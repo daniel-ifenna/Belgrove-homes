@@ -1,0 +1,31 @@
+"use client";
+import { useEffect, useState } from "react";
+
+export default function FloatingWhatsApp() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      // show once scrolled past header (approx 80px + hero)
+      setShow(window.scrollY > 280);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <a
+      href="https://wa.me/2348103760063?text=Hello%20Belgrove%20Homes%2C%20I%20would%20like%20to%20enquire."
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Chat on WhatsApp"
+      className="fixed bottom-5 right-5 z-40 h-14 w-14 rounded-full bg-[#25D366] shadow-[0_12px_24px_rgba(0,0,0,0.22)] grid place-items-center hover:scale-[1.04] hover:shadow-[0_16px_32px_rgba(0,0,0,0.28)] transition-all"
+    >
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+        <path d="M19.05 4.94A9.82 9.82 0 0 0 12.05 2 9.94 9.94 0 0 0 3.5 11.5c0 1.75.46 3.45 1.32 4.95L3 22l5.7-1.49a9.86 9.86 0 0 0 3.35.61h.01A9.94 9.94 0 0 0 22 11.5a9.82 9.82 0 0 0-2.95-6.56Zm-7 15.12a8.2 8.2 0 0 1-4.18-1.14l-.3-.18-3.38.89.9-3.3-.2-.34A8.26 8.26 0 0 1 3.65 11.5a8.26 8.26 0 0 1 8.4-8.32 8.26 8.26 0 0 1 8.32 8.32 8.26 8.26 0 0 1-8.32 8.56Zm4.68-6.2c-.26-.13-1.53-.76-1.77-.85-.24-.08-.41-.13-.58.13-.17.26-.67.85-.82 1.02-.15.17-.3.2-.56.06-.26-.13-1.08-.4-2.06-1.27-.76-.68-1.27-1.51-1.42-1.77-.15-.26-.02-.4.11-.53.11-.11.26-.3.38-.45.13-.15.17-.26.26-.43.08-.17.04-.32-.02-.45-.06-.13-.58-1.4-.8-1.92-.21-.5-.42-.43-.58-.44l-.5-.01c-.17 0-.45.06-.69.32-.24.26-.91.89-.91 2.16s.93 2.51 1.06 2.68c.13.17 1.84 2.8 4.45 3.93.62.27 1.1.43 1.48.55.62.2 1.18.17 1.62.11.49-.07 1.53-.62 1.74-1.23.22-.6.22-1.12.15-1.23-.06-.11-.23-.17-.49-.3Z" />
+      </svg>
+    </a>
+  );
+}

@@ -1,0 +1,624 @@
+/* Belgrove Homes — cinematic homepage intro.
+   Plain static CSS, no build step, loaded directly via <link>. */
+
+#cinematic {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #14100c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+
+#cinematic.out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#cinematic.gone {
+  display: none;
+}
+
+.cin-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1400px;
+}
+
+.cin-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cin-glow-a {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, rgba(214, 178, 110, 0.35), transparent 70%);
+  top: 20%;
+  left: 30%;
+  animation: cinGlowPulse 4s ease-in-out infinite;
+  animation-delay: 2.4s;
+}
+
+.cin-glow-b {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(180, 140, 90, 0.28), transparent 70%);
+  bottom: 15%;
+  right: 25%;
+  animation: cinGlowPulse 4.5s ease-in-out infinite;
+  animation-delay: 2.7s;
+}
+
+@keyframes cinFadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cinGlowPulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.08);
+  }
+}
+
+/* ---------- Phase 1: blueprint draw-on ---------- */
+
+.cin-blueprint {
+  position: absolute;
+  width: min(70vmin, 560px);
+  height: min(70vmin, 560px);
+  opacity: 1;
+  animation: cinBlueprintFadeOut 0.5s ease forwards;
+  animation-delay: 1.9s;
+}
+
+.bp-line {
+  fill: none;
+  stroke: #d6b26e;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+  animation: cinBlueprintDraw 1.1s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+/* Door swing arcs and window mullions read as thinner, fainter marks than
+   the structural walls — standard floor-plan convention. */
+.bp-line.bp-detail {
+  stroke-width: 0.9;
+  opacity: 0.6;
+  stroke-dasharray: 240;
+  stroke-dashoffset: 240;
+}
+
+.bp-dim {
+  fill: none;
+  stroke: rgba(214, 178, 110, 0.45);
+  stroke-width: 0.6;
+  stroke-dasharray: 3 4;
+  opacity: 0;
+  animation: cinFadeIn 0.4s ease forwards;
+  animation-delay: 1.5s;
+}
+
+.bp-label {
+  fill: rgba(214, 178, 110, 0.55);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  opacity: 0;
+  animation: cinFadeIn 0.4s ease forwards;
+  animation-delay: 1.6s;
+}
+
+@keyframes cinBlueprintDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cinBlueprintFadeOut {
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+/* ---------- Phase 2-3: 3D panel assembly ---------- */
+
+/* IMPORTANT — @keyframes vs transition on this subtree is not a style
+   choice, it's load-bearing: a `@keyframes` animation on `.cin-building` or
+   `.cin-block` (or any ancestor of the faces below), even after it has
+   finished and is just holding its end value via `forwards`, causes this
+   engine to stop depth-sorting the nested `preserve-3d` faces correctly —
+   the closest face silently covers the other two regardless of their real
+   3D position, so the whole building renders as a flat card. A
+   class-toggled `transition` does not have this problem. Verified directly:
+   swapping one `.cin-block` from animation to transition (identical
+   resolved transform) was the difference between an invisible roof/side
+   and a correctly shaded 3D volume. So every transform change in this
+   subtree — building fade/recede, block assembly — is driven by adding a
+   class from cinematic-intro.js at the right delay, never by @keyframes. */
+
+.cin-building {
+  position: relative;
+  width: 560px;
+  height: 540px;
+  transform-style: preserve-3d;
+  transform: rotateX(36deg) rotateZ(-32deg);
+  opacity: 0;
+  transition:
+    opacity 0.4s ease,
+    transform 0.6s ease,
+    filter 0.6s ease;
+}
+
+.cin-building.is-visible {
+  opacity: 1;
+}
+
+.cin-building.is-receded {
+  opacity: 0.28;
+  filter: grayscale(0.6) brightness(0.5);
+  transform: rotateX(36deg) rotateZ(-32deg) scale(0.82) translateY(30px);
+}
+
+/* Each .cin-block is a true 3D volume (not a flat card): a preserve-3d
+   wrapper holding three shaded faces (top/front/side), built with the
+   standard CSS-cube recipe — a WxD rectangle laid flat via rotateX(90deg)
+   for the roof, a DxH rectangle turned via rotateY(90deg) for the side wall. */
+.cin-block {
+  position: absolute;
+  transform-style: preserve-3d;
+  opacity: 0;
+  transform: translate3d(var(--tx), var(--ty), var(--tz)) rotateX(var(--rx)) rotateY(var(--ry))
+    rotateZ(var(--rz));
+  transition:
+    transform 1s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.6s ease;
+}
+
+.cin-block.is-settled {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) rotateZ(0);
+}
+
+.block-face {
+  position: absolute;
+}
+
+.face-top {
+  background: linear-gradient(135deg, #f0e6cd 0%, #ddcda0 100%);
+}
+
+.face-front {
+  background: linear-gradient(180deg, #c2ab7c 0%, #a3875a 100%);
+  background-image:
+    repeating-linear-gradient(90deg, rgba(30, 22, 12, 0.22) 0 1.5px, transparent 1.5px 46px),
+    linear-gradient(180deg, #c2ab7c 0%, #a3875a 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.face-side {
+  background: linear-gradient(180deg, #5e4f34 0%, #453a26 100%);
+}
+
+/* Roof caps read as a distinct material — dark slate instead of stone
+   facade — and skip the window mullion pattern. */
+.cin-block.is-roof .face-top {
+  background: linear-gradient(135deg, #5d574a, #4a453a);
+}
+.cin-block.is-roof .face-front {
+  background: #3c372e;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.cin-block.is-roof .face-side {
+  background: #2c2822;
+}
+
+.cin-block {
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* Proportions matter more than the projection math here: a box that's
+   short relative to its footprint (H much less than W/D) reads as a flat
+   slab at ANY viewing angle, because it geometrically is one — that's not
+   a rendering bug, it's what a thin wide box looks like. Real building
+   massing needs H closer to half the footprint width to read as a volume
+   rather than a plank. Stacking math: each block's wrapper top/left is its
+   geometric CENTER, so "sits on top of" means
+   childTop = parentTopSurface - childH/2, where parentTopSurface =
+   parentTop - parentH/2. */
+
+/* --- Base volume (ground floor) — W300 x H150 x D190 --- */
+.block-base {
+  left: 270px;
+  top: 340px;
+  --tx: -560px;
+  --ty: 160px;
+  --tz: -280px;
+  --rx: 30deg;
+  --ry: -70deg;
+  --rz: 12deg;
+}
+.block-base .face-top {
+  width: 300px;
+  height: 190px;
+  left: -150px;
+  top: -95px;
+  transform: rotateX(90deg) translateZ(75px);
+}
+.block-base .face-front {
+  width: 300px;
+  height: 150px;
+  left: -150px;
+  top: -75px;
+  transform: translateZ(95px);
+}
+.block-base .face-side {
+  width: 190px;
+  height: 150px;
+  left: -95px;
+  top: -75px;
+  transform: rotateY(90deg) translateZ(150px);
+}
+
+/* --- Cantilever volume (upper story, overhangs right) — W250 x H130 x D160 --- */
+.block-cantilever {
+  left: 440px;
+  top: 200px;
+  --tx: 560px;
+  --ty: -140px;
+  --tz: 200px;
+  --rx: -35deg;
+  --ry: 60deg;
+  --rz: -16deg;
+}
+.block-cantilever .face-top {
+  width: 250px;
+  height: 160px;
+  left: -125px;
+  top: -80px;
+  transform: rotateX(90deg) translateZ(65px);
+}
+.block-cantilever .face-front {
+  width: 250px;
+  height: 130px;
+  left: -125px;
+  top: -65px;
+  transform: translateZ(80px);
+}
+.block-cantilever .face-side {
+  width: 160px;
+  height: 130px;
+  left: -80px;
+  top: -65px;
+  transform: rotateY(90deg) translateZ(125px);
+}
+
+/* --- Core volume (vertical tower) — W76 x H260 x D76 --- */
+.block-core {
+  left: 200px;
+  top: 135px;
+  --tx: -80px;
+  --ty: -460px;
+  --tz: -320px;
+  --rx: 60deg;
+  --ry: 10deg;
+  --rz: 4deg;
+}
+.block-core .face-top {
+  width: 76px;
+  height: 76px;
+  left: -38px;
+  top: -38px;
+  transform: rotateX(90deg) translateZ(130px);
+}
+.block-core .face-front {
+  width: 76px;
+  height: 260px;
+  left: -38px;
+  top: -130px;
+  transform: translateZ(38px);
+}
+.block-core .face-side {
+  width: 76px;
+  height: 260px;
+  left: -38px;
+  top: -130px;
+  transform: rotateY(90deg) translateZ(38px);
+}
+
+/* --- Roof cap on the cantilever volume — W250 x H16 x D160 --- */
+.block-roof-cantilever {
+  left: 440px;
+  top: 127px;
+  --tx: 0px;
+  --ty: -540px;
+  --tz: 0px;
+  --rx: 80deg;
+  --ry: 0deg;
+  --rz: 0deg;
+}
+.block-roof-cantilever .face-top {
+  width: 250px;
+  height: 160px;
+  left: -125px;
+  top: -80px;
+  transform: rotateX(90deg) translateZ(8px);
+}
+.block-roof-cantilever .face-front {
+  width: 250px;
+  height: 16px;
+  left: -125px;
+  top: -8px;
+  transform: translateZ(80px);
+}
+.block-roof-cantilever .face-side {
+  width: 160px;
+  height: 16px;
+  left: -80px;
+  top: -8px;
+  transform: rotateY(90deg) translateZ(125px);
+}
+
+/* --- Roof cap on the core volume — W76 x H14 x D76 --- */
+.block-roof-core {
+  left: 200px;
+  top: -2px;
+  --tx: 40px;
+  --ty: -520px;
+  --tz: 260px;
+  --rx: -50deg;
+  --ry: -40deg;
+  --rz: 18deg;
+}
+.block-roof-core .face-top {
+  width: 76px;
+  height: 76px;
+  left: -38px;
+  top: -38px;
+  transform: rotateX(90deg) translateZ(7px);
+}
+.block-roof-core .face-front {
+  width: 76px;
+  height: 14px;
+  left: -38px;
+  top: -7px;
+  transform: translateZ(38px);
+}
+.block-roof-core .face-side {
+  width: 76px;
+  height: 14px;
+  left: -38px;
+  top: -7px;
+  transform: rotateY(90deg) translateZ(38px);
+}
+
+/* ---------- Phase 4: wordmark ---------- */
+
+.cin-wordmark {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  opacity: 0;
+  animation: cinFadeIn 0.6s ease forwards;
+  animation-delay: 3.5s;
+}
+
+.cin-logo-mark {
+  width: 64px;
+  height: 64px;
+  position: relative;
+  transform: scale(0.4) rotate(-140deg);
+  opacity: 0;
+  animation: cinLogoSpin 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: 3.5s;
+}
+
+.cin-logo-mark::before,
+.cin-logo-mark::after {
+  content: "";
+  position: absolute;
+  background: linear-gradient(135deg, #e8c584, #b9873f);
+}
+
+.cin-logo-mark::before {
+  left: 0;
+  top: 14px;
+  width: 64px;
+  height: 16px;
+  clip-path: polygon(0 100%, 0 30%, 100% 0, 100% 70%);
+}
+
+.cin-logo-mark::after {
+  left: 6px;
+  top: 0;
+  width: 22px;
+  height: 64px;
+  clip-path: polygon(0 0, 60% 0, 100% 12%, 100% 100%, 40% 100%, 0 88%);
+}
+
+@keyframes cinLogoSpin {
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.cin-letters {
+  display: flex;
+  align-items: baseline;
+  gap: 0.06em;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.2rem, 7vw, 3.6rem);
+  letter-spacing: 0.08em;
+  color: #f3ead9;
+}
+
+.cin-letters .cin-gap {
+  width: 0.4em;
+}
+
+.cin-letters span {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(24px);
+  animation: cinLetterIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.cin-letters span:nth-child(1) {
+  animation-delay: 3.8s;
+}
+.cin-letters span:nth-child(2) {
+  animation-delay: 3.86s;
+}
+.cin-letters span:nth-child(3) {
+  animation-delay: 3.92s;
+}
+.cin-letters span:nth-child(4) {
+  animation-delay: 3.98s;
+}
+.cin-letters span:nth-child(5) {
+  animation-delay: 4.04s;
+}
+.cin-letters span:nth-child(6) {
+  animation-delay: 4.1s;
+}
+.cin-letters span:nth-child(7) {
+  animation-delay: 4.16s;
+}
+.cin-letters span:nth-child(8) {
+  animation-delay: 4.22s;
+}
+.cin-letters span:nth-child(9) {
+  animation-delay: 4.28s;
+}
+.cin-letters span:nth-child(10) {
+  animation-delay: 4.34s;
+}
+.cin-letters span:nth-child(11) {
+  animation-delay: 4.4s;
+}
+.cin-letters span:nth-child(12) {
+  animation-delay: 4.46s;
+}
+.cin-letters span:nth-child(13) {
+  animation-delay: 4.52s;
+}
+.cin-letters span:nth-child(14) {
+  animation-delay: 4.58s;
+}
+
+@keyframes cinLetterIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cin-tagline {
+  font-size: clamp(0.75rem, 2vw, 0.95rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #b9a687;
+  opacity: 0;
+  animation: cinFadeIn 0.8s ease forwards;
+  animation-delay: 4.6s;
+}
+
+/* ---------- Progress bar + skip hint ---------- */
+
+.cin-progress {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(280px, 60vw);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0;
+  animation: cinFadeIn 0.4s ease forwards;
+  animation-delay: 4.3s;
+}
+
+.cin-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #b9873f, #f0d4a0, #b9873f);
+  animation: cinProgress 5.6s linear forwards;
+}
+
+@keyframes cinProgress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.cin-skip {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(233, 223, 201, 0.55);
+  opacity: 0;
+  animation: cinFadeIn 0.6s ease forwards;
+  animation-delay: 4.4s;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 640px) {
+  .cin-building {
+    width: 300px;
+    height: 260px;
+    transform: rotateX(36deg) rotateZ(-32deg) scale(0.82);
+  }
+
+  .cin-progress {
+    bottom: 40px;
+  }
+
+  .cin-skip {
+    bottom: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #cinematic * {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

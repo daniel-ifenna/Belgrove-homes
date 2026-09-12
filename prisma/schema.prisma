@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(staff)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedBookings InspectionBooking[] @relation("AssignedTo")
+  reviewedBookings InspectionBooking[] @relation("ReviewedBy")
+  confirmedAgents  InspectionBooking[] @relation("AgentConfirmedBy")
+  notifications    Notification[]
+  activities       BookingActivity[]
+  messages         BookingMessage[]
+  internalNotes    InternalNote[]
+}
+
+enum Role {
+  admin
+  staff
+  reviewer
+  approver
+}
+
+model InspectionBooking {
+  id String @id @default(cuid())
+  ref String @unique // BEL-YYYY-XXXXX
+
+  // Visitor-submitted
+  name          String
+  email         String
+  phone         String?
+  preferredDate DateTime
+  preferredTime String
+  location      String
+  agentName     String?
+
+  // Lifecycle status
+  status BookingStatus @default(new)
+
+  // Admin fields
+  assignedToId    String?
+  assignedToUser  User?   @relation("AssignedTo", fields: [assignedToId], references: [id])
+  internalNote    String?
+  rescheduledDate DateTime?
+  rescheduledTime String?
+
+  // Company agent assignment
+  agentId String?
+  agent   Agent?  @relation("BookingAgent", fields: [agentId], references: [id])
+
+  // Post-inspection outcome
+  outcome         SaleOutcome?
+  leadTemperature LeadTemperature @default(cold)
+
+  // Locking — once closed, only reopen can mutate
+  lockedAt DateTime?
+
+  // Visitor raw text preserved separately from canonical agent assignment
+  visitorAgentRaw String?
+
+  // Duplicate pointer (computed, but persisted for fast banner)
+  possibleDuplicateOfId String?
+  possibleDuplicateOf   InspectionBooking? @relation("DuplicatePointer", fields: [possibleDuplicateOfId], references: [id])
+  duplicates            InspectionBooking[] @relation("DuplicatePointer")
+
+  // Agent confirmation audit
+  agentConfirmedAt   DateTime?
+  agentConfirmedById String?
+  agentConfirmedBy   User? @relation("AgentConfirmedBy", fields: [agentConfirmedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reviewedById String?
+  reviewedByUser User? @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  notifications Notification[]
+  activities    BookingActivity[]
+  messages      BookingMessage[]
+  internalNotes InternalNote[]
+
+  @@index([status])
+  @@index([leadTemperature])
+  @@index([agentId])
+  @@index([assignedToId])
+  @@index([lockedAt])
+}
+
+enum BookingStatus {
+  new
+  under_review
+  on_hold
+  approved
+  rescheduled
+  active
+  closed
+}
+
+enum SaleOutcome {
+  sold
+  interested
+  not_sold
+}
+
+enum LeadTemperature {
+  cold
+  warm
+  hot
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  message   String
+  bookingId String?
+  booking   InspectionBooking? @relation(fields: [bookingId], references: [id])
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+// Company agents — staff or hire-purchase partners that can be assigned to unassigned bookings.
+model Agent {
+  id        String        @id @default(cuid())
+  name      String
+  phone     String
+  email     String        @unique
+  category  AgentCategory @default(staff)
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  bookings InspectionBooking[] @relation("BookingAgent")
+
+  @@index([category])
+  @@index([isActive])
+  @@index([email])
+}
+
+enum AgentCategory {
+  staff
+  hire_purchase
+}
+
+// Internal messaging thread per booking — visible until booking closed, then read-only.
+model BookingMessage {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   InspectionBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id])
+  authorName String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([bookingId, createdAt])
+}
+
+// Immutable audit log of every admin action taken on a booking, so the
+// booking row itself never has to be the only record of who did what.
+model BookingActivity {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   InspectionBooking @relation(fields: [bookingId], references: [id])
+
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  actorName String // snapshot at time of action, survives actor deletion
+
+  action     String // approve | reschedule | hold | under_review | mark_active | record_outcome | save | assign_agent | reopen | cool_down | confirm_agent
+  fromStatus BookingStatus
+  toStatus   BookingStatus
+  note       String?
+
+  emailSent  Boolean?
+  emailError String?
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId, createdAt])
+}
+
+// Append-only internal notes — each entry timestamped and attributed,
+// replacing the old single overwrite "internalNote" textarea.
+model InternalNote {
+  id         String   @id @default(cuid())
+  bookingId  String
+  booking    InspectionBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?    @relation(fields: [authorId], references: [id])
+  authorName String
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([bookingId, createdAt])
+}
