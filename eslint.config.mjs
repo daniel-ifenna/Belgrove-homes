@@ -13,6 +13,20 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // Belgrove intentionally uses <img> for external unsplash + large hero
+    // assets to avoid next/image remote loader config + keep cinematic LCP simple.
+    rules: {
+      "@next/next/no-img-element": "off",
+    },
+  },
+  {
+    // Bulk Prisma + transition types use `any` for dynamic where inputs by design
+    files: ["src/app/admin/bookings/**/*.tsx", "src/app/api/admin/bookings/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

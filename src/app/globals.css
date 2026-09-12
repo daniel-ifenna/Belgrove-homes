@@ -1,26 +1,52 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cream: #F6F1E4;
+  --cream-elevated: #FFFFFF;
+  --forest-900: #16281F;
+  --forest-800: #1E3A2E;
+  --forest-600: #3B6650;
+  --gold-600: #A9843C;
+  --gold-400: #D4B368;
+  --ink: #211F19;
+  --ink-muted: #6B6656;
+  --line: #E4DCC7;
+  --red-600: #A6402F;
+  --blue-600: #4C6E8C;
+  --amber-600: #B98A2E;
+  --plum-600: #705A78;
+  --background: var(--cream);
+  --foreground: var(--ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-cream: var(--cream);
+  --color-cream-elevated: var(--cream-elevated);
+  --color-forest-900: var(--forest-900);
+  --color-forest-800: var(--forest-800);
+  --color-forest-600: var(--forest-600);
+  --color-gold-600: var(--gold-600);
+  --color-gold-400: var(--gold-400);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-red-600: var(--red-600);
+  --color-blue-600: var(--blue-600);
+  --color-amber-600: var(--amber-600);
+  --color-plum-600: var(--plum-600);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--line);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--cream);
+  color: var(--ink);
 }
+
+/* Fraunces for display, Inter for UI */
+.font-serif { font-family: var(--font-fraunces), ui-serif, Georgia, serif; }
+.font-sans  { font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif; }
