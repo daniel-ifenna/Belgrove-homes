@@ -5,6 +5,8 @@ Single-file mirror of the entire real-estate website. Built successfully with `n
 Generated: 2026-09-10
 Run: `npm install && npx prisma migrate dev && npm run dev` (see .env.example)
 
+{% raw %}
+
 ---
 
 ## File Tree
@@ -5409,4 +5411,6 @@ services:
 volumes:
   postgres_data:
 ```
+
+{% endraw %}
 
