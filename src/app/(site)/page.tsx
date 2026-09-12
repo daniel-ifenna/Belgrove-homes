@@ -486,7 +486,7 @@ export default function HomePage() {
       </section>
 
       {/* OUR VISION detailed */}
-      <section className="bg-white border-y border-[#E0D5BB] py-12 lg:py-16 overflow-hidden reveal">
+      <section id="vision" className="bg-white border-y border-[#E0D5BB] py-12 lg:py-16 overflow-hidden reveal">
         <div className="max-w-[1280px] mx-auto px-6 lg:px-8">
           <div className="grid lg:grid-cols-[0.88fr_1.12fr] gap-8 lg:gap-12 items-center">
             <div className="relative lg:translate-x-2">

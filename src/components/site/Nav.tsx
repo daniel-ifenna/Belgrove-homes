@@ -6,7 +6,7 @@ import ContactModal from "./ContactModal";
 
 const links = [
   { href: "/gallery", label: "GALLERY" },
-  { href: "/vision", label: "VISION" },
+  { href: "/#vision", label: "VISION" },
   { href: "/#about", label: "ABOUT" },
 ];
 

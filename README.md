@@ -16,6 +16,15 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Deployment environment
+
+Set these variables in Vercel for the Production environment before deploying:
+
+- `DATABASE_URL`: the production PostgreSQL connection string
+- `AUTH_SECRET`: a long random value shared by all deployment instances
+
+`AUTH_URL` is optional on Vercel because Auth.js derives it from the deployment URL. After adding or changing variables, redeploy so the new values are available to the serverless functions.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
