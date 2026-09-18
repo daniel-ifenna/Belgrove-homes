@@ -1,52 +1,90 @@
 @import "tailwindcss";
 
 :root {
-  --cream: #F6F1E4;
-  --cream-elevated: #FFFFFF;
-  --forest-900: #16281F;
-  --forest-800: #1E3A2E;
+  --bg-cream: #F7EFE2;
+  --bg-cream-alt: #FAF4EA;
+  --bg-dark: #16281D;
+  --bg-dark-alt: #1B2E23;
+  --accent-gold: #C89B3C;
+  --accent-gold-soft: #E8C77A;
+  --text-heading: #1C2B20;
+  --text-body: #5B5346;
+  --text-on-dark: #F5EFE2;
+  --text-on-dark-muted: #B9C4B8;
+  --border-hairline: #E4D8C1;
+  --border-hairline-dark: rgba(245,239,226,0.15);
+  --white: #FFFFFF;
+  --shadow-sm: 0 1px 2px rgba(28,43,32,0.06);
+  --shadow-md: 0 12px 32px rgba(28,43,32,0.12);
+  --shadow-lg: 0 20px 48px rgba(28,43,32,0.16);
+  /* Premium Operations Palette — Belgrove Admin */
+  --ops-bg: #F7F5EE;
+  --ops-surface: #FFFFFF;
+  --ops-primary: #0D3328;
+  --ops-deep: #08261E;
+  --ops-gold: #C8A04A;
+  --ops-gold-soft: #E8D9A8;
+  --ops-text: #10231E;
+  --ops-muted: #65736E;
+  --ops-border: #E3E6E1;
+  --ops-border-strong: #D6DBD7;
+  --ops-radius: 14px;
+  --ops-radius-sm: 10px;
+  --ops-shadow-sm: 0 1px 2px rgba(16,35,30,0.04), 0 4px 12px rgba(16,35,30,0.04);
+  --ops-shadow-md: 0 4px 16px rgba(16,35,30,0.06), 0 12px 32px rgba(16,35,30,0.06);
+  --ops-shadow-lg: 0 8px 24px rgba(16,35,30,0.08), 0 20px 48px rgba(16,35,30,0.08);
+  /* legacy aliases for migrated styles */
+  --cream: var(--bg-cream);
+  --cream-elevated: var(--white);
+  --forest-900: var(--bg-dark);
+  --forest-800: var(--bg-dark-alt);
   --forest-600: #3B6650;
-  --gold-600: #A9843C;
-  --gold-400: #D4B368;
-  --ink: #211F19;
-  --ink-muted: #6B6656;
-  --line: #E4DCC7;
-  --red-600: #A6402F;
-  --blue-600: #4C6E8C;
-  --amber-600: #B98A2E;
-  --plum-600: #705A78;
-  --background: var(--cream);
-  --foreground: var(--ink);
+  --gold-600: var(--accent-gold);
+  --gold-400: var(--accent-gold-soft);
+  --ink: var(--text-heading);
+  --ink-muted: var(--text-body);
+  --line: var(--border-hairline);
+  --background: var(--bg-cream);
+  --foreground: var(--text-heading);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-cream: var(--cream);
-  --color-cream-elevated: var(--cream-elevated);
-  --color-forest-900: var(--forest-900);
-  --color-forest-800: var(--forest-800);
-  --color-forest-600: var(--forest-600);
-  --color-gold-600: var(--gold-600);
-  --color-gold-400: var(--gold-400);
-  --color-ink: var(--ink);
-  --color-ink-muted: var(--ink-muted);
-  --color-line: var(--line);
-  --color-red-600: var(--red-600);
-  --color-blue-600: var(--blue-600);
-  --color-amber-600: var(--amber-600);
-  --color-plum-600: var(--plum-600);
+  --color-cream: var(--bg-cream);
+  --color-cream-elevated: var(--white);
+  --color-forest-900: var(--bg-dark);
+  --color-forest-800: var(--bg-dark-alt);
+  --color-gold-600: var(--accent-gold);
+  --color-gold-400: var(--accent-gold-soft);
+  --color-ink: var(--text-heading);
+  --color-ink-muted: var(--text-body);
+  --color-line: var(--border-hairline);
 }
 
 * {
-  border-color: var(--line);
+  border-color: var(--border-hairline);
 }
 
 body {
-  background: var(--cream);
-  color: var(--ink);
+  background: var(--bg-cream);
+  color: var(--text-heading);
 }
 
-/* Fraunces for display, Inter for UI */
-.font-serif { font-family: var(--font-fraunces), ui-serif, Georgia, serif; }
-.font-sans  { font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif; }
+/* Fraunces for display, Inter for UI, IBM Plex Mono for eyebrows/nav */
+.font-serif { font-family: var(--font-fraunces), Georgia, 'Times New Roman', serif; }
+.font-sans  { font-family: var(--font-inter), -apple-system, 'Segoe UI', sans-serif; }
+.font-mono  { font-family: var(--font-plex-mono), 'Courier New', monospace; }
+.mono { font-family: var(--font-plex-mono), 'IBM Plex Mono', 'Courier New', monospace; }
+.fraunces { font-family: var(--font-fraunces), Georgia, serif; }
+.public { font-family: var(--font-inter), -apple-system, 'Segoe UI', sans-serif; }
+
+/* — Elevation craft details — */
+.photo-warm { position: relative; overflow: hidden; border-radius: 16px; }
+.photo-warm::after { content:""; position:absolute; inset:0; background: rgba(200,155,60,0.06); pointer-events:none; mix-blend-mode: multiply; }
+.photo-warm img { filter: saturate(1.03) contrast(1.02) brightness(1.02); }
+.hairline-gold { width: 56px; height: 1px; background: var(--accent-gold); margin-top: 10px; }
+.texture-cream { position: relative; }
+.texture-cream::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:0.025; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E"); }
+*:focus-visible { outline: 2px solid var(--accent-gold); outline-offset: 2px; }
+::selection { background: rgba(200,155,60,0.22); }

@@ -1,20 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
 
 export default function FloatingWhatsApp() {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    const onScroll = () => {
-      // show once scrolled past header (approx 80px + hero)
-      setShow(window.scrollY > 280);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  if (!show) return null;
-
   return (
     <a
       href="https://wa.me/2348103760063?text=Hello%20Belgrove%20Homes%2C%20I%20would%20like%20to%20enquire."

@@ -13,9 +13,10 @@ export type BookingAction =
   | "reopen"
   | "cool_down"
   | "confirm_agent"
-  | "add_note";
+  | "add_note"
+  | "edit_booking";
 
-type StatusGatedAction = Exclude<BookingAction, "save" | "escalate_lead" | "assign_agent" | "add_note" | "confirm_agent">;
+type StatusGatedAction = Exclude<BookingAction, "save" | "escalate_lead" | "assign_agent" | "add_note" | "confirm_agent" | "edit_booking">;
 
 export const ALLOWED_FROM: Record<StatusGatedAction, BookingStatus[]> = {
   approve: ["new", "under_review", "on_hold", "approved", "rescheduled"],
@@ -29,7 +30,7 @@ export const ALLOWED_FROM: Record<StatusGatedAction, BookingStatus[]> = {
 };
 
 export function isTransitionAllowed(action: BookingAction, status: BookingStatus): boolean {
-  if (action === "save" || action === "escalate_lead" || action === "assign_agent" || action === "add_note" || action === "confirm_agent") return true;
+  if (action === "save" || action === "escalate_lead" || action === "assign_agent" || action === "add_note" || action === "confirm_agent" || action === "edit_booking") return true;
   const allowed = ALLOWED_FROM[action as StatusGatedAction];
   return allowed ? allowed.includes(status) : false;
 }
@@ -48,6 +49,7 @@ export const actionLabels: Record<BookingAction, string> = {
   cool_down: "Cool down",
   confirm_agent: "Confirm match",
   add_note: "Add note",
+  edit_booking: "Edit booking",
 };
 
 export const temperatureRank: Record<LeadTemperature, number> = {

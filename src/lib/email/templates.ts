@@ -240,6 +240,7 @@ export function agentAssignmentTemplate(params: {
   rescheduledTime?: string | null;
   location: string;
   agentCategory?: string | null;
+  assignmentNote?: string | null;
 }): string {
   const {
     agentName,
@@ -253,6 +254,7 @@ export function agentAssignmentTemplate(params: {
     rescheduledTime,
     location,
     agentCategory,
+    assignmentNote,
   } = params;
   const dateToShow = rescheduledDate ?? preferredDate;
   const timeToShow = rescheduledTime ?? preferredTime;
@@ -272,6 +274,7 @@ export function agentAssignmentTemplate(params: {
       <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
       ${agentCategory ? `<tr><td style="padding:6px 0; color:#6b6055;">Your category</td><td style="padding:6px 0; text-transform: capitalize;">${agentCategory.replace("_", " ")}</td></tr>` : ""}
     </table>
+    ${assignmentNote ? `<div style="background:#f7f5ee; border:1px solid #e3e6e1; border-left:3px solid #0D3328; padding:12px 14px; margin:16px 0;"><div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#65736E; margin-bottom:6px;">Note from admin</div><div style="font-size:13px; color:#10231E; white-space:pre-wrap;">${assignmentNote.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
     <p style="background:#fef3c7; border:1px solid #fcd34d; padding:12px; border-radius:4px; font-size:13px;">Action required: Contact <strong>${clientName}</strong> within 24 hours to confirm the inspection and provide directions. Reply to this email if you need admin support.</p>
     <p>Client reference: <strong>${ref}</strong></p>
     `

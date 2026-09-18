@@ -99,6 +99,7 @@ export async function sendAgentAssignment(
     rescheduledTime?: string | null;
     location: string;
     agentCategory?: string | null;
+    assignmentNote?: string | null;
   }
 ): Promise<EmailResult> {
   return sendEmail({

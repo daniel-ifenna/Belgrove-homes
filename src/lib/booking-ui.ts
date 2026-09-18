@@ -9,19 +9,19 @@ export const statusLabels: Record<string, string> = {
 };
 
 export const statusColors: Record<string, string> = {
-  new: "bg-[var(--blue-600)] text-white",
-  under_review: "bg-[var(--amber-600)] text-white",
-  on_hold: "bg-[#C07A2A] text-white",
-  approved: "bg-[var(--forest-600)] text-white",
-  rescheduled: "bg-[var(--plum-600)] text-white",
-  active: "bg-[var(--forest-800)] text-white",
-  closed: "bg-[var(--ink)] text-white",
+  new: "bg-[#E8EEF0] text-[#1E3A5F] border border-[#C7D2E0]",
+  under_review: "bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]",
+  on_hold: "bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB]",
+  approved: "bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]",
+  rescheduled: "bg-[#F5F0FF] text-[#5B21B6] border border-[#DDD6FE]",
+  active: "bg-[#E0F2F1] text-[#0D3328] border border-[#B2DFDB]",
+  closed: "bg-[#1A1A1A] text-white border border-[#1A1A1A]",
 };
 
 export const temperatureColors: Record<string, string> = {
-  cold: "bg-[var(--blue-600)] text-white",
-  warm: "bg-[var(--amber-600)] text-white",
-  hot: "bg-[var(--red-600)] text-white",
+  cold: "bg-[#F1F3F2] text-[#4B5563] border border-[#E3E6E1]",
+  warm: "bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]",
+  hot: "bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]",
 };
 
 export const allStatuses = [

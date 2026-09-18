@@ -107,6 +107,16 @@ export const bookingActionSchema = z.discriminatedUnion("action", [
     reason: z.string().trim().min(3, "Reason is required").max(1000),
     ...concurrency,
   }),
+  z.object({
+    action: z.literal("edit_booking"),
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().email().optional(),
+    phone: z.string().trim().max(20).optional(),
+    location: z.string().trim().min(1).max(300).optional(),
+    preferredDate: z.string().optional(),
+    preferredTime: z.string().optional(),
+    ...concurrency,
+  }),
 ]);
 
 export type BookingActionInput = z.infer<typeof bookingActionSchema>;

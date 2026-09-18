@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { AdminSidebar } from "@/components/admin/AdminTopBar";
+import AdminTopBar, { AdminSidebar } from "@/components/admin/AdminTopBar";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,9 +12,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen flex bg-[var(--cream)]">
+    <div className="min-h-screen flex bg-[var(--ops-bg)]">
       <AdminSidebar />
-      <main className="flex-1 min-w-0">{children}</main>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <AdminTopBar />
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
     </div>
   );
 }

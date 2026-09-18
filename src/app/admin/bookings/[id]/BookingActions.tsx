@@ -270,15 +270,15 @@ export default function BookingActions({
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             {isTransitionAllowed("approve", status) && (
               <button
                 onClick={() => run("approve", { note: reviewNote || undefined })}
                 disabled={busy !== null || !canApprove}
-                title={!canApprove ? "Approver required" : undefined}
+                title={!canApprove ? "Approver required" : "Approving will auto-move lead Cold → Warm"}
                 className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
               >
-                {busy === "approve" ? "Approving…" : "Approve"}
+                {busy === "approve" ? "Approving…" : "Approve → Warm"}
               </button>
             )}
             {isTransitionAllowed("hold", status) && (
@@ -300,9 +300,10 @@ export default function BookingActions({
               </button>
             )}
           </div>
+          <p className="mono text-[10px] leading-[1.4] text-[var(--ops-muted)] bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-lg px-3 py-2">Auto: <span className="font-medium text-[var(--ops-text)]">Approve → Warm</span> if currently Cold • <span className="font-medium">Interested → Hot</span> and stays open for Sold/Not Sold → both close with automated email before locking.</p>
 
           {isTransitionAllowed("reschedule", status) && (
-            <div className="border-t border-[var(--line)] pt-4">
+            <div id="reschedule-section" className="border-t border-[var(--line)] pt-4">
               <p className="text-xs font-medium text-[var(--ink)] mb-2">Reschedule</p>
               <div className="flex flex-wrap items-end gap-3">
                 <div>
@@ -370,41 +371,73 @@ export default function BookingActions({
       )}
 
       {showOutcome && (
-        <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-          <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-3">
-            <span className="h-6 w-6 rounded-md bg-[var(--forest-600)] text-white grid place-items-center text-xs">★</span>
+        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+          <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)] flex items-center gap-2 mb-1">
+            <span className="h-6 w-6 rounded-[8px] bg-[var(--ops-primary)] text-white grid place-items-center">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 2l7 4v6c0 5-4 9-7 11-3-2-7-6-7-11V6l7-4z"/><path d="M9 12l2 2 4-4"/></svg>
+            </span>
             Record sale outcome
           </h2>
-          <p className="text-xs text-[var(--ink-muted)] mb-3">Active → Close. Includes subscription-form message for Interested.</p>
-          <div className="flex gap-3 flex-wrap items-center">
-            <button
-              onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
-              disabled={busy !== null}
-              className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
-            >
-              Sold
-            </button>
-            <button
-              onClick={() => {
-                if (!showInterestedPreview) {
-                  setShowInterestedPreview(true);
-                  return;
-                }
-                run("record_outcome", { outcome: "interested", note: reviewNote || undefined });
-              }}
-              disabled={busy !== null}
-              className="text-sm bg-[var(--gold-600)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
-            >
-              {busy === "record_outcome" ? "Saving…" : "Interested"}
-            </button>
-            <button
-              onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
-              disabled={busy !== null}
-              className="text-sm bg-white border border-[var(--line)] rounded-full px-5 py-2 font-medium disabled:opacity-50"
-            >
-              Not sold
-            </button>
-          </div>
+          {(booking as any).outcome === "interested" ? (
+            <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
+              <div className="flex items-center gap-2">
+                <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
+                <span className="text-[13px] font-medium text-[#92400E]">Interested — Hot lead • Awaiting final decision</span>
+                <span className="ml-auto px-2 py-1 rounded-full text-[11px] font-medium bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span>
+              </div>
+              <p className="public text-[12px] leading-[1.5] text-[#92400E]/80 mt-2">Client signaled as <strong>Interested</strong> and automatically moved to <strong>HOT</strong>. Next, confirm if they <strong>bought (Sold)</strong> or <strong>did not buy (Not Sold)</strong> — the system will send the appropriate automated response and then close.</p>
+              <div className="flex gap-3 flex-wrap items-center mt-4">
+                <button
+                  onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-[#0D3328] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[#08261E] disabled:opacity-50 shadow-sm"
+                >
+                  Bought — Sold
+                </button>
+                <button
+                  onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-white border border-[var(--ops-border)] rounded-full px-5 py-2.5 font-medium hover:bg-[var(--ops-bg)] disabled:opacity-50"
+                >
+                  Not Sold
+                </button>
+              </div>
+              <p className="mono text-[10px] text-[#92400E]/60 mt-2">Both actions send an automated email/message before locking the booking as closed.</p>
+            </div>
+          ) : (
+            <>
+              <p className="public text-[12px] leading-[1.5] text-[var(--ops-muted)] mb-4">Choose the outcome. <span className="font-medium text-[var(--ops-text)]">Interested</span> will auto-heat to <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span> and stay open for the final Sold / Not Sold step. <span className="font-medium">Sold</span> and <span className="font-medium">Not Sold</span> both close with an automated response.</p>
+              <div className="flex gap-3 flex-wrap items-center">
+                <button
+                  onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50 shadow-sm"
+                >
+                  Sold
+                </button>
+                <button
+                  onClick={() => {
+                    if (!showInterestedPreview) {
+                      setShowInterestedPreview(true);
+                      return;
+                    }
+                    run("record_outcome", { outcome: "interested", note: reviewNote || undefined });
+                  }}
+                  disabled={busy !== null}
+                  className="text-sm bg-[#C8A04A] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[#9A7A2F] disabled:opacity-50 shadow-sm"
+                >
+                  {busy === "record_outcome" ? "Saving…" : "Interested → Hot"}
+                </button>
+                <button
+                  onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-white border border-[var(--ops-border)] rounded-full px-5 py-2.5 font-medium hover:bg-[var(--ops-bg)] disabled:opacity-50"
+                >
+                  Not sold
+                </button>
+              </div>
+            </>
+          )}
           {showInterestedPreview && (
             <div className="mt-4 p-4 rounded-xl bg-[var(--cream)] border border-[var(--line)] text-sm">
               <div className="font-medium text-[var(--ink)] mb-2">Preview Interested message to client</div>
@@ -490,17 +523,21 @@ export default function BookingActions({
               )}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input
-                value={assignNote}
-                onChange={(e) => setAssignNote(e.target.value)}
-                placeholder="Note to agent (optional)"
-                className="border border-[var(--line)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] bg-white"
-              />
-              <label className="flex items-center gap-1.5 text-xs">
-                <input type="checkbox" checked={assignSilent} onChange={(e) => setAssignSilent(e.target.checked)} />
-                Silent (no email)
-              </label>
+            <div className="mt-3">
+              <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Note to agent — will appear in email & internal notes</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={assignNote}
+                  onChange={(e) => setAssignNote(e.target.value)}
+                  placeholder="e.g. Please prioritize — client is hot, call within 2 hours"
+                  className="border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
+                />
+                <label className="flex items-center gap-1.5 text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 cursor-pointer">
+                  <input type="checkbox" checked={assignSilent} onChange={(e) => setAssignSilent(e.target.checked)} className="rounded" />
+                  Silent (no email)
+                </label>
+              </div>
+              <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">Leave a note to give context — it will be saved to the timeline and included in the agent’s email.</p>
             </div>
 
             {selectedAgentId && !assignSilent && (
@@ -589,25 +626,27 @@ export default function BookingActions({
           </div>
         )}
         <div className="mt-4">
+          <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Follow-up message — emailed to assigned agent & logged to timeline</label>
           <textarea
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder="Post a follow-up note…"
+            placeholder="Post a follow-up note… e.g. Client called, wants to reschedule to next week, hot lead"
             rows={3}
-            className="w-full border border-[var(--line)] rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--forest-600)] resize-none"
+            className="w-full border border-[var(--ops-border)] rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10 resize-none"
           />
+          <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">This will be saved as a message, added to the activity timeline, and emailed to the assigned agent (if any).</p>
           <div className="flex items-center justify-between mt-3">
-            <span className="text-xs text-[var(--ink-muted)]">{messageText.length}/5000</span>
-            <button onClick={sendMessage} disabled={!messageText.trim() || messageSending} className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2.5 font-medium disabled:opacity-50">
-              {messageSending ? "Sending…" : "Send message"}
+            <span className="mono text-[11px] text-[var(--ops-muted)]">{messageText.length}/5000</span>
+            <button onClick={sendMessage} disabled={!messageText.trim() || messageSending} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 font-medium disabled:opacity-50 hover:bg-[var(--ops-deep)] transition-colors">
+              {messageSending ? "Sending…" : "Send message →"}
             </button>
           </div>
-          {messageError && <p className="text-xs text-[var(--red-600)] mt-2">{messageError}</p>}
+          {messageError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">{messageError}</p>}
         </div>
       </div>
 
       {/* Internal notes append-only */}
-      <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
+      <div id="internal-notes" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-3">
           <span className="h-6 w-6 rounded-md bg-[var(--gold-600)] text-white grid place-items-center text-xs">✎</span>
           Internal notes
@@ -643,7 +682,7 @@ export default function BookingActions({
       </div>
 
       {/* Lead temperature */}
-      <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
+      <div id="lead-temp" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-3">
           <span className="h-6 w-6 rounded-md bg-[var(--red-600)] text-white grid place-items-center text-xs">◐</span>
           Lead temperature

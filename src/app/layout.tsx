@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Fraunces, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -14,6 +14,13 @@ const inter = Inter({
   display: "swap",
 });
 
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Belgrove Homes",
   description: "Find your next home. Book a property inspection with Belgrove Homes.",
@@ -21,8 +28,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`h-full antialiased ${fraunces.variable} ${inter.variable}`}>
-      <body className="min-h-full flex flex-col font-sans bg-[var(--cream)] text-[var(--ink)]">{children}</body>
+    <html lang="en" className={`h-full antialiased ${fraunces.variable} ${inter.variable} ${plexMono.variable}`}>
+      <body className="min-h-full flex flex-col font-sans bg-[var(--bg-cream)] text-[var(--text-heading)]">{children}</body>
     </html>
   );
 }
