@@ -74,11 +74,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   let confirmed;
   try {
     confirmed = await prisma.$transaction(
-      async (tx) =>
+        async (tx) =>
         applyConfirmationDbUnit(tx, {
           paymentId,
           transactionId: id,
           confirmedById: session!.user.id,
+          confirmedByName: session!.user.name ?? session!.user.email ?? "System",
           verificationNotes,
           receiptRef,
           receiptUrl,

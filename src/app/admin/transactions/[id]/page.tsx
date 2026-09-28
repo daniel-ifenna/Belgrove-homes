@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
 import { getTransactionSummary } from "@/lib/finance";
+import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
 import RecordPaymentForm from "./RecordPaymentForm";
 import PaymentVerificationButtons from "./PaymentVerificationButtons";
@@ -181,7 +182,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                     const inst = transaction.installments.find((i: any) => i.id === p.installmentId);
                     const receipt = transaction.receipts.find((r: any) => r.paymentId === p.id);
                     return (
-                      <div key={p.id} className="flex gap-3 p-3 rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)]/30">
+                      <div key={p.id} id={`payment-${p.id}`} className="flex gap-3 p-3 rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)]/30 scroll-mt-20">
                         <div className="h-8 w-8 rounded-full bg-[#0D3328] text-white grid place-items-center text-[11px]">₦</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-baseline justify-between gap-2">
@@ -213,7 +214,6 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
           <div className="space-y-6">
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Receipts</h3>
               {transaction.receipts.length === 0 ? (
                 <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No receipts yet.</p>
               ) : (
@@ -232,6 +232,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                 </div>
               )}
             </div>
+            <ActivitySection entityType="transaction" entityId={transaction.id} />
           </div>
         </div>
       </div>

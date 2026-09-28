@@ -93,9 +93,10 @@ export async function POST(request: NextRequest) {
       if (existingTxn) return NextResponse.json({ transaction: existingTxn, alreadyExists: true });
     }
     let transaction;
+    const actorName = session!.user.name ?? session!.user.email ?? "Unknown";
     if (bookingId) {
       const { createTransactionFromBooking } = await import("@/lib/transactionService");
-      transaction = await createTransactionFromBooking(bookingId, paymentPlanCode, price, qty, agentId, session!.user.id);
+      transaction = await createTransactionFromBooking(bookingId, paymentPlanCode, price, qty, agentId, session!.user.id, actorName);
     } else {
       transaction = await createManualTransaction({
         customerName: customerName.trim(),
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
         paymentPlanCode,
         agentId: agentId || null,
         createdById: session!.user.id,
+        actorName,
         manualReason: manualReason.trim(),
       });
     }

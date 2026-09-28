@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
+import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
 import ReceiptActions from "./ReceiptActions";
 
@@ -162,6 +163,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 </ol>
               )}
               <div className="mono text-[10px] text-[var(--ops-muted)] mt-3">Last sent: {lastSent ? formatDateTime(lastSent.attemptedAt) : "—"} · Attempts: {attemptsCount} · Last status: {receipt.status}</div>
+            </div>
+            <div className="mt-6">
+              <ActivitySection entityType="receipt" entityId={receipt.id} />
             </div>
           </div>
         </div>

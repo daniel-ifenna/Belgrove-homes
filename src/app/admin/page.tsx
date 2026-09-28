@@ -4,9 +4,9 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { formatNaira, formatCompactNaira } from "@/lib/currency";
-import { statusColors, statusLabels } from "@/lib/booking-ui";
 import { excludeTestRows, excludeTestTransactions } from "@/lib/test-data";
-import { getCollectedRevenue, getMonthlyTargetProgress, getOverdueInstallments, getRevenueSparkline } from "@/lib/finance";
+import { getCollectedRevenue, getMonthlyTargetProgress, getRevenueSparkline } from "@/lib/finance";
+import { getActionCounts, getActionItems, INBOX_CATEGORIES } from "@/lib/inbox";
 import TestDataToggle from "@/components/admin/TestDataToggle";
 
 export const dynamic = "force-dynamic";
@@ -103,11 +103,8 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     revenue30Sum,
     revenuePriorSum,
     target,
-    recentBookings,
-    recentTx,
-    overdue,
-    unassignedCount,
-    awaitingCount,
+    actionItems,
+    actionCounts,
     sparkDays,
   ] = await Promise.all([
     prisma.inspectionBooking.count({ where: realBooking }),
@@ -121,104 +118,27 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     getCollectedRevenue({ from: d30, ...testOpts }),
     getCollectedRevenue({ from: d60, to: d30, ...testOpts }),
     getMonthlyTargetProgress(now, undefined, testOpts),
-    prisma.inspectionBooking.findMany({
-      where: realBooking,
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-      select: { id: true, ref: true, name: true, status: true, updatedAt: true },
-    }),
-    prisma.transaction.findMany({
-      where: realTx,
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-      select: { id: true, ref: true, customerName: true, estate: true, status: true, updatedAt: true },
-    }),
-    getOverdueInstallments(undefined, undefined, testOpts),
-    prisma.inspectionBooking.count({ where: { ...realBooking, agentId: null, status: { not: "closed" } } }),
-    prisma.inspectionBooking.count({ where: { ...realBooking, status: "active" } }),
+    getActionItems({ includeTest: showTest, now }),
+    getActionCounts({ includeTest: showTest }),
     getRevenueSparkline(14, undefined, undefined, testOpts),
   ]);
 
   const soldSum = target.collected;
   const goal = target.goal;
   const pct = target.pct;
-  const overdueCount = overdue.length;
   const days = sparkDays;
   const maxDay = Math.max(1, ...days);
   const sparkPoints = days
     .map((v, i) => `${(i / 13) * 100},${28 - (v / maxDay) * 24}`)
     .join(" ");
 
-  type FeedItem = {
-    kind: "booking" | "transaction";
-    id: string;
-    ref: string;
-    customer: string;
-    detail: string;
-    statusLabel: string;
-    statusClass: string;
-    href: string;
-    at: Date;
-  };
-  const txBadge = (s: string) =>
-    s === "PAID_IN_FULL"
-      ? "bg-[#16281D] text-white border-[#16281D]"
-      : s === "ACTIVE"
-        ? "bg-[#1F6B3E] text-white border-[#1F6B3E]"
-        : "bg-transparent text-[#6B6252] border-[#D8CFC0]";
-  const feed: FeedItem[] = [
-    ...recentBookings.map((b) => ({
-      kind: "booking" as const,
-      id: b.id,
-      ref: b.ref,
-      customer: b.name,
-      detail: "Inspection booking",
-      statusLabel: statusLabels[b.status] ?? b.status,
-      statusClass: statusColors[b.status] ?? "",
-      href: `/admin/bookings/${b.id}`,
-      at: b.updatedAt,
-    })),
-    ...recentTx.map((t) => ({
-      kind: "transaction" as const,
-      id: t.id,
-      ref: t.ref,
-      customer: t.customerName,
-      detail: t.estate,
-      statusLabel: t.status.replace("_", " "),
-      statusClass: txBadge(t.status),
-      href: `/admin/transactions/${t.id}`,
-      at: t.updatedAt,
-    })),
-  ]
-    .sort((a, b) => b.at.getTime() - a.at.getTime())
-    .slice(0, 8);
-
-  const attention = [
-    {
-      label: "Overdue payments",
-      count: overdueCount,
-      hint: "installments past due",
-      href: "/admin/transactions",
-      tone: overdueCount > 0 ? "text-[#A6402F]" : "text-[var(--ops-muted)]",
-      dot: overdueCount > 0 ? "bg-[#A6402F]" : "bg-[var(--ops-border)]",
-    },
-    {
-      label: "Unassigned bookings",
-      count: unassignedCount,
-      hint: "no agent yet",
-      href: "/admin/bookings?missingAgent=1",
-      tone: unassignedCount > 0 ? "text-[#8B6B1F]" : "text-[var(--ops-muted)]",
-      dot: unassignedCount > 0 ? "bg-[#C89B3C]" : "bg-[var(--ops-border)]",
-    },
-    {
-      label: "Awaiting outcome",
-      count: awaitingCount,
-      hint: "inspections held",
-      href: "/admin/inspections",
-      tone: awaitingCount > 0 ? "text-[#1F6B3E]" : "text-[var(--ops-muted)]",
-      dot: awaitingCount > 0 ? "bg-[#1F6B3E]" : "bg-[var(--ops-border)]",
-    },
-  ];
+  // Needs-action groups in priority order; top items inline, rest via inbox.
+  const groups = INBOX_CATEGORIES.map((c) => ({
+    ...c,
+    count: actionCounts.byCategory[c.category],
+    items: actionItems.filter((i) => i.category === c.category).slice(0, 2),
+  })).filter((g) => g.count > 0);
+  const topItems = actionItems.slice(0, 6);
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -279,62 +199,51 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         </div>
 
         <div className="mt-4 grid lg:grid-cols-[1.85fr_1fr] gap-4 items-start">
-          {/* Recent activity */}
+          {/* Needs action — live work queue, clears itself as items resolve */}
           <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
             <div className="flex items-center justify-between px-5 pt-4 pb-3">
               <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">
-                Recent activity
+                Needs action{actionCounts.total > 0 ? ` · ${actionCounts.total}` : ""}
               </h2>
-              <Link href="/admin/bookings" className="mono text-[11px] text-[var(--ops-primary)] hover:underline underline-offset-4">
-                All bookings →
+              <Link href="/admin/inbox" className="mono text-[11px] text-[var(--ops-primary)] hover:underline underline-offset-4">
+                View all →
               </Link>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm admin-table">
-                <thead>
-                  <tr className="border-b border-[var(--border-hairline)] text-left">
-                    <th className="px-5 py-2.5 mono text-[11px] tracking-[0.08em] uppercase font-medium text-[var(--text-body)]">Reference</th>
-                    <th className="px-4 py-2.5 mono text-[11px] tracking-[0.08em] uppercase font-medium text-[var(--text-body)]">Customer</th>
-                    <th className="px-4 py-2.5 mono text-[11px] tracking-[0.08em] uppercase font-medium text-[var(--text-body)]">Status</th>
-                    <th className="px-4 py-2.5 mono text-[11px] tracking-[0.08em] uppercase font-medium text-[var(--text-body)]">Updated</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--ops-border)]/60">
-                  {feed.map((f) => (
-                    <tr key={`${f.kind}-${f.id}`} className="hover:bg-[rgba(28,43,32,0.03)] transition-colors">
-                      <td className="px-5">
-                        <Link href={f.href} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline">
-                          {f.ref}
+            {topItems.length === 0 ? (
+              <p className="public text-[14px] text-[var(--ops-muted)] px-5 py-12 text-center">You&apos;re all caught up.</p>
+            ) : (
+              <div className="divide-y divide-[var(--ops-border)]/60">
+                {topItems.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[rgba(28,43,32,0.03)] transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <Link href={item.href} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline">
+                          {item.ref}
                         </Link>
-                        <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">{f.kind}</div>
-                      </td>
-                      <td className="px-4">
-                        <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-all">{f.customer}</div>
-                        <div className="text-[12px] text-[var(--ops-muted)] break-all">{f.detail}</div>
-                      </td>
-                      <td className="px-4">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium border ${f.statusClass}`}>
-                          {f.statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-4 mono text-[11px] text-[var(--ops-muted)]">
-                        {f.at.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
-                      </td>
-                    </tr>
-                  ))}
-                  {feed.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-5 py-12 text-center">
-                        <p className="public text-[14px] text-[var(--ops-muted)]">No activity yet — bookings and transactions will appear here.</p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">{item.age}</span>
+                      </div>
+                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-all">{item.title}</div>
+                      <div className="text-[12px] text-[var(--ops-muted)] break-all">{item.subtitle}</div>
+                    </div>
+                    <Link href={item.href} className="shrink-0 mono text-[11px] bg-[var(--ops-primary)] text-white rounded-full px-3.5 py-1.5 font-medium hover:bg-[var(--ops-deep)] transition-colors">
+                      {item.actionLabel}
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+            {groups.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 px-5 py-3 border-t border-[var(--ops-border)]/60">
+                {groups.map((g) => (
+                  <Link key={g.category} href={`/admin/inbox?category=${g.category}`} className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)]">
+                    {g.label} · {g.count}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Right stack: target + attention */}
+          {/* Right stack: target only (attention merged into Needs action) */}
           <div className="space-y-4">
             <div className="bg-white border border-[var(--border-hairline)] rounded-[var(--ops-radius)] p-5 shadow-[var(--shadow-sm)]">
               <div className="mono text-[11px] tracking-[0.08em] uppercase text-[var(--ops-muted)]">Monthly target</div>
@@ -360,23 +269,6 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                 <div className="h-full rounded-full bg-[var(--accent-gold)]" style={{ width: `${pct}%` }} />
               </div>
               <div className="public text-[12px] text-[var(--ops-muted)] mt-2">Receipted sales this month · last 14 days above</div>
-            </div>
-
-            <div className="bg-white border border-[var(--border-hairline)] rounded-[var(--ops-radius)] p-5 shadow-[var(--shadow-sm)]">
-              <div className="mono text-[11px] tracking-[0.08em] uppercase text-[var(--ops-muted)]">Needs attention</div>
-              <div className="mt-3 divide-y divide-[var(--ops-border)]/60">
-                {attention.map((a) => (
-                  <Link key={a.label} href={a.href} className="flex items-center gap-3 py-3 group">
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${a.dot}`} />
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[13px] font-medium text-[var(--ops-text)] group-hover:underline underline-offset-4">{a.label}</span>
-                      <span className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">{a.hint}</span>
-                    </span>
-                    <span className={`font-mono text-[15px] font-medium ${a.tone}`}>{a.count}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-[var(--ops-muted)] group-hover:text-[var(--ops-text)] transition-colors"><path d="M9 18l6-6-6-6" /></svg>
-                  </Link>
-                ))}
-              </div>
             </div>
           </div>
         </div>

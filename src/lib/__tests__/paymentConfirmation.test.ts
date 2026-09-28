@@ -66,6 +66,7 @@ type MockState = {
   transactions: MockTransaction[];
   receipts: Record<string, unknown>[];
   outbox: Record<string, unknown>[];
+  audits: Record<string, unknown>[];
 };
 
 function makeMockTx(state: MockState): TxClient {
@@ -162,6 +163,14 @@ function makeMockTx(state: MockState): TxClient {
         return row;
       },
     },
+    auditEvent: {
+      create: async (args: unknown) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const row = { id: `aud-${state.audits.length + 1}`, ...data };
+        state.audits.push(row);
+        return row;
+      },
+    },
   } as unknown as TxClient;
 }
 
@@ -198,7 +207,7 @@ function seed2900(): MockState {
     paymentPlan: { code: "OUTRIGHT", name: "Outright" },
     installments: [installment],
   };
-  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], outbox: [] };
+  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], outbox: [], audits: [] };
 }
 
 function pendingPayment(id: string): MockPayment {
@@ -285,6 +294,10 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.outbox).toHaveLength(1);
     expect((state.outbox[0] as { type: string }).type).toBe("receipt");
     expect((state.outbox[0] as { relatedId: string }).relatedId).toBe((state.receipts[0] as { id: string }).id);
+    // Audit row written in the same unit.
+    expect(state.audits).toHaveLength(1);
+    expect((state.audits[0] as { action: string }).action).toBe("payment.confirm");
+    expect((state.audits[0] as { entityId: string }).entityId).toBe("pay-1");
   });
 
   it("double-confirm applies only once (idempotent claim)", async () => {
@@ -347,6 +360,7 @@ describe("reverseConfirmedPaymentDbUnit", () => {
     expect(state.installments[0].status).toBe("OVERDUE"); // past due, nothing confirmed
     expect(state.payments[0].status).toBe("CANCELLED");
     expect(state.receipts).toHaveLength(1); // audit trail kept
+    expect(state.audits.map((a) => (a as { action: string }).action)).toContain("payment.void");
   });
 
   it("second void aborts (already handled)", async () => {

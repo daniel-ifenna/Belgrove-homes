@@ -88,6 +88,17 @@ export async function sendReceiptForOutbox(receiptId: string): Promise<EmailResu
       error: result.error,
     },
   });
+  await prisma.auditEvent.create({
+    data: {
+      actorId: null,
+      actorName: "Outbox",
+      action: "receipt.send",
+      entityType: "receipt",
+      entityId: receipt.id,
+      before: { emailStatus: "PENDING" },
+      after: { sent: result.sent, to: receipt.recipientEmail, error: result.error },
+    },
+  });
   await prisma.receipt.update({
     where: { id: receipt.id },
     data: {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { generateUniquePaymentRef } from "@/lib/ref";
@@ -76,20 +77,34 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     });
     if (recentDup) return NextResponse.json({ payment: recentDup, deduped: true });
 
-    const payment = await prisma.payment.create({
-      data: {
-        transactionId: id,
-        installmentId: installmentIdToUse,
-        paymentReference: await generateUniquePaymentRef(),
-        amount: amt,
-        paymentDate: date,
-        paymentMethod: paymentMethod || "Bank Transfer",
-        bankReference: bankReference || null,
-        notes: notes || null,
-        status: "PENDING_VERIFICATION",
-        recordedById: session!.user.id,
-        source: "MANUAL",
-      },
+    const { payment } = await prisma.$transaction(async (tx) => {
+      const created = await tx.payment.create({
+        data: {
+          transactionId: id,
+          installmentId: installmentIdToUse,
+          paymentReference: await generateUniquePaymentRef(),
+          amount: amt,
+          paymentDate: date,
+          paymentMethod: paymentMethod || "Bank Transfer",
+          bankReference: bankReference || null,
+          notes: notes || null,
+          status: "PENDING_VERIFICATION",
+          recordedById: session!.user.id,
+          source: "MANUAL",
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorId: session!.user.id,
+          actorName: session!.user.name ?? session!.user.email ?? "Unknown",
+          action: "payment.record",
+          entityType: "payment",
+          entityId: created.id,
+          before: Prisma.JsonNull,
+          after: { status: "PENDING_VERIFICATION", amount: amt, paymentReference: created.paymentReference },
+        },
+      });
+      return { payment: created };
     });
 
     return NextResponse.json({ payment }, { status: 201 });

@@ -485,7 +485,7 @@ export default function BookingActions({
       )}
 
       {/* Company Agent canonical typeahead */}
-      <div id="assign-agent" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
+      <div id="assign-agent" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6 scroll-mt-20">
         <PanelHeader
           title="Company Agent"
           description="Typeahead against the Agents table — the visitor's raw text is read-only; confirm the match explicitly."

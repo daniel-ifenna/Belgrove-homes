@@ -120,6 +120,7 @@ export type ConfirmDbInput = {
   paymentId: string;
   transactionId: string;
   confirmedById?: string | null;
+  confirmedByName?: string | null;
   verificationNotes?: string | null;
   receiptRef: string; // pre-generated BEFORE the transaction (DB uniqueness rechecked by constraint)
   receiptUrl: string; // tokenized client URL ({APP_URL}/r/{accessToken})
@@ -295,6 +296,19 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
     },
   });
 
+  // Immutable audit row in the same unit: who confirmed what.
+  await tx.auditEvent.create({
+    data: {
+      actorId: input.confirmedById ?? null,
+      actorName: input.confirmedByName ?? "System",
+      action: "payment.confirm",
+      entityType: "payment",
+      entityId: payment.id,
+      before: { status: "PENDING_VERIFICATION", amount: payment.amount },
+      after: { status: "CONFIRMED", amount: payment.amount, receiptRef: input.receiptRef },
+    },
+  });
+
   return {
     payment: {
       id: payment.id,
@@ -325,7 +339,7 @@ export type VoidDbResult = {
 // toward totals). Pending payments are voided without touching totals.
 export async function reverseConfirmedPaymentDbUnit(
   tx: TxClient,
-  input: { paymentId: string; transactionId: string; reason?: string | null }
+  input: { paymentId: string; transactionId: string; reason?: string | null; actorId?: string | null; actorName?: string | null }
 ): Promise<VoidDbResult> {
   const now = new Date();
 
@@ -380,6 +394,18 @@ export async function reverseConfirmedPaymentDbUnit(
       // A paid-in-full transaction that loses a payment becomes active again.
       status: newOutstanding === 0 ? "PAID_IN_FULL" : "ACTIVE",
       updatedAt: now,
+    },
+  });
+
+  await tx.auditEvent.create({
+    data: {
+      actorId: input.actorId ?? null,
+      actorName: input.actorName ?? "System",
+      action: "payment.void",
+      entityType: "payment",
+      entityId: payment.id,
+      before: { status: "CONFIRMED", amount: payment.amount },
+      after: { status: "CANCELLED", amount: payment.amount, reason: input.reason ?? null },
     },
   });
 

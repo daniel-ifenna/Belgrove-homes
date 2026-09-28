@@ -168,9 +168,13 @@ model Notification {
   bookingId String?
   booking   InspectionBooking? @relation(fields: [bookingId], references: [id])
   read      Boolean  @default(false)
+  // Set when the entity behind this notification no longer has an inbox
+  // item (work done). The bell counts unresolved + unread only.
+  resolvedAt DateTime?
   createdAt DateTime @default(now())
 
   @@index([userId, read])
+  @@index([userId, resolvedAt])
 }
 
 // Company agents — staff or hire-purchase partners that can be assigned to unassigned bookings.
@@ -540,4 +544,23 @@ model EmailOutbox {
 
   @@index([status, nextAttemptAt])
   @@index([relatedType, relatedId])
+}
+
+// Immutable audit trail for payment/transaction/receipt mutations.
+// Bookings keep using BookingActivity; this covers everything else.
+// Rows are written inside the same DB transaction as the change.
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorName  String   @default("System")
+  action     String // payment.confirm | payment.void | payment.record |
+                    // transaction.create | receipt.send | receipt.resend
+  entityType String // payment | transaction | receipt
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }

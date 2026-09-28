@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { generateUniqueTransactionRef } from "@/lib/ref";
 import { calculateTransactionAmounts, generateInstallmentSchedule } from "@/lib/paymentCalculation";
 import { findOrCreateCustomer } from "@/lib/customer";
@@ -10,7 +11,8 @@ export async function createTransactionFromBooking(
   unitPrice: number,
   plotQuantity: number,
   agentId?: string | null,
-  createdById?: string | null
+  createdById?: string | null,
+  actorName?: string | null
 ) {
   const booking = await prisma.inspectionBooking.findUnique({ where: { id: bookingId }, include: { agent: true } });
   if (!booking) throw new Error("Booking not found");
@@ -71,6 +73,18 @@ export async function createTransactionFromBooking(
       });
     }
 
+    await tx.auditEvent.create({
+      data: {
+        actorId: createdById ?? null,
+        actorName: actorName ?? "System",
+        action: "transaction.create",
+        entityType: "transaction",
+        entityId: transaction.id,
+        before: Prisma.JsonNull,
+        after: { ref: transaction.ref, bookingId: booking.id, totalPayable },
+      },
+    });
+
     return transaction;
   });
 }
@@ -88,6 +102,7 @@ export async function createManualTransaction(params: {
   paymentPlanCode: string;
   agentId?: string | null;
   createdById?: string | null;
+  actorName?: string | null;
   manualReason: string;
 }) {
   if (!params.manualReason?.trim()) {
@@ -154,6 +169,18 @@ export async function createManualTransaction(params: {
         },
       });
     }
+
+    await tx.auditEvent.create({
+      data: {
+        actorId: params.createdById ?? null,
+        actorName: params.actorName ?? "System",
+        action: "transaction.create",
+        entityType: "transaction",
+        entityId: transaction.id,
+        before: Prisma.JsonNull,
+        after: { ref: transaction.ref, manualReason: params.manualReason.trim(), totalPayable },
+      },
+    });
 
     return transaction;
   });

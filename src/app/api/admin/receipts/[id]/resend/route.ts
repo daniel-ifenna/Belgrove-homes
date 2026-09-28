@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
@@ -93,6 +94,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       error: emailResult.error,
       actorId,
       actorName,
+    },
+  });
+  await prisma.auditEvent.create({
+    data: {
+      actorId,
+      actorName,
+      action: "receipt.resend",
+      entityType: "receipt",
+      entityId: receipt.id,
+      before: Prisma.JsonNull,
+      after: { sent: emailResult.sent, to: receipt.recipientEmail, error: emailResult.error },
     },
   });
 

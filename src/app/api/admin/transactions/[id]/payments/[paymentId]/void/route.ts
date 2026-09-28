@@ -29,20 +29,42 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   try {
     if (payment.status === "PENDING_VERIFICATION") {
-      const updated = await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "CANCELLED",
-          verificationNotes: reason ? `Voided: ${reason}` : "Voided before verification",
-          updatedAt: new Date(),
-        },
+      const actorName = session!.user.name ?? session!.user.email ?? "Unknown";
+      const updated = await prisma.$transaction(async (tx) => {
+        const row = await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "CANCELLED",
+            verificationNotes: reason ? `Voided: ${reason}` : "Voided before verification",
+            updatedAt: new Date(),
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorId: session!.user.id,
+            actorName,
+            action: "payment.void",
+            entityType: "payment",
+            entityId: payment.id,
+            before: { status: "PENDING_VERIFICATION", amount: payment.amount },
+            after: { status: "CANCELLED", amount: payment.amount, reason },
+          },
+        });
+        return row;
       });
       return NextResponse.json({ payment: updated });
     }
 
     if (payment.status === "CONFIRMED") {
       const result = await prisma.$transaction(
-        async (tx) => reverseConfirmedPaymentDbUnit(tx, { paymentId, transactionId: id, reason }),
+        async (tx) =>
+          reverseConfirmedPaymentDbUnit(tx, {
+            paymentId,
+            transactionId: id,
+            reason,
+            actorId: session!.user.id,
+            actorName: session!.user.name ?? session!.user.email ?? "Unknown",
+          }),
         { maxWait: 5000, timeout: 10000 }
       );
       return NextResponse.json({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
+import { getInboxBookingIds } from "@/lib/inbox";
 
 export async function GET() {
   const session = await auth();
@@ -9,14 +10,28 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Resolve notifications whose booking no longer has an inbox item (work done).
+  const openIds = await getInboxBookingIds();
+  const stale = await prisma.notification.findMany({
+    where: { userId: session!.user.id, resolvedAt: null, bookingId: { not: null } },
+    select: { id: true, bookingId: true },
+  });
+  const doneIds = stale.filter((n) => n.bookingId && !openIds.has(n.bookingId)).map((n) => n.id);
+  if (doneIds.length > 0) {
+    await prisma.notification.updateMany({
+      where: { id: { in: doneIds } },
+      data: { resolvedAt: new Date() },
+    });
+  }
+
   const [notifications, unreadCount] = await Promise.all([
     prisma.notification.findMany({
-      where: { userId: session!.user.id },
+      where: { userId: session!.user.id, resolvedAt: null },
       orderBy: { createdAt: "desc" },
       take: 20,
       include: { booking: { select: { ref: true } } },
     }),
-    prisma.notification.count({ where: { userId: session!.user.id, read: false } }),
+    prisma.notification.count({ where: { userId: session!.user.id, read: false, resolvedAt: null } }),
   ]);
 
   return NextResponse.json({ notifications, unreadCount });

@@ -161,11 +161,46 @@ export function AdminSidebar() {
 function SidebarInner() {
   const pathname = usePathname();
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + "/");
+  const [badges, setBadges] = useState<{ total: number; pendingPayments: number; bookingsNewUnassigned: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/inbox/counts", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j && typeof j.total === "number") setBadges(j);
+      })
+      .catch(() => {});
+    const interval = setInterval(() => {
+      fetch("/api/admin/inbox/counts", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (!cancelled && j && typeof j.total === "number") setBadges(j);
+        })
+        .catch(() => {});
+    }, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [pathname]);
+
+  const badgeFor = (href: string): number => {
+    if (!badges) return 0;
+    if (href === "/admin/inbox") return badges.total;
+    if (href === "/admin/payments") return badges.pendingPayments;
+    if (href === "/admin/bookings") return badges.bookingsNewUnassigned;
+    return 0;
+  };
 
   const groups: { label: string; items: { href: string; label: string; icon: React.ComponentType<{ active?: boolean; dim?: boolean }>; active: boolean }[] }[] = [
     {
       label: "Overview",
-      items: [{ href: "/admin", label: "Dashboard", icon: DashboardIcon, active: pathname === "/admin" }],
+      items: [
+        { href: "/admin", label: "Dashboard", icon: DashboardIcon, active: pathname === "/admin" },
+        { href: "/admin/inbox", label: "Inbox", icon: InspectionsIcon, active: isActive("/admin/inbox") },
+        { href: "/admin/activity", label: "Activity", icon: ReportsIcon, active: isActive("/admin/activity") },
+      ],
     },
     {
       label: "Sales",
@@ -207,6 +242,7 @@ function SidebarInner() {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = item.active;
+                const badge = badgeFor(item.href);
                 return (
                   <Link
                     key={item.label}
@@ -217,7 +253,11 @@ function SidebarInner() {
                       <Icon active={active} />
                     </span>
                     {item.label}
-                    {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--ops-gold)]" />}
+                    {badge > 0 && (
+                      <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--ops-gold)] text-[var(--ops-deep)] text-[11px] font-medium grid place-items-center">
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
