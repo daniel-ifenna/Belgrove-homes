@@ -109,4 +109,10 @@ describe("mark_active timing rule", () => {
     const text = fs.readFileSync(path.join(SRC, "app/api/admin/bookings/[id]/route.ts"), "utf8");
     expect(text).toContain("inspectedAt: new Date()");
   });
+  it("scheduled start is Lagos-explicit, never server-local", () => {
+    const text = fs.readFileSync(path.join(SRC, "lib/inspection-time.ts"), "utf8");
+    expect(text).toContain("lagosToUtc");
+    expect(text).toContain("lagosDayKey");
+    expect(text).not.toMatch(/\.setHours\(/);
+  });
 });
