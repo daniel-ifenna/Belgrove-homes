@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
 import StatusBadge from "@/components/admin/StatusBadge";
+import ClickableRow from "@/components/admin/ClickableRow";
 import { formatDate } from "@/lib/booking-ui";
 import { getCollectedRevenue } from "@/lib/finance";
 export const dynamic = "force-dynamic";
@@ -164,7 +165,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
               </thead>
               <tbody className="divide-y divide-[var(--ops-border)]/60">
                 {payments.map((p: any) => (
-                  <tr key={p.id} className="hover:bg-[var(--ops-bg)]/50">
+                  <ClickableRow key={p.id} href={`/admin/transactions/${p.transactionId}#payment-${p.id}`}>
                     <td className="px-4 py-3 font-mono text-[11px] row-lead"><Link href={`/admin/transactions/${p.transactionId}#payment-${p.id}`} className="text-[var(--ops-primary)] hover:underline">{p.paymentReference}</Link></td>
                     <td className="px-4 py-3 font-mono text-[11px] text-[var(--ops-muted)]">{p.bankReference ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "—"}</td>
@@ -176,11 +177,11 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
                     <td className="px-4 py-3"><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" /></td>
                     <td className="px-4 py-3 mono text-[11px]">{formatDate(p.paymentDate)}</td>
                     <td className="px-4 py-3 mono text-[11px]">{p.confirmedBy?.name ?? "—"}</td>
-                  </tr>
+                  </ClickableRow>
                 ))}
                 {payments.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-16 text-center">
+                    <td colSpan={11} className="px-4 py-16 text-center">
                       <p className="public text-[14px] font-medium">No payments</p>
                       <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Payments appear here after recording and confirmation.</p>
                     </td>

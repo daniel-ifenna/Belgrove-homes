@@ -4,20 +4,13 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
+import { formatDateTime } from "@/lib/booking-ui";
+import { receiptAmountsRows } from "@/lib/receipt-amounts";
 import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
 import ReceiptActions from "./ReceiptActions";
 
-function formatDate(d: Date | string | null): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-function formatDateTime(d: Date | string | null): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+// Dates go through the shared Lagos formatter (src/lib/booking-ui.ts).
 export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const receipt = await prisma.receipt.findUnique({
@@ -101,12 +94,22 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
               <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Amounts</h2>
               <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">This payment</span><span className="font-mono font-bold price">{formatNaira(receipt.finalAmount)}</span></div>
-                {installmentLabel && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Installment</span><span className="font-medium">{installmentLabel}</span></div>}
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Total price</span><span className="font-mono price">{formatNaira(receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Paid to date</span><span className="font-mono price">{formatNaira(paidToDate)}</span></div>
-                <div className="flex justify-between border-t border-[var(--ops-border)] pt-2"><span className="font-medium">Balance remaining</span><span className="font-mono font-bold price">{formatNaira(balanceRemaining)}</span></div>
-                {receipt.discount > 0 && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Discount</span><span className="font-mono price">{formatNaira(receipt.discount)}</span></div>}
+                {receiptAmountsRows({
+                  thisPayment: receipt.finalAmount,
+                  installmentLabel,
+                  totalPrice: receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount,
+                  paidToDate,
+                  balanceRemaining,
+                  discount: receipt.discount,
+                }).map((row) => (
+                  <div
+                    key={row.key}
+                    className={`flex justify-between ${row.key === "balance" ? "border-t border-[var(--ops-border)] pt-2" : ""}`}
+                  >
+                    <span className={row.key === "balance" ? "font-medium" : "text-[var(--ops-muted)]"}>{row.label}</span>
+                    <span className={`font-mono price ${row.emphasize ? "font-bold" : ""}`}>{typeof row.value === "number" ? formatNaira(row.value) : row.value}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Amount in words</span><span className="text-[12px] text-right max-w-[60%]">{receipt.amountInWords}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Description</span><span className="text-[12px] text-right max-w-[60%]">{receipt.paymentDescription}</span></div>
                 {receipt.paymentMethod && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Method</span><span className="font-medium">{receipt.paymentMethod}</span></div>}

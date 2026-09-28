@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
+import { receiptAmountsRows } from "@/lib/receipt-amounts";
 import { isTokenUsable } from "@/lib/receipt-access";
 
 export const dynamic = "force-dynamic";
@@ -89,12 +90,23 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
               <div className="mono text-[12px] text-[#6B6656]">{receipt.customerEmail}</div>
             </div>
             <div className="bg-[#C79A46] rounded-lg p-4 text-white">
-              <div className="mono text-[10px] tracking-[0.12em] uppercase opacity-90">This payment</div>
-              <div className="fraunces text-[20px] font-bold mt-1">{formatNaira(receipt.finalAmount)}</div>
-              <div className="mono text-[11px] mt-2 opacity-90">TOTAL PRICE: {formatNaira(totalPrice)}</div>
-              <div className="mono text-[11px] opacity-90">PAID TO DATE: {formatNaira(paidToDate)}</div>
-              <div className="mono text-[11px] opacity-90">BALANCE: {formatNaira(totalPrice - paidToDate)}</div>
-              {receipt.discount > 0 && <div className="mono text-[11px] opacity-90">DISCOUNT: {formatNaira(receipt.discount)}</div>}
+              {receiptAmountsRows({
+                thisPayment: receipt.finalAmount,
+                installmentLabel,
+                totalPrice,
+                paidToDate,
+                balanceRemaining: totalPrice - paidToDate,
+                discount: receipt.discount,
+              }).map((row, i) => (
+                <div key={row.key} className={`mono text-[11px] opacity-90 ${i === 0 ? "" : "mt-2"}`}>
+                  {i === 0 && <div className="mono text-[10px] tracking-[0.12em] uppercase opacity-90">{row.label}</div>}
+                  {i === 0 ? (
+                    <div className="fraunces text-[20px] font-bold mt-1">{formatNaira(row.value as number)}</div>
+                  ) : (
+                    <span>{row.label.toUpperCase()}: {typeof row.value === "number" ? formatNaira(row.value) : row.value}</span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 

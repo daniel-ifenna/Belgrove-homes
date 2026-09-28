@@ -110,18 +110,23 @@ export default function RecordPaymentForm({
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
         <div>
           <label className="mono text-[11px] text-[var(--ops-muted)]">Installment *</label>
-          <select
-            value={installmentId}
-            onChange={(e) => onInstallmentChange(e.target.value)}
-            disabled={lockInstallment}
-            className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white disabled:bg-[var(--ops-bg)] disabled:text-[var(--ops-muted)]"
-          >
-            {installments.map((inst) => (
-              <option key={inst.id} value={inst.id}>
-                {inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`} — Due {new Date(inst.dueDate).toLocaleDateString("en-GB")} — Scheduled {formatNaira(inst.scheduledAmount)} — Paid {formatNaira(inst.paidAmount)} — {inst.status} {inst.scheduledAmount - inst.paidAmount > 0 ? `· Due ${formatNaira(inst.scheduledAmount - inst.paidAmount)}` : ""}
-              </option>
-            ))}
-          </select>
+          {lockInstallment && selected ? (
+            <div className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-[var(--ops-bg)] text-[var(--ops-text)] font-medium">
+              {selected.type === "INITIAL" ? "Initial payment" : `Month ${selected.installmentNumber} payment`}
+            </div>
+          ) : (
+            <select
+              value={installmentId}
+              onChange={(e) => onInstallmentChange(e.target.value)}
+              className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white"
+            >
+              {installments.map((inst) => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`} — Due {new Date(inst.dueDate).toLocaleDateString("en-GB")} — Scheduled {formatNaira(inst.scheduledAmount)} — Paid {formatNaira(inst.paidAmount)} — {inst.status} {inst.scheduledAmount - inst.paidAmount > 0 ? `· Due ${formatNaira(inst.scheduledAmount - inst.paidAmount)}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
           {selected && <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">Selected due: {formatNaira(due)} · Outstanding transaction: {formatNaira(outstanding)}</div>}
         </div>
         <div className="grid md:grid-cols-2 gap-3">

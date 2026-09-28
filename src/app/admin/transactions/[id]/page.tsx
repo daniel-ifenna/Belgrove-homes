@@ -7,6 +7,7 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
+import { formatDate, formatDateTime } from "@/lib/booking-ui";
 import { getTransactionSummary } from "@/lib/finance";
 import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
@@ -16,16 +17,8 @@ import PaymentVerificationButtons from "./PaymentVerificationButtons";
 // Finance display labels (Paid / Late / Partial / Pending) are rendered
 // directly from getTransactionSummary — no local status mapping.
 
-function formatDate(d: Date | string | null): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-function formatDateTime(d: Date | string | null): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+// Dates go through the shared Lagos formatter (src/lib/booking-ui.ts) —
+ // never server-local toLocaleString.
 
 export default async function TransactionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -69,7 +62,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
               <div className="mono text-[11px] tracking-[0.14em] uppercase text-[var(--ops-muted)]">Transaction</div>
               <div className="flex flex-wrap items-baseline gap-3 mt-1">
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{transaction.ref}</h1>
-                <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${transaction.status === "PAID_IN_FULL" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : transaction.status === "ACTIVE" ? "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>{transaction.status.replace("_", " ")}</span>
+                <StatusBadge status={transaction.status} className="px-3 py-1.5 text-xs" />
                 {transaction.booking && <Link href={`/admin/bookings/${transaction.booking.id}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">Booking {transaction.booking.ref} ↗</Link>}
                 {!transaction.booking && transaction.manualReason && <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {transaction.manualReason}</span>}
               </div>

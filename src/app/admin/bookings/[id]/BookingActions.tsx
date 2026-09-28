@@ -10,6 +10,7 @@ import type { BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 
 type Booking = {
   id: string;
+  ref: string;
   status: BookingStatus;
   leadTemperature: LeadTemperature;
   agentName: string | null;
@@ -577,7 +578,7 @@ export default function BookingActions({
                   <div className="p-3 rounded-xl bg-[var(--cream)] border border-[var(--line)] text-xs">
                     <div className="font-medium text-[var(--ink)]">Email preview</div>
                     <p className="text-[var(--ink-muted)] mt-1">To: {agents.find((a) => a.id === selectedAgentId)?.email}</p>
-                    <p className="text-[var(--ink-muted)]">Subject: New client assigned {booking.id.slice(0, 8)}</p>
+                    <p className="text-[var(--ink-muted)]">Subject: New client assigned {booking.ref}</p>
                     <p className="text-[var(--ink)] mt-2">Client details will be sent to the agent. {assignNote ? `Note: “${assignNote}”` : ""}</p>
                     <button onClick={() => setShowPreview(false)} className="text-xs underline mt-2">Hide preview</button>
                   </div>

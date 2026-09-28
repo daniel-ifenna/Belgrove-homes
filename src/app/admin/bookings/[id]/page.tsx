@@ -132,7 +132,6 @@ export default async function AdminBookingDetailPage({
               <div className="mono text-[11px] tracking-[0.14em] uppercase text-[var(--ops-muted)]">Booking</div>
               <div className="flex flex-wrap items-baseline gap-3 mt-1">
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{booking.ref}</h1>
-                <span className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] border border-[var(--ops-border)] rounded-full px-2.5 py-1 bg-[var(--ops-bg)]">{booking.id.slice(0, 8)}</span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-[15px] font-medium text-[var(--ops-text)]">{booking.name}</span>
@@ -231,12 +230,21 @@ export default async function AdminBookingDetailPage({
               <div className="flex items-center gap-2">
                 <span className="h-6 w-6 rounded-full bg-[#C89B3C] text-white grid place-items-center text-[10px]">★</span>
                 <div>
-                  <span className="text-sm font-medium text-[#92400E]">Intake form completed?</span>
-                  <span className="block mono text-[11px] text-[#92400E]/80">Confirm to auto-create the transaction — pre-filled from this booking, plan selection only.</span>
+                  {booking.outcome === "sold" ? (
+                    <>
+                      <span className="text-sm font-medium text-[#92400E]">Sold — no transaction yet</span>
+                      <span className="block mono text-[11px] text-[#92400E]/80">Create the transaction to record payments and issue receipts.</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium text-[#92400E]">Intake form completed?</span>
+                      <span className="block mono text-[11px] text-[#92400E]/80">Confirm to auto-create the transaction — pre-filled from this booking, plan selection only.</span>
+                    </>
+                  )}
                 </div>
               </div>
               <Link href={`/admin/transactions/new?bookingId=${booking.id}`} className="mono text-[11px] bg-[#0D3328] text-white px-4 py-2 rounded-full hover:bg-[#08261E] font-medium">
-                Confirm Form Completed →
+                {booking.outcome === "sold" ? "Create transaction →" : "Confirm Form Completed →"}
               </Link>
             </div>
           ) : null}
@@ -370,6 +378,7 @@ export default async function AdminBookingDetailPage({
             <BookingActions
               booking={{
                 id: booking.id,
+                ref: booking.ref,
                 status: booking.status as any,
                 leadTemperature: booking.leadTemperature as any,
                 agentName: booking.agentName,

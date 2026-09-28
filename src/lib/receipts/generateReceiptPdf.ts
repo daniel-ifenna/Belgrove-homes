@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import { amountToWords } from "./amountToWords";
 import { formatNaira } from "../currency";
 import { formatDisplayName } from "../formatName";
+import { receiptAmountsRows } from "../receipt-amounts";
 
 // Server-only: signature asset stored in private path, never as public URL
 const SIGNATURE_REL = path.join(process.cwd(), "src/lib/receipts/belgrove-cashier-signature.png");
@@ -253,16 +254,22 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
     doc.setFontSize(7);
     doc.setTextColor(80, 80, 80);
     const details: [string, string][] = [];
+    // Same amounts layout and wording as the admin receipt page and the
+    // client receipt (This payment → Installment → Total price →
+    // Paid to date → Balance remaining, Discount only when > 0).
+    for (const row of receiptAmountsRows({
+      thisPayment: data.amountPaid,
+      installmentLabel: ext.installmentLabel ?? null,
+      totalPrice: ext.totalPayable ?? data.soldPrice,
+      paidToDate: ext.totalPaidAfter ?? data.amountPaid,
+      balanceRemaining: ext.outstandingBalance ?? data.soldPrice - data.amountPaid,
+      discount: data.discount ?? 0,
+    })) {
+      details.push([`${row.label}:`, typeof row.value === "number" ? formatNaira(row.value) : row.value]);
+    }
     if (ext.paymentPlanName) details.push(["Payment Plan:", ext.paymentPlanName]);
     if (ext.interestAmount !== undefined) details.push(["Interest:", formatNaira(ext.interestAmount)]);
-    if (typeof data.discount === "number" && data.discount > 0) details.push(["Discount:", formatNaira(data.discount)]);
-    if (ext.installmentLabel) details.push(["Installment:", ext.installmentLabel]);
-    if (ext.totalPayable !== undefined) details.push(["Total price:", formatNaira(ext.totalPayable)]);
     if (ext.previouslyPaid !== undefined) details.push(["Previously Paid:", formatNaira(ext.previouslyPaid)]);
-    details.push(["This payment:", formatNaira(data.amountPaid)]);
-    if (ext.totalPaidAfter !== undefined) details.push(["Paid to date:", formatNaira(ext.totalPaidAfter)]);
-    else details.push(["Paid to date:", formatNaira(data.amountPaid)]);
-    if (ext.outstandingBalance !== undefined) details.push(["Balance remaining:", formatNaira(ext.outstandingBalance)]);
     for (const [label, val] of details) {
       doc.setFont(fontName, "bold");
       doc.text(label, margin, y);

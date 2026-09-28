@@ -92,6 +92,12 @@ body {
 *:focus-visible { outline: 2px solid var(--accent-gold); outline-offset: 2px; }
 ::selection { background: rgba(200,155,60,0.22); }
 
+/* — Phase 4 tablet rule: wide tables scroll inside their own container
+   (overflow-x-auto); the page itself never scrolls horizontally.
+   `clip` (not `hidden`) keeps position: sticky working. */
+html, body { overflow-x: clip; }
+
+
 /* — Admin ledger tables — hairline dividers, 56px rhythm, hover affordance.
    First-column lead text gains weight on row hover (400→500) as a quiet
    signal the row is interactive. */

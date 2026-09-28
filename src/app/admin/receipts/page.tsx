@@ -71,7 +71,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
       orderBy: { issuedAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { booking: { select: { id: true, status: true } }, transaction: { select: { id: true, ref: true } }, sendAttempts: { orderBy: { attemptedAt: "desc" }, take: 1 } },
+      include: { booking: { select: { id: true, ref: true, status: true } }, transaction: { select: { id: true, ref: true } }, sendAttempts: { orderBy: { attemptedAt: "desc" }, take: 1 } },
     }),
     prisma.receipt.count({ where }),
   ]);
@@ -198,9 +198,9 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                     </td>
                     <td className="px-4 py-3">
                       {(r as any).transactionId ? (
-                        <Link href={`/admin/transactions/${(r as any).transactionId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).transaction?.ref ?? (r as any).transactionId.slice(0, 8)}</Link>
+                        <Link href={`/admin/transactions/${(r as any).transactionId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).transaction?.ref ?? "—"}</Link>
                       ) : r.bookingId ? (
-                        <Link href={`/admin/bookings/${r.bookingId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{r.bookingId.slice(0, 8)}</Link>
+                        <Link href={`/admin/bookings/${r.bookingId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).booking?.ref ?? "—"}</Link>
                       ) : (
                         <span className="mono text-[11px] text-[var(--ops-muted)]">—</span>
                       )}

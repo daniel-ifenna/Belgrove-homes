@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import StatusBadge, { statusLabel, statusStyle } from "../StatusBadge";
 import { trendFor } from "../TrendChip";
 import { describePayment } from "@/lib/paymentConfirmation";
+import { receiptAmountsRows } from "@/lib/receipt-amounts";
 
 describe("StatusBadge mapping", () => {
   it("maps every known status to a pill class (no unstyled fallback)", () => {
@@ -66,5 +67,26 @@ describe("receipt amounts wording", () => {
   });
   it("omits missing unit/plot cleanly", () => {
     expect(describePayment(null, { estate: "Estate" })).toBe("Initial payment — Estate");
+  });
+
+  it("amounts block uses the shared order with no legacy labels", () => {
+    const rows = receiptAmountsRows({
+      thisPayment: 2_905_000,
+      installmentLabel: "Initial payment",
+      totalPrice: 8_300_000,
+      paidToDate: 2_905_000,
+      balanceRemaining: 5_395_000,
+      discount: 0,
+    });
+    expect(rows.map((r) => r.label)).toEqual([
+      "This payment",
+      "Installment",
+      "Total price",
+      "Paid to date",
+      "Balance remaining",
+    ]);
+    for (const r of rows) {
+      expect(r.label).not.toMatch(/amount before discount|final amount paid/i);
+    }
   });
 });
