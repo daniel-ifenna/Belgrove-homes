@@ -4,7 +4,7 @@ export default function Footer() {
   return (
     <footer className="bg-[#16281D] text-[#F5EFE2] mt-0">
       <div className="max-w-[1280px] mx-auto px-6 lg:px-8 py-12 lg:py-14">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
           <div>
             <div className="flex items-baseline gap-1">
               <span className="font-serif text-[20px] tracking-[-0.02em] text-[#F5EFE2] font-semibold">Belgrove</span>
@@ -22,10 +22,20 @@ export default function Footer() {
             </div>
           </div>
           <div>
-            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Explore</h4>
+            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Estates</h4>
             <ul className="mt-4 space-y-2.5">
-              <li><Link href="/gallery" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Gallery</Link></li>
+              <li><Link href="/estates/aurum-residence" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Aurum Residence</Link></li>
+              <li><Link href="/estates/belgrove-peninsula" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Belgrove Peninsula</Link></li>
+              <li><Link href="/estates/sunrise-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Sunrise Estate</Link></li>
+              <li><Link href="/estates/starlight-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Starlight Estate</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Company</h4>
+            <ul className="mt-4 space-y-2.5">
               <li><Link href="/about" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">About</Link></li>
+              <li><Link href="/faq" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">FAQ</Link></li>
+              <li><Link href="/gallery" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Gallery</Link></li>
               <li><Link href="/book-inspection" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Book Inspection</Link></li>
             </ul>
           </div>

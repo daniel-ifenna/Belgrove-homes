@@ -60,12 +60,22 @@ export default function BookingForm() {
   }, []);
 
   // Prefill from estate/plot detail or gallery: /book-inspection?estate=...&size=...&code=...&unit=...&price=...&phase=...
+  // Homepage inspection form also passes name, phone and date.
   useEffect(() => {
     const estate = searchParams.get("estate");
     const size = searchParams.get("size");
     const code = searchParams.get("code");
     const unit = searchParams.get("unit");
     const phase = searchParams.get("phase");
+    const name = searchParams.get("name");
+    const phone = searchParams.get("phone");
+    const date = searchParams.get("date");
+    setForm((f) => ({
+      ...f,
+      ...(name && !f.name ? { name } : {}),
+      ...(phone && !f.phone ? { phone } : {}),
+      ...(date && !f.preferredDate ? { preferredDate: date } : {}),
+    }));
     // Only prefill estate/plot selector when params present
     if (estate) {
       // find estate name exactly or fallback
