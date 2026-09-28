@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
@@ -9,7 +7,6 @@ import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/li
 import { receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
-import { sendReceiptEmail } from "@/lib/receipts/emailReceipt";
 import {
   applyConfirmationDbUnit,
   toUserFacingError,
@@ -17,7 +14,7 @@ import {
   PaymentAlreadyHandledError,
   OverScheduleError,
 } from "@/lib/paymentConfirmation";
-import { generateAndStoreReceiptPdf, deliverReceiptEmail } from "@/lib/receiptDelivery";
+import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
 function formatDateDMY(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
@@ -183,53 +180,22 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     });
   }
 
-  let pdfBuffer: Buffer;
-  try {
-    pdfBuffer = await fs.promises.readFile(path.join(process.cwd(), pdfPath));
-  } catch (e) {
-    logServerError(`receipt ${receiptRef}: PDF written but unreadable`, e);
-    return NextResponse.json({
-      receipt: { id: confirmed.receiptId, ref: receiptRef },
-      emailResult: { sent: false, error: "Receipt PDF is unavailable. Retry from the receipt page." },
-      warning: "Payment confirmed, but the receipt PDF failed. Retry from the receipt page.",
-    });
-  }
-
-  const emailResult = await deliverReceiptEmail({
-    db: prisma,
-    receiptId: confirmed.receiptId,
-    ref: receiptRef,
-    send: () =>
-      sendReceiptEmail({
-        to: txn.customerEmail,
-        clientName: txn.customerName,
-        ref: receiptRef,
-        receiptUrl,
-        pdfBuffer,
-      }),
+  // The outbox sender reads (or regenerates) the stored PDF itself, so no
+  // file read is needed here. Queue the receipt email — durable delivery
+  // with retries. The response returns after the enqueue, never after SMTP.
+  const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
+  await enqueueEmail(prisma, {
+    type: "receipt",
+    to: txn.customerEmail,
+    payload: { receiptId: confirmed.receiptId },
+    relatedType: "receipt",
+    relatedId: confirmed.receiptId,
   });
-
-  try {
-    await prisma.receiptSendAttempt.create({
-      data: {
-        receiptId: confirmed.receiptId,
-        recipientEmail: txn.customerEmail,
-        status: emailResult.sent ? "sent" : "failed",
-        error: emailResult.error,
-        actorId: session!.user.id,
-        actorName: session!.user.name ?? session!.user.email ?? "Unknown",
-      },
-    });
-  } catch (e) {
-    logServerError(`receipt ${receiptRef}: failed to log send attempt`, e);
-  }
+  kickOutbox();
 
   return NextResponse.json({
     receipt: { id: confirmed.receiptId, ref: receiptRef },
-    emailResult,
-    ...(emailResult.sent
-      ? {}
-      : { warning: "Payment confirmed, but the receipt email failed. Resend from the receipt page." }),
+    emailQueued: true,
   });
 }
 

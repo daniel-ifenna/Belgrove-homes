@@ -4,16 +4,13 @@ import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/li
 import { receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
-import { sendReceiptEmail } from "@/lib/receipts/emailReceipt";
 import {
   applyConfirmationDbUnit,
   wouldExceedSchedule,
   OverScheduleError,
   logServerError,
 } from "@/lib/paymentConfirmation";
-import { generateAndStoreReceiptPdf, deliverReceiptEmail } from "@/lib/receiptDelivery";
-import fs from "node:fs";
-import path from "node:path";
+import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
 function formatDateDMY(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
@@ -130,41 +127,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
     writeFile: (filePath, buf) => writeReceiptPdf(filePath, buf),
   });
 
-  let emailResult: { sent: boolean; error: string | null } = { sent: false, error: null };
-  if (pdfOutcome.ok) {
-    let pdfBuffer: Buffer | null = null;
-    try {
-      pdfBuffer = await fs.promises.readFile(path.join(process.cwd(), pdfPath));
-    } catch (e) {
-      logServerError(`receipt ${receiptRef}: PDF written but unreadable`, e);
-    }
-    if (pdfBuffer) {
-      emailResult = await deliverReceiptEmail({
-        db: prisma,
-        receiptId: confirmed.receiptId,
-        ref: receiptRef,
-        send: () =>
-          sendReceiptEmail({
-            to: transaction.customerEmail,
-            clientName: transaction.customerName,
-            ref: receiptRef,
-            receiptUrl,
-            pdfBuffer: pdfBuffer as Buffer,
-          }),
-      });
-    } else {
-      emailResult = { sent: false, error: "Receipt PDF is unavailable." };
-      try {
-        await prisma.receipt.update({
-          where: { id: confirmed.receiptId },
-          data: { emailStatus: "FAILED", lastError: emailResult.error },
-        });
-      } catch (e) {
-        logServerError(`receipt ${receiptRef}: failed to mark email failed`, e);
-      }
-    }
-  } else {
-    emailResult = { sent: false, error: pdfOutcome.error };
+  if (!pdfOutcome.ok) {
     try {
       await prisma.receipt.update({
         where: { id: confirmed.receiptId },
@@ -175,22 +138,18 @@ export async function recordPaymentAndGenerateReceipt(params: {
     }
   }
 
-  try {
-    await prisma.receiptSendAttempt.create({
-      data: {
-        receiptId: confirmed.receiptId,
-        recipientEmail: transaction.customerEmail,
-        status: emailResult.sent ? "sent" : "failed",
-        error: emailResult.error,
-        actorId: params.recordedById,
-        actorName: params.recordedByName ?? undefined,
-      },
-    });
-  } catch (e) {
-    logServerError(`receipt ${receiptRef}: failed to log send attempt`, e);
-  }
+  // Queue the receipt email — durable outbox delivery with retries.
+  const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
+  await enqueueEmail(prisma, {
+    type: "receipt",
+    to: transaction.customerEmail,
+    payload: { receiptId: confirmed.receiptId },
+    relatedType: "receipt",
+    relatedId: confirmed.receiptId,
+  });
+  kickOutbox();
 
   const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId } });
   const payment = await prisma.payment.findUnique({ where: { id: confirmed.payment.id } });
-  return { payment, receipt, emailResult };
+  return { payment, receipt, emailQueued: true as const };
 }

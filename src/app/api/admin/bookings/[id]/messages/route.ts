@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
-import { sendAgentFollowUp } from "@/lib/email/emailService";
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -65,19 +64,30 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     },
   });
 
-  // Follow-up with assigned agent: send message to agent email for follow-ups
+  // Follow-up with assigned agent: queue message to agent email for follow-ups
   if (booking.agentId) {
     try {
       const agent = await prisma.agent.findUnique({ where: { id: booking.agentId } });
       if (agent) {
-        const emailRes = await sendAgentFollowUp(agent.email, {
-          agentName: agent.name,
-          clientName: booking.name,
-          ref: booking.ref,
-          location: booking.location,
-          message,
-          authorName,
+        const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
+        await enqueueEmail(prisma, {
+          type: "agent_followup",
+          to: agent.email,
+          payload: {
+            to: agent.email,
+            params: {
+              agentName: agent.name,
+              clientName: booking.name,
+              ref: booking.ref,
+              location: booking.location,
+              message,
+              authorName,
+            },
+          },
+          relatedType: "booking",
+          relatedId: id,
         });
+        kickOutbox();
         await prisma.bookingActivity.create({
           data: {
             bookingId: id,
@@ -86,14 +96,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
             action: "message_to_agent",
             fromStatus: booking.status,
             toStatus: booking.status,
-            note: `Sent to ${agent.name} <${agent.email}>: ${message.slice(0, 500)}`,
-            emailSent: emailRes.sent,
-            emailError: emailRes.error,
+            note: `Queued to ${agent.name} <${agent.email}>: ${message.slice(0, 500)}`,
+            emailSent: null,
+            emailError: "queued via outbox",
           },
         });
       }
     } catch (e) {
-      console.error("Agent follow-up email failed:", e);
+      console.error("Agent follow-up email queue failed:", e);
     }
   }
 

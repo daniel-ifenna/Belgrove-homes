@@ -29,8 +29,22 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Email outbox + production cron (required)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+All transactional email is queued in the `EmailOutbox` table and delivered by
+`processOutbox()` with exponential backoff (2/4/8/16/32 min, 5 attempts, then
+FAILED). Every enqueue also triggers a non-blocking in-app kick, but
+production MUST run a cron every minute as the reliable driver:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+curl -X POST "https://belgrovehomes.com/api/cron/outbox" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Set `CRON_SECRET` (see `.env.example`) to a long random string, identical in
+the app environment and the cron caller. Without it the route returns 401;
+without the cron, mail still sends via the kick but has no retry driver if
+the process restarts mid-queue.
+
+Money figures come from `src/lib/finance/` (CONFIRMED payments only).
+Data-changing scripts live in `/scripts` and default to `--dry-run`.

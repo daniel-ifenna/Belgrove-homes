@@ -3,7 +3,6 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { prefixedRef, generateUniqueBookingRef } from "@/lib/ref";
 import { bookingSubmissionSchema } from "@/lib/validation";
-import { sendBookingReceived, sendAdminNewBookingAlert } from "@/lib/email/emailService";
 
 function isUniqueRefConflict(err: unknown): boolean {
   return (
@@ -76,20 +75,32 @@ export async function POST(request: NextRequest) {
   let ref = await generateUniqueBookingRef();
   const { findOrCreateCustomer } = await import("@/lib/customer");
   const { normalizeEmail, normalizeName, normalizePhoneE164 } = await import("@/lib/phone");
+  const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
   const customerName = normalizeName(name) ?? name;
   const customerEmail = normalizeEmail(email) ?? email;
   const customerPhone = normalizePhoneE164(phone);
   const customer = await findOrCreateCustomer({ name: customerName, email: customerEmail, phone: customerPhone });
+  // Admin/staff recipients for the alert + in-app notifications. Read once;
+  // the rows are written inside the booking transaction below.
+  const staffRecipients = await prisma.user
+    .findMany({ where: { role: { in: ["admin", "staff"] } }, select: { id: true, email: true } })
+    .catch((err) => {
+      console.error("Admin/staff lookup failed (booking proceeds without alerts)", err);
+      return [];
+    });
   let booking;
   for (let attempt = 0; ; attempt++) {
     try {
-      booking = await prisma.inspectionBooking.create({
-        data: {
-          ref,
-          name: customerName,
-          email: customerEmail,
-          phone: customerPhone,
-          customerId: customer.id,
+      // One DB transaction: booking row + notifications + email outbox rows.
+      // The response returns after commit — never after SMTP delivery.
+      booking = await prisma.$transaction(async (tx) => {
+        const created = await tx.inspectionBooking.create({
+          data: {
+            ref,
+            name: customerName,
+            email: customerEmail,
+            phone: customerPhone,
+            customerId: customer.id,
           preferredDate: preferredDateObj,
           preferredTime,
           location,
@@ -103,7 +114,44 @@ export async function POST(request: NextRequest) {
           sqm: typeof sqm === "number" ? sqm : null,
           sqmNeeded: typeof sqmNeeded === "number" ? sqmNeeded : null,
           selectionType: selectionType || (sqmNeeded ? "sqm_needed" : plotCode ? "unit" : null),
-        },
+          },
+        });
+        const bookingLike = {
+          name: created.name,
+          ref: created.ref,
+          preferredDate: created.preferredDate.toISOString(),
+          preferredTime: created.preferredTime,
+          location: created.location,
+          agentName: created.agentName,
+          phone: created.phone,
+          email: created.email,
+        };
+        // Visitor confirmation queued (never awaited — response returns now).
+        await enqueueEmail(tx, {
+          type: "booking_received",
+          to: created.email,
+          payload: { to: created.email, booking: bookingLike },
+          relatedType: "booking",
+          relatedId: created.id,
+        });
+        if (staffRecipients.length > 0) {
+          await tx.notification.createMany({
+            data: staffRecipients.map((r) => ({
+              userId: r.id,
+              type: "new_booking",
+              message: `New inspection booking ${created.ref} from ${created.name}`,
+              bookingId: created.id,
+            })),
+          });
+          await enqueueEmail(tx, {
+            type: "admin_booking_alert",
+            to: staffRecipients.map((r) => r.email),
+            payload: { to: staffRecipients.map((r) => r.email), booking: bookingLike },
+            relatedType: "booking",
+            relatedId: created.id,
+          });
+        }
+        return created;
       });
       break;
     } catch (err) {
@@ -115,36 +163,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Visitor confirmation blocking, they need the reference code before we respond.
-  await sendBookingReceived(booking.email, booking);
-
-  // Admin/staff alert fire-and-forget, must not delay or fail the visitor's response.
-  // Notifications are created even if email fails; email failure is logged only.
-  prisma.user
-    .findMany({ where: { role: { in: ["admin", "staff"] } }, select: { id: true, email: true } })
-    .then(async (recipients) => {
-      if (recipients.length === 0) return;
-      const emailPromise = sendAdminNewBookingAlert(
-        recipients.map((r) => r.email),
-        booking
-      )
-        .then((r) => {
-          if (!r.sent) console.error("Admin alert email failed:", r.error);
-        })
-        .catch((err) => console.error("Admin alert email threw:", err));
-      const notifPromise = prisma.notification
-        .createMany({
-          data: recipients.map((r) => ({
-            userId: r.id,
-            type: "new_booking",
-            message: `New inspection booking ${booking.ref} from ${booking.name}`,
-            bookingId: booking.id,
-          })),
-        })
-        .catch((err) => console.error("Notification create failed:", err));
-      await Promise.allSettled([emailPromise, notifPromise]);
-    })
-    .catch((err) => console.error("Admin alert/notification lookup failed:", err));
+  // Non-blocking delivery kick — the response does not wait for SMTP.
+  kickOutbox();
 
   return NextResponse.json({ ref: booking.ref, id: booking.id }, { status: 201 });
 }

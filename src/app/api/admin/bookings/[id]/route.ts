@@ -9,13 +9,7 @@ import { scheduledInspectionStart } from "@/lib/inspection-time";
 import type { EmailResult } from "@/lib/email/sendEmail";
 import type { InspectionBooking, BookingStatus } from "@/generated/prisma/client";
 import {
-  sendBookingApproved,
-  sendBookingRescheduled,
-  sendBookingStatusEmail,
-  sendAgentAssignment,
-  sendInterestedOutcome,
   getInterestedMessageText,
-  sendAgentRescheduledNotice,
 } from "@/lib/email/emailService";
 
 function parseSlotMinutes(slot: string): number | null {
@@ -100,9 +94,19 @@ export async function PATCH(
 
   let updated: InspectionBooking;
   let note: string | null = null;
-  let emailResult: EmailResult = { sent: false, error: null };
+  const emailResult: EmailResult = { sent: false, error: null };
   let emailAttempted = false;
+  let emailQueued = false;
   const fromStatus: BookingStatus = booking.status;
+
+  // Outbox delivery: enqueue (durable) + non-blocking kick. The request never
+  // waits for SMTP; retries and failures live in EmailOutbox.
+  async function queue(type: import("@/lib/email/outbox").OutboxType, to: string | string[], payload: Record<string, unknown>) {
+    const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
+    await enqueueEmail(prisma, { type, to, payload, relatedType: "booking", relatedId: id });
+    emailQueued = true;
+    kickOutbox();
+  }
 
   switch (input.action) {
     case "approve": {
@@ -132,10 +136,9 @@ export async function PATCH(
       }
       const confirmedDate = updated.rescheduledDate ?? updated.preferredDate;
       const confirmedTime = updated.rescheduledTime ?? updated.preferredTime;
-      emailResult = await sendBookingApproved(updated.email, {
-        ...updated,
-        preferredDate: confirmedDate,
-        preferredTime: confirmedTime,
+      await queue("booking_approved", updated.email, {
+        to: updated.email,
+        booking: { ...updated, preferredDate: confirmedDate, preferredTime: confirmedTime },
       });
       emailAttempted = true;
       note = input.note ? `${input.note}${shouldWarm ? " • Auto-warmed lead to warm" : ""}` : shouldWarm ? "Auto: lead warmed to warm on approval" : null;
@@ -201,12 +204,15 @@ export async function PATCH(
       if (input.note) note += ` ${input.note}`;
       if (input.notifyClient !== false) {
         // Notify visitor
-        emailResult = await sendBookingRescheduled(updated.email, {
-          name: updated.name,
-          ref: updated.ref,
-          rescheduledDate: updated.rescheduledDate!,
-          rescheduledTime: updated.rescheduledTime!,
-          location: updated.location,
+        await queue("booking_rescheduled", updated.email, {
+          to: updated.email,
+          booking: {
+            name: updated.name,
+            ref: updated.ref,
+            rescheduledDate: updated.rescheduledDate!,
+            rescheduledTime: updated.rescheduledTime!,
+            location: updated.location,
+          },
         });
         emailAttempted = true;
         // Also notify assigned agent (follow-up requirement: both must receive)
@@ -214,13 +220,16 @@ export async function PATCH(
           try {
             const agent = await prisma.agent.findUnique({ where: { id: updated.agentId } });
             if (agent) {
-              const agentRes = await sendAgentRescheduledNotice(agent.email, {
-                agentName: agent.name,
-                ref: updated.ref,
-                clientName: updated.name,
-                rescheduledDate: updated.rescheduledDate!,
-                rescheduledTime: updated.rescheduledTime!,
-                location: updated.location,
+              await queue("agent_rescheduled_notice", agent.email, {
+                to: agent.email,
+                params: {
+                  agentName: agent.name,
+                  ref: updated.ref,
+                  clientName: updated.name,
+                  rescheduledDate: updated.rescheduledDate!,
+                  rescheduledTime: updated.rescheduledTime!,
+                  location: updated.location,
+                },
               });
               // Log agent notification separately for audit
               await prisma.bookingActivity.create({
@@ -231,14 +240,14 @@ export async function PATCH(
                   action: "reschedule_agent_notify",
                   fromStatus,
                   toStatus: updated.status,
-                  note: `Agent ${agent.name} notified of new time ${input.rescheduledTime} on ${rescheduledDate.toDateString()}`,
-                  emailSent: agentRes.sent,
-                  emailError: agentRes.error,
+                  note: `Agent ${agent.name} notified of new time ${input.rescheduledTime} on ${rescheduledDate.toDateString()} (queued)`,
+                  emailSent: null,
+                  emailError: null,
                 },
               });
             }
           } catch (e) {
-            console.error("Agent reschedule email failed:", e);
+            console.error("Agent reschedule email queue failed:", e);
           }
         }
       }
@@ -250,7 +259,7 @@ export async function PATCH(
         where: { id },
         data: { status: "on_hold", reviewedById: actorId, reviewedAt: new Date() },
       });
-      emailResult = await sendBookingStatusEmail(updated.email, updated, "on_hold");
+      await queue("booking_status", updated.email, { to: updated.email, booking: updated, status: "on_hold" });
       emailAttempted = true;
       note = input.note || null;
       break;
@@ -270,7 +279,7 @@ export async function PATCH(
         note = input.assignedToId ? "Reassigned" : "Unassigned";
       }
       if (input.note) note = note ? `${note} ${input.note}` : input.note;
-      emailResult = await sendBookingStatusEmail(updated.email, updated, "under_review");
+      await queue("booking_status", updated.email, { to: updated.email, booking: updated, status: "under_review" });
       emailAttempted = true;
       break;
     }
@@ -337,10 +346,9 @@ export async function PATCH(
         if (input.note) note += ` ${input.note}`;
         const propertyName = booking.location;
         const text = getInterestedMessageText(propertyName);
-        emailResult = await sendInterestedOutcome(updated.email, {
-          name: updated.name,
-          ref: updated.ref,
-          propertyName,
+        await queue("interested_outcome", updated.email, {
+          to: updated.email,
+          params: { name: updated.name, ref: updated.ref, propertyName },
         });
         emailAttempted = true;
         await prisma.bookingMessage.create({
@@ -403,22 +411,12 @@ export async function PATCH(
       } else {
         note = "Not sold — follow-up required, closing";
         if (input.note) note += ` ${input.note}`;
-        // Automated not-sold response
+        // Automated not-sold response (queued, custom copy)
         const notSoldText = `Thank you for visiting ${booking.location} with Belgrove Homes (ref ${booking.ref}). We understand you’ve decided not to proceed at this time — your feedback helps us serve you better. Your file remains warm for 30 days; reply to this email or call +234 810 376 0063 if you’d like to revisit, and we’ll keep you notified of similar plots.`;
-        emailResult = await sendBookingStatusEmail(updated.email, { name: updated.name, ref: updated.ref } as any, "on_hold" as any);
-        // Override email with custom not-sold text via direct send
-        try {
-          const { sendEmail } = await import("@/lib/email/sendEmail");
-          const customRes = await sendEmail({
-            to: updated.email,
-            subject: `Following up on ${booking.location} — ${booking.ref}`,
-            html: `<div style="font-family:Inter, sans-serif; max-width:560px; margin:0 auto; color:#10231E;"><div style="background:#0D3328; padding:18px 20px; color:#C8A04A; font-weight:bold;">Belgrove Homes</div><div style="padding:20px; background:#fff; border:1px solid #E3E6E1;"><p>Hi ${updated.name},</p><p>${notSoldText}</p><p style="margin-top:16px; font-size:12px; color:#65736E;">Ref: ${updated.ref} • ${booking.location}</p></div></div>`,
-          });
-          emailResult = customRes;
-          emailAttempted = true;
-        } catch (e) {
-          console.error(`Not-sold follow-up email failed for booking ${id}`, e);
-        }
+        const notSoldSubject = `Following up on ${booking.location} — ${booking.ref}`;
+        const notSoldHtml = `<div style="font-family:Inter, sans-serif; max-width:560px; margin:0 auto; color:#10231E;"><div style="background:#0D3328; padding:18px 20px; color:#C8A04A; font-weight:bold;">Belgrove Homes</div><div style="padding:20px; background:#fff; border:1px solid #E3E6E1;"><p>Hi ${updated.name},</p><p>${notSoldText}</p><p style="margin-top:16px; font-size:12px; color:#65736E;">Ref: ${updated.ref} • ${booking.location}</p></div></div>`;
+        await queue("not_sold_followup", updated.email, { to: updated.email, subject: notSoldSubject, html: notSoldHtml });
+        emailAttempted = true;
         await prisma.bookingMessage.create({
           data: { bookingId: id, authorId: null, authorName: "System", message: notSoldText },
         });
@@ -600,19 +598,22 @@ export async function PATCH(
       }
 
       if (!input.silent) {
-        emailResult = await sendAgentAssignment(agent.email, {
-          agentName: agent.name,
-          clientName: updated.name,
-          clientEmail: updated.email,
-          clientPhone: updated.phone,
-          ref: updated.ref,
-          preferredDate: updated.preferredDate,
-          preferredTime: updated.preferredTime,
-          rescheduledDate: updated.rescheduledDate,
-          rescheduledTime: updated.rescheduledTime,
-          location: updated.location,
-          agentCategory: agent.category,
-          assignmentNote: input.note ?? null,
+        await queue("agent_assignment", agent.email, {
+          to: agent.email,
+          params: {
+            agentName: agent.name,
+            clientName: updated.name,
+            clientEmail: updated.email,
+            clientPhone: updated.phone,
+            ref: updated.ref,
+            preferredDate: updated.preferredDate,
+            preferredTime: updated.preferredTime,
+            rescheduledDate: updated.rescheduledDate,
+            rescheduledTime: updated.rescheduledTime,
+            location: updated.location,
+            agentCategory: agent.category,
+            assignmentNote: input.note ?? null,
+          },
         });
         emailAttempted = true;
       }
@@ -682,11 +683,11 @@ export async function PATCH(
       action: input.action,
       fromStatus,
       toStatus: updated.status,
-      note,
-      emailSent: emailAttempted ? emailResult.sent : null,
-      emailError: emailResult.error,
+      note: emailQueued && note ? `${note} (email queued)` : note,
+      emailSent: emailQueued ? null : emailAttempted ? emailResult.sent : null,
+      emailError: emailQueued ? "queued via outbox" : emailResult.error,
     },
   });
 
-  return NextResponse.json({ booking: updated, emailResult });
+  return NextResponse.json({ booking: updated, emailResult, emailQueued });
 }

@@ -114,9 +114,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Confirmation email (one per client per transaction, fired at creation —
-    // this replaces the old Sold-outcome email). Branches by payment plan.
-    // Email failure never fails creation — it is reported, not thrown.
+    // this replaces the old Sold-outcome email). Queued, never awaited:
+    // email failure never fails creation — it is retried from the outbox.
     let confirmationEmail: { sent: boolean; error: string | null } = { sent: false, error: null };
+    let confirmationQueued = false;
     try {
       const created = await prisma.transaction.findUnique({
         where: { id: transaction.id },
@@ -130,23 +131,34 @@ export async function POST(request: NextRequest) {
         const bookingRef = bookingId
           ? (await prisma.inspectionBooking.findUnique({ where: { id: bookingId }, select: { ref: true } }))?.ref ?? null
           : null;
-        const { sendTransactionConfirmation } = await import("@/lib/email/emailService");
-        confirmationEmail = await sendTransactionConfirmation(created.customerEmail, {
-          name: created.customerName,
-          txnRef: created.ref,
-          bookingRef,
-          propertyLine: `${created.estate}${created.unitType ? ` · ${created.unitType}` : ""}${created.plotCode ? ` · ${created.plotCode}` : ""}`,
-          planName: created.paymentPlan.name,
-          planCode: created.paymentPlan.code,
-          depositAmount: initial && created.paymentPlan.remainingInstallments > 0 ? initial.scheduledAmount : null,
-          depositDueDate: fmtD(initial?.dueDate ?? created.createdAt),
-          schedule: monthlies.map((m) => ({ label: `Month ${m.installmentNumber}`, dueDate: fmtD(m.dueDate), amount: m.scheduledAmount })),
-          interestAmount: created.interestAmount,
-          interestRate: Number(created.interestRate),
-          totalPayable: created.totalPayable,
+        const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
+        await enqueueEmail(prisma, {
+          type: "transaction_confirmation",
+          to: created.customerEmail,
+          payload: {
+            to: created.customerEmail,
+            params: {
+              name: created.customerName,
+              txnRef: created.ref,
+              bookingRef,
+              propertyLine: `${created.estate}${created.unitType ? ` · ${created.unitType}` : ""}${created.plotCode ? ` · ${created.plotCode}` : ""}`,
+              planName: created.paymentPlan.name,
+              planCode: created.paymentPlan.code,
+              depositAmount: initial && created.paymentPlan.remainingInstallments > 0 ? initial.scheduledAmount : null,
+              depositDueDate: fmtD(initial?.dueDate ?? created.createdAt),
+              schedule: monthlies.map((m) => ({ label: `Month ${m.installmentNumber}`, dueDate: fmtD(m.dueDate), amount: m.scheduledAmount })),
+              interestAmount: created.interestAmount,
+              interestRate: Number(created.interestRate),
+              totalPayable: created.totalPayable,
+            },
+          },
+          relatedType: "transaction",
+          relatedId: created.id,
         });
+        confirmationQueued = true;
+        kickOutbox();
         if (bookingId) {
-          const line = `Transaction ${created.ref} created (${created.paymentPlan.name} plan) — confirmation email ${confirmationEmail.sent ? "sent" : `failed: ${confirmationEmail.error ?? "unknown"}`}.`;
+          const line = `Transaction ${created.ref} created (${created.paymentPlan.name} plan) — confirmation email ${confirmationQueued ? "queued" : `failed: ${confirmationEmail.error ?? "unknown"}`}.`;
           await prisma.bookingMessage.create({
             data: { bookingId, authorId: null, authorName: "System", message: line },
           });
@@ -177,7 +189,7 @@ export async function POST(request: NextRequest) {
           recordedById: session!.user.id,
           recordedByName: session!.user.name ?? session!.user.email ?? "Unknown",
         });
-        return NextResponse.json({ transaction, payment: result.payment, receipt: result.receipt, confirmationEmail }, { status: 201 });
+        return NextResponse.json({ transaction, payment: result.payment, receipt: result.receipt, confirmationEmail, confirmationQueued }, { status: 201 });
       } catch (e) {
         const { toUserFacingError, logServerError, OverScheduleError } = await import("@/lib/paymentConfirmation");
         logServerError("initial payment failed", e);
@@ -188,7 +200,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ transaction, confirmationEmail }, { status: 201 });
+    return NextResponse.json({ transaction, confirmationEmail, confirmationQueued }, { status: 201 });
   } catch (e: any) {
     const { toUserFacingError } = await import("@/lib/paymentConfirmation");
     console.error("Create transaction failed", e);

@@ -509,3 +509,34 @@ model Payment {
   @@index([installmentId])
   @@index([status])
 }
+
+// Email outbox (Phase 2): every fire-and-forget send is a durable row.
+// Enqueued in the same DB transaction as the business change where possible;
+// processOutbox() delivers with exponential backoff (5 attempts → FAILED).
+// Receipt delivery rows also write ReceiptSendAttempt on send/fail.
+enum EmailOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+model EmailOutbox {
+  id            String            @id @default(cuid())
+  type          String
+  to            Json // string | string[]
+  subject       String?
+  payload       Json
+  status        EmailOutboxStatus @default(PENDING)
+  attempts      Int               @default(0)
+  nextAttemptAt DateTime          @default(now())
+  lastError     String?
+  relatedType   String?
+  relatedId     String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  sentAt        DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([relatedType, relatedId])
+}
