@@ -5,7 +5,7 @@ export default function GalleryPage() {
   return (
     <div className="bg-white min-h-screen">
       <div className="max-w-[1180px] mx-auto px-6 lg:px-8 py-12">
-        <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C79A46]">GALLERY — VERIFIED LAND, CURRENTLY AVAILABLE</div>
+        <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C79A46]">GALLERY: VERIFIED LAND, CURRENTLY AVAILABLE</div>
         <h1 className="fraunces text-[30px] leading-[1.05] text-[#16281F] mt-2">
           Every plot here has passed <em style={{ fontStyle: "italic", color: "var(--ink-muted,#6B6656)" }}>our verification standard</em>
         </h1>

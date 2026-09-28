@@ -338,7 +338,7 @@ export function describePayment(
     !installment || installment.type === "INITIAL" ? "Initial payment" : `Month ${installment.installmentNumber} payment`;
   const unit = transaction.unitType ? `, ${transaction.unitType}` : "";
   const plot = transaction.plotCode ? ` (${transaction.plotCode})` : "";
-  return `${kind} — ${transaction.estate}${unit}${plot}`;
+  return `${kind}: ${transaction.estate}${unit}${plot}`;
 }
 
 export type VoidDbResult = {

@@ -382,7 +382,7 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.setFont(fontName, "normal");
   doc.setFontSize(7);
   doc.setTextColor(107, 102, 86);
-  doc.text("PLEASURE DOING BUSINESS WITH YOU — certainty, not just a deed.", margin, y);
+  doc.text("PLEASURE DOING BUSINESS WITH YOU: certainty, not just a deed.", margin, y);
   y += 6;
   doc.setFontSize(6);
   const disclaimer =

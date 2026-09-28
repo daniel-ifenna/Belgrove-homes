@@ -51,7 +51,7 @@ function AgentCell({ agent, customerEmail, customerPhone }: { agent: { name: str
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="h-8 w-8 rounded-full border border-dashed border-[var(--ops-border)] bg-[var(--ops-bg)] grid place-items-center text-[10px] text-[var(--ops-muted)]">—</span>
+      <span className="h-8 w-8 rounded-full border border-dashed border-[var(--ops-border)] bg-[var(--ops-bg)] grid place-items-center text-[10px] text-[var(--ops-muted)]">-</span>
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-white border border-[var(--ops-border)] text-[var(--ops-muted)]">Unassigned</span>
     </div>
   );
@@ -342,11 +342,11 @@ export default async function AdminBookingsPage({
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-[13px] text-[var(--ops-text)] leading-tight break-words">{b.location}</div>
-                      <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">{b.agentName ?? "—"}</div>
+                      <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">{b.agentName ?? "-"}</div>
                       {(b as any).selectionType === "unit" && (b as any).plotCode ? (
                         <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">Unit selected · {(b as any).plotCode}</span>
                       ) : (b as any).selectionType === "sqm_needed" && (b as any).sqmNeeded ? (
-                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing — {(b as any).sqmNeeded}sqm requested</span>
+                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing: {(b as any).sqmNeeded}sqm requested</span>
                       ) : (b as any).estate ? (
                         <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-white text-[#4B5563] border border-[#E5E7EB]">{(b as any).estate}</span>
                       ) : null}
@@ -380,7 +380,7 @@ export default async function AdminBookingsPage({
                       {b.outcome ? (
                         <StatusBadge status={b.outcome} />
                       ) : (
-                        <span className="text-[12px] text-[var(--ops-muted)]">—</span>
+                        <span className="text-[12px] text-[var(--ops-muted)]">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{new Date(b.updatedAt).toLocaleDateString("en-GB")}</td>
@@ -441,7 +441,7 @@ export default async function AdminBookingsPage({
                 </div>
                 <div>
                   <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Outcome</div>
-                  <div className="mt-1">{b.outcome ? <span className="text-xs px-2 py-1 rounded-full border bg-white">{b.outcome}</span> : <span className="text-[var(--ops-muted)]">—</span>}</div>
+                  <div className="mt-1">{b.outcome ? <span className="text-xs px-2 py-1 rounded-full border bg-white">{b.outcome}</span> : <span className="text-[var(--ops-muted)]">-</span>}</div>
                 </div>
               </div>
             </Link>

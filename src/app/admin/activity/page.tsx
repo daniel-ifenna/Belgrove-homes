@@ -48,7 +48,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         <div className="mb-6">
           <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Activity</h1>
           <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">
-            Read-only audit history — every booking action and payment, transaction and receipt change.
+            Read-only audit history: every booking action and payment, transaction and receipt change.
           </p>
         </div>
 
@@ -106,7 +106,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
                       <Link href={r.href} className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline">{r.entityRef}</Link>
                       <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">{r.entityType}</div>
                     </td>
-                    <td className="px-4 text-[12px] text-[var(--ops-muted)] break-words max-w-[320px]">{r.detail ?? "—"}</td>
+                    <td className="px-4 text-[12px] text-[var(--ops-muted)] break-words max-w-[320px]">{r.detail ?? "-"}</td>
                   </tr>
                 ))}
                 {visible.length === 0 && (
@@ -123,7 +123,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         <div className="mt-4">
           <AdminPagination page={page} totalPages={totalPages} total={rows.length} pageSize={PAGE_SIZE} basePath="/admin/activity" query={paginationQuery} />
         </div>
-        <div className="mt-2 mono text-[10px] text-[var(--ops-muted)]">Server-side paging over the latest {rows.length} events — narrow with filters for older history.</div>
+        <div className="mt-2 mono text-[10px] text-[var(--ops-muted)]">Server-side paging over the latest {rows.length} events. Narrow with filters for older history.</div>
       </div>
     </div>
   );

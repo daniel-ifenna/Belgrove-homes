@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(16, 35, 30);
-  doc.text("Inspection Bookings — Executive Summary", margin, y);
+  doc.text("Inspection Bookings: Executive Summary", margin, y);
   y += 4;
   doc.setFontSize(7);
   doc.setTextColor(101, 115, 110);
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
   const summaryBody: string[][] = [
     ["Total Bookings", String(total)],
     ...allStatuses.map((s) => [s.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()), String(byStatus[s] ?? 0)]),
-    ["—", ""],
+    ["-", ""],
     ...allTemperatures.map((t) => [t.toUpperCase(), String(byTemp[t] ?? 0)]),
   ];
 
@@ -195,12 +195,12 @@ export async function GET(request: NextRequest) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(16, 35, 30);
-  doc.text("Performance Analytics — Company Wide", margin, perfY);
+  doc.text("Performance Analytics: Company Wide", margin, perfY);
   perfY += 3;
   doc.setFontSize(6.5);
   doc.setTextColor(101, 115, 110);
   doc.setFont("helvetica", "normal");
-  doc.text("Aggregated from current filtered bookings — for operational review and company-wide planning.", margin, perfY);
+  doc.text("Aggregated from current filtered bookings. For operational review and company-wide planning.", margin, perfY);
   perfY += 4;
   doc.setDrawColor(200, 160, 74);
   doc.setLineWidth(0.3);
@@ -248,7 +248,7 @@ export async function GET(request: NextRequest) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(13, 51, 40);
-  doc.text("PROPERTIES BOOKED — BY ESTATE / LOCATION", margin, perfY);
+  doc.text("PROPERTIES BOOKED: BY ESTATE / LOCATION", margin, perfY);
   perfY += 4;
   const propertyRows = Object.entries(byProperty)
     .sort((a, b) => b[1] - a[1])
@@ -256,7 +256,7 @@ export async function GET(request: NextRequest) {
   autoTable(doc, {
     startY: perfY,
     head: [["Property / Location", "Bookings", "Share"]],
-    body: propertyRows.length ? propertyRows : [["No properties in filtered set", "0", "—"]],
+    body: propertyRows.length ? propertyRows : [["No properties in filtered set", "0", "-"]],
     theme: "grid",
     styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225] },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(13, 51, 40);
-  doc.text("AGENT PERFORMANCE — BOOKINGS HANDLED", margin, perfY);
+  doc.text("AGENT PERFORMANCE: BOOKINGS HANDLED", margin, perfY);
   perfY += 4;
   const agentRows = Object.entries(byAgentPerf)
     .sort((a, b) => b[1] - a[1])
@@ -278,7 +278,7 @@ export async function GET(request: NextRequest) {
   autoTable(doc, {
     startY: perfY,
     head: [["Agent", "Bookings Handled", "Share"]],
-    body: agentRows.length ? agentRows : [["No agents", "0", "—"]],
+    body: agentRows.length ? agentRows : [["No agents", "0", "-"]],
     theme: "grid",
     styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225] },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -298,7 +298,7 @@ export async function GET(request: NextRequest) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(200, 160, 74);
-  doc.text("Belgrove Homes — Performance Sheet", landscapeMargin, 10);
+  doc.text("Belgrove Homes: Performance Sheet", landscapeMargin, 10);
   doc.setFontSize(7);
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "normal");
@@ -309,12 +309,12 @@ export async function GET(request: NextRequest) {
   // Build rows: Agent | Property | Inspection Date | Client | Lead / Closed
   const landscapeRows = bookings.map((b: any) => {
     const agent = b.agent?.name ?? "Unassigned";
-    const property = b.location ?? "—";
-    const inspDate = b.rescheduledDate ? new Date(b.rescheduledDate).toLocaleDateString("en-GB") : b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "—";
+    const property = b.location ?? "-";
+    const inspDate = b.rescheduledDate ? new Date(b.rescheduledDate).toLocaleDateString("en-GB") : b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "-";
     const inspTime = b.rescheduledTime ?? b.preferredTime ?? "";
     const dateCell = inspTime ? `${inspDate} · ${inspTime}` : inspDate;
     const client = `${b.name}\n${b.email}`;
-    const lead = b.leadTemperature ? b.leadTemperature.toUpperCase() : "—";
+    const lead = b.leadTemperature ? b.leadTemperature.toUpperCase() : "-";
     const closed = b.status === "closed" ? "CLOSED" : b.status === "active" ? "COMPLETED" : b.status.toUpperCase();
     const leadCell = `${lead}  •  ${closed}`;
     return [agent, property, dateCell, client, leadCell];
@@ -323,7 +323,7 @@ export async function GET(request: NextRequest) {
   autoTable(doc, {
     startY: 28,
     head: [["Agent", "Property", "Inspection Date", "Client", "Lead / Closed"]],
-    body: landscapeRows.length ? landscapeRows : [["—", "No bookings in filtered set", "—", "—", "—"]],
+    body: landscapeRows.length ? landscapeRows : [["-", "No bookings in filtered set", "-", "-", "-"]],
     theme: "grid",
     styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2.5, lineColor: [227, 230, 225], textColor: [16, 35, 30], valign: "middle", overflow: "linebreak" },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 6.5 },
@@ -421,29 +421,29 @@ export async function GET(request: NextRequest) {
     yy = section("Customer", [
       ["Name", b.name],
       ["Email", b.email],
-      ["Phone", b.phone ?? "—"],
+      ["Phone", b.phone ?? "-"],
       ["Booking Ref", b.ref],
     ], yy);
 
     yy = section("Property", [
       ["Estate / Location", b.location],
-      ["Inspection Date", b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "—"],
-      ["Inspection Time", b.preferredTime ?? "—"],
+      ["Inspection Date", b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "-"],
+      ["Inspection Time", b.preferredTime ?? "-"],
       ["Assigned Agent", b.agent ? `${b.agent.name} (${b.agent.category === "hire_purchase" ? "Hire Purchase" : "Staff"})` : "Unassigned"],
-      ["Visitor Agent Note", b.visitorAgentRaw ?? b.agentName ?? "—"],
+      ["Visitor Agent Note", b.visitorAgentRaw ?? b.agentName ?? "-"],
     ], yy);
 
     yy = section("Booking", [
-      ["Original Date", b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "—"],
-      ["Original Time", b.preferredTime ?? "—"],
-      ["Current Date", b.rescheduledDate ? new Date(b.rescheduledDate).toLocaleDateString("en-GB") : b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "—"],
-      ["Current Time", b.rescheduledTime ?? b.preferredTime ?? "—"],
+      ["Original Date", b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "-"],
+      ["Original Time", b.preferredTime ?? "-"],
+      ["Current Date", b.rescheduledDate ? new Date(b.rescheduledDate).toLocaleDateString("en-GB") : b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "-"],
+      ["Current Time", b.rescheduledTime ?? b.preferredTime ?? "-"],
     ], yy);
 
     yy = section("Status", [
       ["Booking Status", b.status],
       ["Lead Temperature", b.leadTemperature],
-      ["Lead Outcome", b.outcome ?? "—"],
+      ["Lead Outcome", b.outcome ?? "-"],
       ["Assigned Agent", b.agent ? `${b.agent.name} <${b.agent.email}>` : "No agent assigned."],
     ], yy);
 
@@ -548,7 +548,7 @@ export async function GET(request: NextRequest) {
         const d = e.at.toLocaleString("en-GB");
         if (e.type === "activity") {
           const a: any = e.data;
-          return [d, a.actorName, `${a.action} (${a.fromStatus} → ${a.toStatus})${a.note ? ` — ${a.note}` : ""}`];
+          return [d, a.actorName, `${a.action} (${a.fromStatus} → ${a.toStatus})${a.note ? `: ${a.note}` : ""}`];
         } else if (e.type === "message") {
           const m: any = e.data;
           return [d, m.authorName, `Message: ${m.message}`];
@@ -583,7 +583,7 @@ export async function GET(request: NextRequest) {
     const auditLines = [
       `Created: ${new Date(b.createdAt).toLocaleString("en-GB")}`,
       `Last updated: ${new Date(b.updatedAt).toLocaleString("en-GB")}${b.lockedAt ? `  •  Locked: ${new Date(b.lockedAt).toLocaleString("en-GB")}` : ""}`,
-      `Status: ${b.status}  •  Lead: ${b.leadTemperature}  •  Outcome: ${b.outcome ?? "—"}`,
+      `Status: ${b.status}  •  Lead: ${b.leadTemperature}  •  Outcome: ${b.outcome ?? "-"}`,
     ];
     auditLines.forEach((line) => {
       doc.text(line, margin, yy);

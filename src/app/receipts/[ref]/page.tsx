@@ -42,7 +42,7 @@ export default async function AdminReceiptRefPage({ params }: { params: Promise<
           <div className="mono text-[12px] text-[#6B6656]">{receipt.customerEmail}</div>
           <div className="mono text-[12px] text-[#6B6656] mt-1">{receipt.property}</div>
           <div className="fraunces text-[20px] font-bold text-[#16281F] mt-3">{formatNaira(receipt.finalAmount)}</div>
-          <div className="mono text-[11px] text-[#6B6656] mt-1">Status: {receipt.status} · Payment: {receipt.payment?.status ?? "—"}</div>
+          <div className="mono text-[11px] text-[#6B6656] mt-1">Status: {receipt.status} · Payment: {receipt.payment?.status ?? "-"}</div>
         </div>
         <div className="px-8 py-6 flex flex-wrap gap-3">
           <a href={`/api/admin/receipts/${receipt.ref}/pdf`} className="mono text-[11px] bg-[#16281F] text-[#F5EFE2] px-4 py-2 rounded-full">Download PDF</a>

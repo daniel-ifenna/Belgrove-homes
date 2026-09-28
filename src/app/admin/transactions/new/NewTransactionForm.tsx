@@ -153,16 +153,16 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--ops-bg)] border border-[var(--ops-border)] px-3 py-2.5">
             <span className="text-[13px] text-[var(--ops-text)]">
               <span className="font-mono font-medium text-[var(--ops-primary)]">{linkedBooking.ref}</span>
-              <span className="text-[var(--ops-muted)]"> · {linkedBooking.name} — client & property locked from booking</span>
+              <span className="text-[var(--ops-muted)]"> · {linkedBooking.name} (client and property locked from booking)</span>
             </span>
             <button type="button" onClick={onUnlinkBooking} className="mono text-[11px] text-[var(--ops-muted)] underline underline-offset-4 hover:text-[var(--ops-text)]">
-              Unlink — manual entry
+              Unlink: manual entry
             </button>
           </div>
         ) : (
           <>
             <select value={bookingId} onChange={(e) => onBookingSelect(e.target.value)} className="mt-2 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white">
-              <option value="">— Manual — no booking —</option>
+              <option value="">Manual (no booking)</option>
               {bookings.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.ref} · {b.name} · {b.email} {b.estate ? `· ${b.estate}` : ""}
@@ -181,20 +181,20 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
       </div>
 
       <div className="bg-white border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-        <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Client{bookingLinked ? " — from booking (read-only)" : ""}</h2>
+        <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Client{bookingLinked ? ": from booking (read-only)" : ""}</h2>
         <div className="mt-4 grid md:grid-cols-2 gap-4">
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Full name *</label><input value={customerName} onChange={(e) => setCustomerName(e.target.value)} readOnly={bookingLinked} placeholder="Daniel Ifenna Daniel" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm read-only:bg-[var(--ops-bg)] read-only:text-[var(--ops-muted)]" /></div>
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Email *</label><input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} readOnly={bookingLinked} placeholder="daniel@example.com" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm read-only:bg-[var(--ops-bg)] read-only:text-[var(--ops-muted)]" /></div>
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Phone</label><input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} readOnly={bookingLinked} placeholder="+234 ..." className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm read-only:bg-[var(--ops-bg)] read-only:text-[var(--ops-muted)]" /></div>
-          <div><label className="mono text-[11px] text-[var(--ops-muted)]">Agent</label><select value={agentId} onChange={(e) => setAgentId(e.target.value)} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white"><option value="">— None —</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name} — {a.category}</option>)}</select></div>
+          <div><label className="mono text-[11px] text-[var(--ops-muted)]">Agent</label><select value={agentId} onChange={(e) => setAgentId(e.target.value)} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white"><option value="">None</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.category})</option>)}</select></div>
         </div>
       </div>
 
       <div className="bg-white border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-        <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property{bookingLinked ? " — from booking (read-only)" : ""}</h2>
+        <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property{bookingLinked ? ": from booking (read-only)" : ""}</h2>
         <div className="mt-4 grid md:grid-cols-2 gap-4">
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Estate *</label><select value={estate} onChange={(e) => onEstateChange(e.target.value)} disabled={bookingLinked} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white disabled:bg-[var(--ops-bg)] disabled:text-[var(--ops-muted)]"><option value="">Select estate…</option>{estates.map((e) => <option key={e} value={e}>{e}</option>)}</select></div>
-          <div><label className="mono text-[11px] text-[var(--ops-muted)]">Plot / Unit</label><select value={plotId} onChange={(e) => onPlotChange(e.target.value)} disabled={!estate || bookingLinked} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white disabled:opacity-50"><option value="">— Select plot —</option>{plotsForEstate.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.unitType} · {p.size}sqm · {formatNaira(p.price ?? 0)}</option>)}</select></div>
+          <div><label className="mono text-[11px] text-[var(--ops-muted)]">Plot / Unit</label><select value={plotId} onChange={(e) => onPlotChange(e.target.value)} disabled={!estate || bookingLinked} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white disabled:opacity-50"><option value="">Select plot</option>{plotsForEstate.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.unitType} · {p.size}sqm · {formatNaira(p.price ?? 0)}</option>)}</select></div>
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Property name</label><input value={estate} onChange={(e) => setEstate(e.target.value)} readOnly={bookingLinked} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm read-only:bg-[var(--ops-bg)] read-only:text-[var(--ops-muted)]" /></div>
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Unit type</label><input value={unitType} onChange={(e) => setUnitType(e.target.value)} readOnly={bookingLinked} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm read-only:bg-[var(--ops-bg)] read-only:text-[var(--ops-muted)]" /></div>
           <div><label className="mono text-[11px] text-[var(--ops-muted)]">Size sqm</label><input type="number" value={sqm} onChange={(e) => setSqm(e.target.value)} readOnly={bookingLinked} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm read-only:bg-[var(--ops-bg)] read-only:text-[var(--ops-muted)]" /></div>
@@ -223,7 +223,7 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
           })}
         </div>
         <div className="mt-4 bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3 mono text-[11px] text-[var(--ops-muted)]">
-          Selected: <span className="font-medium text-[var(--ops-text)]">{selectedPlan?.name}</span> — Initial {selectedPlan?.initialPaymentPercentage}% ({formatNaira(Math.round((totalPayable * (selectedPlan?.initialPaymentPercentage ?? 0)) / 100))}) + {selectedPlan?.remainingInstallments} monthly of ~{selectedPlan?.remainingInstallments ? formatNaira(Math.floor((totalPayable - Math.round((totalPayable * (selectedPlan?.initialPaymentPercentage ?? 0)) / 100)) / selectedPlan.remainingInstallments)) : "—"}
+          Selected: <span className="font-medium text-[var(--ops-text)]">{selectedPlan?.name}</span>: initial {selectedPlan?.initialPaymentPercentage}% ({formatNaira(Math.round((totalPayable * (selectedPlan?.initialPaymentPercentage ?? 0)) / 100))}) + {selectedPlan?.remainingInstallments} monthly of ~{selectedPlan?.remainingInstallments ? formatNaira(Math.floor((totalPayable - Math.round((totalPayable * (selectedPlan?.initialPaymentPercentage ?? 0)) / 100)) / selectedPlan.remainingInstallments)) : "-"}
         </div>
       </div>
 

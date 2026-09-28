@@ -116,7 +116,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
             Dashboard
           </h1>
           <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">
-            The ledger at a glance — bookings, sales, receipts and what needs you today.
+            The ledger at a glance: bookings, sales, receipts and what needs you today.
           </p>
           <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">
             {totalBookings} bookings all time

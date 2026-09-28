@@ -51,7 +51,7 @@ export default async function CompletedInspectionsPage({ searchParams }: { searc
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
           <div>
             <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Completed Inspections</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">Inspections that have taken place — awaiting Sold / Not Sold outcome. Sold triggers receipt generation.</p>
+            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">Inspections that have taken place, awaiting Sold / Not Sold outcome. Sold triggers receipt generation.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">
               {rows.length} awaiting · {soldCount} sold · {notConvertedCount} not converted
             </p>

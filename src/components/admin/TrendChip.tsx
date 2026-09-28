@@ -15,7 +15,7 @@ export function trendFor(cur: number, prev: number): Trend {
 export default function TrendChip({ cur, prev }: { cur: number; prev: number }) {
   const trend = trendFor(cur, prev);
   if (trend.kind === "flat") {
-    return <span className="fraunces italic text-[13px] text-[var(--ops-muted)]">— 0%</span>;
+    return <span className="fraunces italic text-[13px] text-[var(--ops-muted)]">- 0%</span>;
   }
   if (trend.kind === "new") {
     return <span className="fraunces italic text-[13px] text-[#1F6B3E]">New</span>;

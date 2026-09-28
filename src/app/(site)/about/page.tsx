@@ -36,7 +36,7 @@ export default function AboutPage() {
                 <div className="public text-[14px] leading-[1.7] text-[#1C2B20] mt-3 space-y-4 text-justify">
                   <p>At Belgrove Homes &amp; Properties Limited, we believe a piece of land is the most honest investment there is. It does not move, decline, or wear out; it waits for you. Build the home you have imagined. Hold an asset that grows with the years. Or lay the foundation of a future your family can stand on. Whatever your dream, it begins with the right ground beneath it.</p>
                   <p>Belgrove Homes &amp; Properties Limited is a real estate company built on one conviction: real estate is far more than the acquisition of ground or buildings. It is a foundation for financial growth, for security, and for a generational legacy. We have made land the heart of that belief, and we are building that promise from Abuja outward, one verified plot at a time.</p>
-                  <p>Founded in 2025 and headquartered in Abuja, Belgrove exists to do one thing well: put verified, honestly priced land in front of people who are ready to build, hold, or pass something on. We intend to earn trust the only way that lasts — by being right about the land, every single time.</p>
+                  <p>Founded in 2025 and headquartered in Abuja, Belgrove exists to do one thing well: put verified, honestly priced land in front of people who are ready to build, hold, or pass something on. We intend to earn trust the only way that lasts: by being right about the land, every single time.</p>
                 </div>
               </div>
 
@@ -74,7 +74,7 @@ export default function AboutPage() {
             <div className="relative flex">
               <div className="absolute -z-0 inset-0 lg:left-6 bg-[#16281D] rounded-[8px] hidden lg:block" />
               <div className="relative rounded-[16px] overflow-hidden border border-[#E4D8C1] bg-white photo-warm shadow-[0_12px_24px_rgba(22,40,29,0.08)] w-full h-full min-h-[560px] z-10">
-                <img src="/manager-dp.jpg" alt="Belgrove Story — General Manager" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "top" }} />
+                <img src="/manager-dp.jpg" alt="Belgrove Story: General Manager" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "top" }} />
               </div>
             </div>
           </div>

@@ -22,15 +22,15 @@ export default function GalleryGrid() {
   const grouped = useMemo(() => {
     const groups: Record<string, typeof BELGROVE_PLOTS> = {};
     BELGROVE_PLOTS.forEach((p) => {
-      const key = p.phase ? `${p.estate} — ${p.phase}` : p.estate;
+      const key = p.phase ? `${p.estate} - ${p.phase}` : p.estate;
       if (!groups[key]) groups[key] = [];
       groups[key].push(p);
     });
     // filter by estate/phase/size query if present
     const filteredGroups: typeof groups = {};
     Object.entries(groups).forEach(([key, plots]) => {
-      const baseEstate = key.split(" — ")[0];
-      const phase = key.includes(" — ") ? key.split(" — ")[1] : "";
+      const baseEstate = key.split(" - ")[0];
+      const phase = key.includes(" - ") ? key.split(" - ")[1] : "";
       if (activeEstate !== "all" && baseEstate !== activeEstate) return;
       if (activePhase && phase !== activePhase) return;
       const filtered = plots.filter((p) => {
@@ -58,7 +58,7 @@ export default function GalleryGrid() {
   if (!estates.length) {
     return (
       <div className="public text-[13px] text-[#8B6B4E] text-center py-12 border border-dashed border-[#E4DCC7] rounded-lg bg-white">
-        No plots match that filter — try Another estate or status.
+        No plots match that filter. Try another estate or status.
       </div>
     );
   }
@@ -91,7 +91,7 @@ export default function GalleryGrid() {
         (() => {
           const key = detailKey;
           const group = detailGroup;
-          const baseEstate = key.split(" — ")[0];
+          const baseEstate = key.split(" - ")[0];
           const location = group[0].location;
           const sizes = [...new Set(group.map((p) => p.size))].sort((a, b) => a - b);
           const sizeLabel = sizes.length === 1 ? `${sizes[0]}sqm` : sizes.length === 2 ? `${sizes[0]}, ${sizes[1]}sqm` : `${Math.min(...sizes)}–${Math.max(...sizes)}sqm`;
@@ -146,7 +146,7 @@ export default function GalleryGrid() {
 
       {estates.map((key) => {
         const plots = grouped[key];
-        const baseEstate = key.split(" — ")[0];
+        const baseEstate = key.split(" - ")[0];
         const info = BELGROVE_ESTATE_INFO[baseEstate];
         const sizes = [...new Set(plots.map((p) => p.size))].sort((a, b) => a - b);
         const prices = plots.map((p) => p.price).filter((v): v is number => typeof v === "number");
@@ -159,7 +159,7 @@ export default function GalleryGrid() {
         return (
           <div key={key} className="estate-section">
             <div className="estate-section-head">
-              <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C79A46]">{key.toUpperCase()} — {plots[0].location}{isPreSaleGroup && " • PRE-SALE"}</div>
+              <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C79A46]">{key.toUpperCase()} - {plots[0].location}{isPreSaleGroup && " • PRE-SALE"}</div>
               <h3>
                 <Link href={(() => { const slug = slugFromEstateName(baseEstate); const qp = plots[0].phase ? `?phase=${encodeURIComponent(plots[0].phase)}` : ""; return slug ? `/estates/${slug}${qp}` : "/gallery"; })()} className="hover:text-[#C79A46] hover:underline underline-offset-4 decoration-[#C79A46]/30">
                   {key}
@@ -185,9 +185,9 @@ export default function GalleryGrid() {
                 const isReserved = p.status === "reserved";
                 const isNotAvailable = isSold || isReserved;
                 const isPreSale = p.estate === "Sunrise Estate" && p.phase === "Phase 2";
-                const phaseSuffix = p.phase ? ` — ${p.phase}` : "";
+                const phaseSuffix = p.phase ? ` - ${p.phase}` : "";
                 const title = p.unitType || p.estate + phaseSuffix;
-                const sub = p.unitType ? `${p.estate}${phaseSuffix} — ${p.location}` : p.location + (phaseSuffix ? ` (${p.phase})` : "");
+                const sub = p.unitType ? `${p.estate}${phaseSuffix} - ${p.location}` : p.location + (phaseSuffix ? ` (${p.phase})` : "");
                 const priceLine = p.price ? formatNaira(p.price) + (isPreSale ? " • Pre-Sale" : "") : "";
                 const estateSlug = slugFromEstateName(p.estate) ?? p.estate.toLowerCase().replace(/\s+/g, "-");
                 const href = `/estates/${estateSlug}/${p.id}`;
@@ -222,7 +222,7 @@ export default function GalleryGrid() {
                       </div>
                       <div className="pop-note">
                         <span style={{ fontWeight: 600, color: "#16281F" }}>Verified land:</span> The prototypes you see are the FCTA-approved building prototypes for {p.estate}
-                        {p.phase ? ` ${p.phase}` : ""} — {p.location}. What you see is what is approved to build at {p.size}sqm.
+                        {p.phase ? ` ${p.phase}` : ""} - {p.location}. What you see is what is approved to build at {p.size}sqm.
                       </div>
                       <div className="pop-cta">View property details →</div>
                     </div>

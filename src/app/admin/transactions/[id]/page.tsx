@@ -64,7 +64,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{transaction.ref}</h1>
                 <StatusBadge status={transaction.status} className="px-3 py-1.5 text-xs" />
                 {transaction.booking && <Link href={`/admin/bookings/${transaction.booking.id}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">Booking {transaction.booking.ref} ↗</Link>}
-                {!transaction.booking && transaction.manualReason && <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {transaction.manualReason}</span>}
+                {!transaction.booking && transaction.manualReason && <span className="mono text-[11px] text-[var(--ops-muted)]">Manual: {transaction.manualReason}</span>}
               </div>
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Created {formatDateTime(transaction.createdAt)} · {transaction.installments.length} installments · {overdueCount} overdue</div>
             </div>
@@ -155,7 +155,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                             <span className="text-[13px] font-medium price">{formatNaira(p.amount)}</span>
                             <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(p.paymentDate)}</span>
                           </div>
-                          <div className="mono text-[11px] text-[var(--ops-muted)]">{instLabel} · {p.paymentMethod ?? "—"}{p.bankReference ? ` · bank: ${p.bankReference}` : ""}{p.notes ? ` · ${p.notes}` : ""}</div>
+                          <div className="mono text-[11px] text-[var(--ops-muted)]">{instLabel} · {p.paymentMethod ?? "-"}{p.bankReference ? ` · bank: ${p.bankReference}` : ""}{p.notes ? ` · ${p.notes}` : ""}</div>
                           <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{p.paymentReference}</div>
                           <div className="mt-1.5">
                             <StatusBadge status={p.status} className="px-2 py-0.5 text-[10px]" />

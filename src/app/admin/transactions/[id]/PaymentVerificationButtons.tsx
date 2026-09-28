@@ -81,7 +81,7 @@ export default function PaymentVerificationButtons({
       {error && <div className="mb-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">{error}</div>}
       {receiptRef && (
         <div className="mb-2 text-[11px] text-[#1F6B3E] bg-[#ECFDF5] border border-[#A7F3D0] rounded-lg px-2.5 py-1.5">
-          Confirmed — receipt <Link href={`/admin/receipts`} className="font-mono underline underline-offset-2">{receiptRef}</Link> issued and emailed.
+          Confirmed: receipt <Link href={`/admin/receipts`} className="font-mono underline underline-offset-2">{receiptRef}</Link> issued and emailed.
         </div>
       )}
       {!showConfirm && !showVoid ? (

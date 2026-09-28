@@ -106,7 +106,7 @@ export default function BookingForm() {
   useEffect(() => {
     if (!form.estate) return;
     if (form.selectionType === "unit" && selectedPlot) {
-      const loc = `${selectedPlot.estate}${selectedPlot.phase ? ` — ${selectedPlot.phase}` : ""} · ${selectedPlot.unitType ?? ""} · ${selectedPlot.code}`.replace(/ ·  ·/g, " · ").replace(/^ · | · $/g, "");
+      const loc = `${selectedPlot.estate}${selectedPlot.phase ? `, ${selectedPlot.phase}` : ""} · ${selectedPlot.unitType ?? ""} · ${selectedPlot.code}`.replace(/ ·  ·/g, " · ").replace(/^ · | · $/g, "");
       setForm((f) => (f.location !== loc ? { ...f, location: loc } : f));
     } else if (form.selectionType === "sqm_needed" && form.sqmNeeded) {
       const loc = `${form.estate} · ${form.sqmNeeded}sqm requested`;
@@ -154,7 +154,7 @@ export default function BookingForm() {
         unitType = selectedPlot.unitType;
         sqm = selectedPlot.size;
         selectionType = "unit";
-        location = `${selectedPlot.estate}${selectedPlot.phase ? ` — ${selectedPlot.phase}` : ""} · ${selectedPlot.unitType ?? ""} · ${selectedPlot.code}`.replace(/ ·  ·/g, " · ");
+        location = `${selectedPlot.estate}${selectedPlot.phase ? `, ${selectedPlot.phase}` : ""} · ${selectedPlot.unitType ?? ""} · ${selectedPlot.code}`.replace(/ ·  ·/g, " · ");
       } else if (form.selectionType === "sqm_needed" && form.sqmNeeded) {
         const n = parseInt(form.sqmNeeded, 10);
         if (Number.isNaN(n) || n < 10) {
@@ -172,7 +172,7 @@ export default function BookingForm() {
     }
 
     if (!location) {
-      setError("Property / Estate is required — pick an estate or enter a location.");
+      setError("Property / Estate is required: pick an estate or enter a location.");
       setSubmitting(false);
       return;
     }
@@ -346,7 +346,7 @@ export default function BookingForm() {
             </option>
           ))}
         </select>
-        <p className="mono text-[11px] text-[#8B5E3C] mt-1">Pick the estate first — then choose a specific unit or enter the SQM the client needs.</p>
+        <p className="mono text-[11px] text-[#8B5E3C] mt-1">Pick the estate first, then choose a specific unit or enter the SQM the client needs.</p>
 
         {form.estate && (
           <div className="mt-4 space-y-3">
@@ -377,7 +377,7 @@ export default function BookingForm() {
                   </option>
                   {plotsForEstate.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.unitType ? `${p.unitType} — ` : ""}
+                      {p.unitType ? `${p.unitType}, ` : ""}
                       {p.size}sqm · {p.code} {p.phase ? ` · ${p.phase}` : ""} {p.price ? ` · ${formatNaira(p.price)}` : ""}
                     </option>
                   ))}
@@ -402,7 +402,7 @@ export default function BookingForm() {
                   />
                   <span className="mono text-xs text-stone-500">sqm</span>
                 </div>
-                <p className="mono text-[11px] text-stone-500 mt-1">Record the size the client is asking for — adviser will match to nearest available unit later. No exact plot required.</p>
+                <p className="mono text-[11px] text-stone-500 mt-1">Record the size the client is asking for. An adviser will match to the nearest available unit later. No exact plot required.</p>
               </div>
             )}
           </div>
@@ -452,13 +452,13 @@ export default function BookingForm() {
             onChange={(e) => update("location", e.target.value)}
             className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
           />
-          <p className="mono text-[11px] text-stone-500 mt-1">Or pick an estate above — this field will be auto-filled.</p>
+          <p className="mono text-[11px] text-stone-500 mt-1">Or pick an estate above. This field will be auto-filled.</p>
         </div>
       )}
       {form.estate && (
         <div className="mono text-[11px] text-stone-500 bg-[#F7F2E7] border border-[#E0D5BB] rounded px-3 py-2">
           Booking will be saved as: <span className="font-medium text-[#1F3328]">{form.location || form.estate}</span>
-          <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[10px] border bg-white">{form.selectionType === "unit" && selectedPlot ? "Unit selected" : form.selectionType === "sqm_needed" && form.sqmNeeded ? `Sizing — ${form.sqmNeeded}sqm requested` : "Estate selected"}</span>
+          <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-[10px] border bg-white">{form.selectionType === "unit" && selectedPlot ? "Unit selected" : form.selectionType === "sqm_needed" && form.sqmNeeded ? `Sizing: ${form.sqmNeeded}sqm requested` : "Estate selected"}</span>
         </div>
       )}
 

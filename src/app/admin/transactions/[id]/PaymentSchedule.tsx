@@ -79,7 +79,7 @@ export default function PaymentSchedule({
                     <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(inst.scheduledAmount)}</td>
                     <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(inst.confirmedPaid)}</td>
                     <td className="px-3 py-2"><StatusBadge status={inst.status} className="px-2 py-1 text-[10px]" /></td>
-                    <td className="px-3 py-2 text-right">{receiptLink ? <Link href={`/admin/receipts/${receiptLink.id}`} className="text-xs text-[var(--ops-primary)] hover:underline">View</Link> : "—"}</td>
+                    <td className="px-3 py-2 text-right">{receiptLink ? <Link href={`/admin/receipts/${receiptLink.id}`} className="text-xs text-[var(--ops-primary)] hover:underline">View</Link> : "-"}</td>
                     <td className="px-3 py-2 text-right">
                       {inst.status !== "Paid" && (
                         <button
@@ -95,7 +95,7 @@ export default function PaymentSchedule({
                     <tr key={p.id} id={`payment-${p.id}`} className="bg-[#FFFBEB]/40 scroll-mt-20">
                       <td className="px-3 py-2 pl-6" colSpan={2}>
                         <span className="mono text-[11px] text-[#92400E]">Pending {formatNaira(p.amount)}</span>
-                        <div className="mono text-[10px] text-[var(--ops-muted)]">{p.paymentReference}{p.bankReference ? ` · bank: ${p.bankReference}` : ""} · {p.paymentMethod ?? "—"}</div>
+                        <div className="mono text-[10px] text-[var(--ops-muted)]">{p.paymentReference}{p.bankReference ? ` · bank: ${p.bankReference}` : ""} · {p.paymentMethod ?? "-"}</div>
                       </td>
                       <td className="px-3 py-2" colSpan={5}>
                         <PaymentVerificationButtons

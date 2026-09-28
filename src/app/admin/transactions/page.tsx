@@ -81,7 +81,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
           <div>
             <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Transactions</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">Source of truth for property sales — payment plans, schedules, and outstanding balances.</p>
+            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">Source of truth for property sales: payment plans, schedules, and outstanding balances.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} transactions · Page {page} of {totalPages}</p>
           </div>
           <div className="flex items-center gap-2">

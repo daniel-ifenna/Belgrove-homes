@@ -44,7 +44,7 @@ export default function HomePage() {
   const [heroInView, setHeroInView] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
   const carouselSlides = [
-    { src: "/aurum-400-fully-detached.jpeg", alt: "Aurum Residence — luxury modern home exterior, Katampe Extension, Abuja", captionTitle: "BELGROVE PENINSULA", captionSub: "Residential plots · Abuja" },
+    { src: "/aurum-400-fully-detached.jpeg", alt: "Aurum Residence, luxury modern home exterior, Katampe Extension, Abuja", captionTitle: "BELGROVE PENINSULA", captionSub: "Residential plots · Abuja" },
     { src: "/peninsula-350-fully-detached.jpeg", alt: "Aerial view of premium residential estate, Abuja corridor", captionTitle: "KABUSA–KETTI CORRIDOR", captionSub: "Strategically positioned residential land" },
     { src: "/admin-login-house.jpg", alt: "Beautiful modern Nigerian home interior, architectural detail", captionTitle: "BUILT FOR THE FUTURE", captionSub: "Infrastructure · Access · Security" },
     { src: "/starlight-150-terrace.jpeg", alt: "Landscaped residential environment, estate development", captionTitle: "INSPECT BEFORE YOU BUY", captionSub: "Private property inspection" },
@@ -102,7 +102,7 @@ export default function HomePage() {
     const PLOTS = w.BELGROVE_PLOTS ?? FALLBACK_PLOTS;
     const SIZES = w.BELGROVE_SIZES ?? FALLBACK_SIZES;
     const ESTATE_INFO: Record<string, {tagline:string, features:string[], whatsapp:string, instagram:string}> = w.BELGROVE_ESTATE_INFO ?? FALLBACK_ESTATE_INFO;
-    function estateKey(p: typeof PLOTS[number]){ return p.phase ? p.estate + ' — ' + p.phase : p.estate; }
+    function estateKey(p: typeof PLOTS[number]){ return p.phase ? p.estate + ' - ' + p.phase : p.estate; }
     function uniqueEstateKeys(){ const seen: Record<string,boolean>={}; const out:string[]=[]; PLOTS.forEach(function(p){ const k=estateKey(p); if(!seen[k]){seen[k]=true; out.push(k);} }); return out; }
     const sEstate = document.getElementById('bgSearchEstate') as HTMLSelectElement | null;
     const sSize = document.getElementById('bgSearchSize') as HTMLSelectElement | null;
@@ -144,7 +144,7 @@ export default function HomePage() {
           '</div>' +
           '<a href="/estates/' + (function(){ var m={"Aurum Residence":"aurum-residence","Belgrove Peninsula":"belgrove-peninsula","Starlight Estate":"starlight-estate","Sunrise Estate":"sunrise-estate"} as Record<string,string>; return (m as Record<string,string>)[baseEstate]||baseEstate.toLowerCase().replace(/\\s+/g,"-"); })() + (phase ? '?phase=' + encodeURIComponent(phase) : '') + '" class="mono text-[12px] bg-[#16281D] text-[#F5EFE2] px-4 py-2 rounded-[6px] hover:bg-[#1B2E23] transition-colors">View estate details →</a>' +
         '</div>' +
-        '<div class="mt-4 pt-4 border-t border-[#E4D8C1] public text-[12.5px] leading-[1.6] text-[#5B5346]"><span class="font-semibold text-[#1C2B20]">FCTA Approved:</span> ' + (count>1 ? 'The prototypes you see are' : 'The prototype you see is') + ' the FCTA-approved building prototype for ' + displayName + ' — located at ' + location + ', ' + sizeLabel + ' from ' + basePriceLabel + (isPreSale ? ' (Pre-Sale offers)' : '') + '. Verified land, what you see is what is approved to build.</div>';
+        '<div class="mt-4 pt-4 border-t border-[#E4D8C1] public text-[12.5px] leading-[1.6] text-[#5B5346]"><span class="font-semibold text-[#1C2B20]">FCTA Approved:</span> ' + (count>1 ? 'The prototypes you see are' : 'The prototype you see is') + ' the FCTA-approved building prototype for ' + displayName + ', located at ' + location + ', ' + sizeLabel + ' from ' + basePriceLabel + (isPreSale ? ' (Pre-Sale offers)' : '') + '. Verified land, what you see is what is approved to build.</div>';
       detailCard.classList.remove('hidden');
       detailCard.scrollIntoView({behavior:'smooth', block:'nearest'});
     }
@@ -219,7 +219,7 @@ export default function HomePage() {
       if(!visibleCount){
         const empty = document.createElement('div');
         empty.className = 'public text-[13px] text-[#5B5346] col-span-full text-center py-8 border border-dashed border-[#E4D8C1] rounded-lg bg-white';
-        empty.textContent = 'No estates match that filter — try another size or estate.';
+        empty.textContent = 'No estates match that filter. Try another size or estate.';
         estateGrid.appendChild(empty);
       } else if(visibleCount===1 && activeEstate!=='all'){
         showDetailCard(activeEstate);
@@ -242,7 +242,7 @@ export default function HomePage() {
       }
       const params = new URLSearchParams();
       if(estateVal && estateVal!=='all'){
-        const parts = estateVal.split(' — ');
+        const parts = estateVal.split(' - ');
         params.set('estate', parts[0]);
         if(parts[1]) params.set('phase', parts[1]);
       }
@@ -509,7 +509,7 @@ export default function HomePage() {
             {/* visual side — real estate photo with floating verification badge */}
             <div className="order-2 lg:order-1 relative" ref={trustRef as any}>
               <div className="relative rounded-[16px] overflow-hidden border border-[#E4D8C1] aspect-[4/3] shadow-[var(--shadow-md)] photo-warm">
-                <img src="/peninsula-350-fully-detached.jpeg" alt="Belgrove Peninsula — estate exterior" className="absolute inset-0 w-full h-full object-cover" />
+                <img src="/peninsula-350-fully-detached.jpeg" alt="Belgrove Peninsula estate exterior" className="absolute inset-0 w-full h-full object-cover" />
               </div>
 
               {/* glow behind photo */}
@@ -522,18 +522,18 @@ export default function HomePage() {
             <div className="order-1 lg:order-2">
               <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C89B3C]">THE BELGROVE LAND VERIFICATION STANDARD · OUR MOAT</div><div className="hairline-gold"></div>
               <h2 className="fraunces text-[30px] lg:text-[36px] leading-[1.05] tracking-[-0.02em] text-[#1C2B20] mt-3">Accuracy is the heart of our promise.</h2>
-              <p className="public text-[14px] leading-[1.65] text-[#5B5346] mt-4 max-w-[50ch]">Every plot we present is checked against a clear seven-point standard before publication. Accuracy is not a department — it is our entire brand.</p>
+              <p className="public text-[14px] leading-[1.65] text-[#5B5346] mt-4 max-w-[50ch]">Every plot we present is checked against a clear seven-point standard before publication. Accuracy is not a department; it is our entire brand.</p>
               <div className="mt-6 space-y-3">
                 {[
                   ["Title & Ownership verified", "Chain of ownership confirmed with documented title."],
-                  ["Boundaries & Size confirmed", "Pegged, photographed, and measured — what you see is what you buy."],
+                  ["Boundaries & Size confirmed", "Pegged, photographed, and measured: what you see is what you buy."],
                   ["Complete Documentation provided", "Deed, transfer, and registration explained end-to-end."],
                 ].map(([title, desc]) => (
                   <div key={title} className="flex gap-3">
                     <span className="h-5 w-5 rounded-full bg-[#C89B3C] text-white grid place-items-center text-[10px] shrink-0 mt-0.5">✓</span>
                     <div>
                       <span className="public text-[14px] font-semibold text-[#1C2B20]">{title}</span>
-                      <span className="public text-[14px] text-[#5B5346]"> — {desc}</span>
+                      <span className="public text-[14px] text-[#5B5346]">: {desc}</span>
                     </div>
                   </div>
                 ))}
@@ -550,25 +550,25 @@ export default function HomePage() {
       <section id="faq" className="bg-[#F7EFE2] texture-cream py-16 lg:py-20 border-t border-[#E4D8C1] reveal">
         <div className="max-w-[880px] mx-auto px-6 lg:px-8">
           <div className="text-center">
-            <div className="mono text-[13px] tracking-[0.12em] uppercase text-[#C89B3C]">LAND FAQs — Answered as your adviser would</div>
+            <div className="mono text-[13px] tracking-[0.12em] uppercase text-[#C89B3C]">LAND FAQs: answered as your adviser would</div>
             <div className="hairline-gold mx-auto"></div>
             <h2 className="fraunces font-[500] text-[32px] lg:text-[40px] leading-[0.95] tracking-[-0.02em] text-[#1C2B20] mt-4">The ground for your future.</h2>
-            <p className="public text-[15px] leading-[1.6] text-[#5B5346] mt-3 max-w-[60ch] mx-auto">Buy the land. Build tomorrow. Welcome to the foundation of everything — with answers, not assurances.</p>
+            <p className="public text-[15px] leading-[1.6] text-[#5B5346] mt-3 max-w-[60ch] mx-auto">Buy the land. Build tomorrow. Welcome to the foundation of everything, with answers, not assurances.</p>
           </div>
           <div className="mt-10 space-y-0 divide-y divide-[#E4D8C1] border-y border-[#E4D8C1] bg-white rounded-[12px] overflow-hidden shadow-[var(--shadow-sm)]">
             {[
               ["Is the land you sell actually yours to sell?","This is the most important question, and we treat it that way. Before publication we verify the chain of ownership and confirm the seller's legal right to sell. Every plot we present is backed by documented title and a clear ownership position and we will walk you through that documentation page by page so you understand it before you commit. Bring your lawyer; we welcome it."],
-              ["What does “verified land” mean at Belgrove?","It means the plot has passed our 7-point land verification standard: title and ownership confirmed, freedom from encumbrance and disputes checked, boundaries and size established, use/planning status and access confirmed, and complete documentation available. You can request the verification pack for any plot you are serious about — we send it before you pay a naira."],
+              ["What does “verified land” mean at Belgrove?","It means the plot has passed our 7-point land verification standard: title and ownership confirmed, freedom from encumbrance and disputes checked, boundaries and size established, use/planning status and access confirmed, and complete documentation available. You can request the verification pack for any plot you are serious about; we send it before you pay a naira."],
               ["Can I trust the size and boundaries shown?","We present size based on the surveyor's measurement / certified record, and boundaries are established by pegs and photographs, rather than guessed. We take care you are buying precisely the land you believe you are buying, and we are honest about any measurement caveats because a square metre hidden is trust lost."],
-              ["I want to buy land to build my own home, how does that work?","We start with your vision and budget, then find land suitable for building — the right location, size, use status, and access. We verify the land, coordinate the legal transfer and registration, and connect you with trusted partners for planning and construction. Your goal is to get from plot to foundation with clarity, not complication — and we project-manage that clarity."],
-              ["Is land a good long-term investment — can I expect it to grow in value?","Land often grows in value over time as areas develop and demand rises, but this is not guaranteed, and no responsible adviser will promise future returns. We seek plots in locations with genuine long-term potential, explain the reasoning with corridor data and comparables, and set realistic expectations. Land is patient by nature, and so is our advice — that patience is our brand promise."],
-              ["What is “land banking,” and do you advise on it?","Land banking is buying land to hold for long-term appreciation before building or resale. We can help identify land with future potential and sequence it within a broader portfolio — but we are transparent that returns are not guaranteed and that a plot's prospects should be weighed carefully, with exit options discussed, rather than assumed."],
-              ["What documents will I receive after buying land?","You will receive the documentation appropriate to a valid sale, typically the title/deed and the completed legal transfer and registration. We make sure you understand every paper you receive — what it means, where to keep it, and how your family will use it — and, where you wish, we coordinate the transfer on your behalf, end-to-end."],
-              ["What if the land has a dispute, an issue, or encroachment?","Our verification is designed to surface these before they become your problem. Where an issue exists, we either resolve it properly with the right parties and paperwork or do not present the plot. Our honest standard means we would rather lose a sale than pass a problem to you. That is not just ethics; it is marketing — a problem sold is a reputation lost."],
-              ["Can you help me sell my land?","Yes. We value it honestly (even if honest is lower than you hoped), prepare clear documentation, and market it to the right buyers — those building homes and those building portfolios — with the same verification we demand as buyers. Selling land should be as transparent as buying it; your buyer will receive the same pack you did."],
+              ["I want to buy land to build my own home, how does that work?","We start with your vision and budget, then find land suitable for building: the right location, size, use status, and access. We verify the land, coordinate the legal transfer and registration, and connect you with trusted partners for planning and construction. Your goal is to get from plot to foundation with clarity, not complication, and we project-manage that clarity."],
+              ["Is land a good long-term investment: can I expect it to grow in value?","Land often grows in value over time as areas develop and demand rises, but this is not guaranteed, and no responsible adviser will promise future returns. We seek plots in locations with genuine long-term potential, explain the reasoning with corridor data and comparables, and set realistic expectations. Land is patient by nature, and so is our advice. That patience is our brand promise."],
+              ["What is “land banking,” and do you advise on it?","Land banking is buying land to hold for long-term appreciation before building or resale. We can help identify land with future potential and sequence it within a broader portfolio, but we are transparent that returns are not guaranteed and that a plot's prospects should be weighed carefully, with exit options discussed, rather than assumed."],
+              ["What documents will I receive after buying land?","You will receive the documentation appropriate to a valid sale, typically the title/deed and the completed legal transfer and registration. We make sure you understand every paper you receive: what it means, where to keep it, and how your family will use it. Where you wish, we coordinate the transfer on your behalf, end to end."],
+              ["What if the land has a dispute, an issue, or encroachment?","Our verification is designed to surface these before they become your problem. Where an issue exists, we either resolve it properly with the right parties and paperwork or do not present the plot. Our honest standard means we would rather lose a sale than pass a problem to you. That is not just ethics; it is marketing: a problem sold is a reputation lost."],
+              ["Can you help me sell my land?","Yes. We value it honestly (even if honest is lower than you hoped), prepare clear documentation, and market it to the right buyers (those building homes and those building portfolios) with the same verification we demand as buyers. Selling land should be as transparent as buying it; your buyer will receive the same pack you did."],
               ["Do you offer payment plans or financing for land?","Yes. We offer flexible installment plans of up to 6 months, paid directly to Belgrove, no third-party financing required. The full price and payment schedule are disclosed clearly and in writing from the first conversation, with no hidden costs."],
-              ["How does your company handle site inspections?","We arrange site visits every week, and for out-of-town or overseas clients we offer virtual tours, drone footage and detailed reports so you can buy with confidence even at a distance. Every visit is hosted — not just a gate opened, but a walk with your adviser who knows the plot number by heart."],
-              ["How long does buying land through Belgrove take?","It varies with documentation and transfer requirements, but typically days to weeks for a straightforward plot. We set clear milestones at the start — verification, offer, transfer, registration — and keep you informed at every stage, so waiting feels like progress, not silence."],
+              ["How does your company handle site inspections?","We arrange site visits every week, and for out-of-town or overseas clients we offer virtual tours, drone footage and detailed reports so you can buy with confidence even at a distance. Every visit is hosted: not just a gate opened, but a walk with your adviser who knows the plot number by heart."],
+              ["How long does buying land through Belgrove take?","It varies with documentation and transfer requirements, but typically days to weeks for a straightforward plot. We set clear milestones at the start: verification, offer, transfer, registration, and keep you informed at every stage, so waiting feels like progress, not silence."],
             ].map(([q,a], idx) => (
               <details key={q as string} className="group bg-white open:bg-[#FAF4EA] transition-colors">
                 <summary className="fraunces text-[15px] leading-[1.3] font-[500] text-[#1C2B20] flex justify-between items-center cursor-pointer list-none gap-4 px-5 lg:px-6 py-4 hover:bg-[#FAF4EA] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C89B3C]">

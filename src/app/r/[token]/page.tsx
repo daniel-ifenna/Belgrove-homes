@@ -147,7 +147,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
         </div>
       </div>
       <div className="max-w-[800px] mx-auto mt-6 text-center mono text-[11px] text-[#8B6B4E]">
-        This page is the stable private URL for receipt <span className="font-medium text-[#16281F]">#{receipt.ref}</span> — the QR code on the PDF points here.
+        This page is the stable private URL for receipt <span className="font-medium text-[#16281F]">#{receipt.ref}</span>. The QR code on the PDF points here.
       </div>
     </div>
   );

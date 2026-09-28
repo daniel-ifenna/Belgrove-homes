@@ -134,7 +134,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
     }
     // ensure sqm is present before sold — block if missing and not yet saved
     if (!soldModal.sqm && !soldModal.sqmNeeded) {
-      setError("Complete SQM first — expand the row and save the property size before marking Sold.");
+      setError("Complete SQM first: expand the row and save the property size before marking Sold.");
       return;
     }
     setGenerating(true);
@@ -158,7 +158,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to mark sold");
       const bookingId = soldModal.id;
-      setSuccessMsg(`Marked sold — create the transaction to record payments and issue receipts.`);
+      setSuccessMsg(`Marked sold. Create the transaction to record payments and issue receipts.`);
       setSoldModal(null);
       router.push(`/admin/transactions/new?bookingId=${bookingId}`);
     } catch (e: any) {
@@ -189,8 +189,8 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
             <tbody className="divide-y divide-[var(--ops-border)]/60">
               {rows.map((r) => {
                 const hasSqm = !!(r.sqm || r.sqmNeeded);
-                const sqmDisplay = r.selectionType === "sqm_needed" && r.sqmNeeded ? `${r.sqmNeeded}sqm requested` : r.sqm ? `${r.sqm}sqm` : r.sqmNeeded ? `${r.sqmNeeded}sqm requested` : "—";
-                const sqmTag = r.selectionType === "sqm_needed" ? "Sizing — " + r.sqmNeeded + "sqm requested" : r.plotCode ? "Unit selected" : null;
+                const sqmDisplay = r.selectionType === "sqm_needed" && r.sqmNeeded ? `${r.sqmNeeded}sqm requested` : r.sqm ? `${r.sqm}sqm` : r.sqmNeeded ? `${r.sqmNeeded}sqm requested` : "-";
+                const sqmTag = r.selectionType === "sqm_needed" ? "Sizing: " + r.sqmNeeded + "sqm requested" : r.plotCode ? "Unit selected" : null;
                 const isExpanded = expandedId === r.id;
                 return (
                   <React.Fragment key={r.id}>
@@ -205,9 +205,9 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                         </div>
                         <div className="mono text-[11px] text-[var(--ops-muted)]">{r.plotCode ? `${r.plotCode}${r.unitType ? ` · ${r.unitType}` : ""}` : r.location}</div>
                         {sqmTag && <span className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] border font-medium ${sqmTag.startsWith("Sizing") ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]"}`}>{sqmTag}</span>}
-                        {!hasSqm && <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] border font-medium bg-amber-50 text-amber-800 border-amber-200">Missing SQM — click to add</span>}
+                        {!hasSqm && <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] border font-medium bg-amber-50 text-amber-800 border-amber-200">Missing SQM: click to add</span>}
                         <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">{r.ref} · {r.name}</div>
-                        <div className="mono text-[11px] text-[var(--ops-muted)]">Inspected {r.inspectedAt ? formatDate(r.inspectedAt) : "—"}</div>
+                        <div className="mono text-[11px] text-[var(--ops-muted)]">Inspected {r.inspectedAt ? formatDate(r.inspectedAt) : "-"}</div>
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {r.agent ? (
@@ -219,12 +219,12 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                             </div>
                           </div>
                         ) : (
-                          <span className="mono text-[11px] text-[var(--ops-muted)]">{r.agentName ?? "—"}</span>
+                          <span className="mono text-[11px] text-[var(--ops-muted)]">{r.agentName ?? "-"}</span>
                         )}
                       </td>
                       <td className="px-4 py-3 mono text-[12px] text-[var(--ops-text)] font-medium">{sqmDisplay}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium border bg-[#16281D] text-white border-[#16281D]">Active — awaiting outcome</span>
+                        <span className="inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium border bg-[#16281D] text-white border-[#16281D]">Active: awaiting outcome</span>
                       </td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
@@ -252,9 +252,9 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                             <div className="bg-white border border-[var(--ops-border)] rounded-xl p-4">
                               <div className="mono text-[10px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property details</div>
                               <div className="mt-2 space-y-1.5 text-[13px]">
-                                <div><span className="mono text-[11px] text-[var(--ops-muted)]">Estate:</span> <span className="font-medium text-[var(--ops-text)]">{r.estate ?? "—"}</span></div>
-                                <div><span className="mono text-[11px] text-[var(--ops-muted)]">Plot / Code:</span> <span className="font-medium text-[var(--ops-text)]">{r.plotCode ?? "—"}</span></div>
-                                <div><span className="mono text-[11px] text-[var(--ops-muted)]">Unit type:</span> <span className="font-medium text-[var(--ops-text)]">{r.unitType ?? "—"}</span></div>
+                                <div><span className="mono text-[11px] text-[var(--ops-muted)]">Estate:</span> <span className="font-medium text-[var(--ops-text)]">{r.estate ?? "-"}</span></div>
+                                <div><span className="mono text-[11px] text-[var(--ops-muted)]">Plot / Code:</span> <span className="font-medium text-[var(--ops-text)]">{r.plotCode ?? "-"}</span></div>
+                                <div><span className="mono text-[11px] text-[var(--ops-muted)]">Unit type:</span> <span className="font-medium text-[var(--ops-text)]">{r.unitType ?? "-"}</span></div>
                                 <div><span className="mono text-[11px] text-[var(--ops-muted)]">Location raw:</span> <span className="text-[var(--ops-text)]">{r.location}</span></div>
                                 <div><span className="mono text-[11px] text-[var(--ops-muted)]">Ref:</span> <span className="font-mono text-[var(--ops-text)]">{r.ref}</span></div>
                               </div>
@@ -264,7 +264,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                               {hasSqm ? (
                                 <div className="mt-2">
                                   <div className="text-[14px] font-medium text-[var(--ops-text)]">{sqmDisplay}</div>
-                                  <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">Saved as {r.sqm ? `sqm=${r.sqm}` : `sqmNeeded=${r.sqmNeeded}`} · {r.selectionType ?? "—"}</div>
+                                  <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">Saved as {r.sqm ? `sqm=${r.sqm}` : `sqmNeeded=${r.sqmNeeded}`} · {r.selectionType ?? "-"}</div>
                                   <div className="mt-3">
                                     <label className="mono text-[11px] text-[var(--ops-muted)]">Update SQM</label>
                                     <div className="flex gap-2 mt-1">
@@ -288,7 +288,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                                 </div>
                               ) : (
                                 <div className="mt-2">
-                                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mono text-[11px] text-amber-900">No SQM on file — add it so the receipt has complete data.</div>
+                                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mono text-[11px] text-amber-900">No SQM on file. Add it so the receipt has complete data.</div>
                                   <div className="mt-3 flex gap-2">
                                     <input
                                       type="number"
@@ -337,7 +337,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                 <tr>
                   <td colSpan={5} className="px-4 py-16 text-center">
                     <p className="public text-[14px] font-medium text-[var(--ops-text)]">No completed inspections awaiting outcome</p>
-                    <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Inspections appear here once marked as held (Active) — the inspection has taken place and is awaiting Sold / Not Sold. Use “Mark inspection as held” on the booking to move it here.</p>
+                    <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Inspections appear here once marked as held (Active). The inspection has taken place and is awaiting Sold / Not Sold. Use “Mark inspection as held” on the booking to move it here.</p>
                   </td>
                 </tr>
               )}
@@ -350,7 +350,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
       {soldModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-[16px] border border-[var(--ops-border)] shadow-xl max-w-[520px] w-full p-6">
-            <h3 className="fraunces text-[18px] text-[#16281F]">Mark as Sold — {soldModal.ref}</h3>
+            <h3 className="fraunces text-[18px] text-[#16281F]">Mark as Sold: {soldModal.ref}</h3>
             <p className="public text-[13px] text-[#6B6656] mt-1">{soldModal.name} · {soldModal.estate ?? soldModal.location} · {soldModal.email}</p>
             <div className="mt-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -358,7 +358,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                   <label className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)]">Unit Price (₦) *</label>
                   <input value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} placeholder="e.g. 8300000" inputMode="numeric" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
                   {soldModal.estate && (
-                    <div className="mono text-[10px] text-[var(--ops-muted)] mt-1 price">Plot price hint: {(() => { const p = getPlotPrice(soldModal.estate, soldModal.plotCode, soldModal.sqm ?? soldModal.sqmNeeded); return p ? formatNaira(p) : "—"; })()}</div>
+                    <div className="mono text-[10px] text-[var(--ops-muted)] mt-1 price">Plot price hint: {(() => { const p = getPlotPrice(soldModal.estate, soldModal.plotCode, soldModal.sqm ?? soldModal.sqmNeeded); return p ? formatNaira(p) : "-"; })()}</div>
                   )}
                 </div>
                 <div>
@@ -369,15 +369,15 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
               <div className="bg-[#16281F] rounded-xl p-4 text-white">
                 <div className="mono text-[10px] tracking-[0.12em] uppercase text-[#D4B368]">Total Price</div>
                 <div className="fraunces text-[20px] font-bold mt-1 price">{Number.isFinite(totalPrice) ? formatNaira(totalPrice) : formatNaira(0)}</div>
-                <div className="mono text-[11px] text-white/70 mt-1">= Unit Price × Plot Qty — this is the Sold Price before discounts.</div>
+                <div className="mono text-[11px] text-white/70 mt-1">= Unit Price × Plot Qty. This is the sold price before discounts.</div>
               </div>
               <div>
-                <label className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)]">Discounts (₦) — omit if none</label>
+                <label className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)]">Discounts (₦, omit if none)</label>
                 <input value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" inputMode="numeric" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
                 {discount && (
                   <div className="mono text-[11px] text-amber-700 mt-1 price">Payable: {formatNaira(totalPrice - (parseInt(discount.replace(/[^0-9]/g, ""), 10) || 0))} (Total − Discount)</div>
                 )}
-                <p className="mono text-[11px] text-[var(--ops-muted)] mt-2">Payment method is recorded with each payment on the transaction — receipts are issued when payments are confirmed.</p>
+                <p className="mono text-[11px] text-[var(--ops-muted)] mt-2">Payment method is recorded with each payment on the transaction. Receipts are issued when payments are confirmed.</p>
               </div>
 
             </div>
@@ -397,7 +397,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
         <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md">
           <div className="h-12 w-12 rounded-full border-4 border-[#E4DCC7] border-t-[#0D3328] animate-spin" />
           <p className="fraunces text-[18px] text-[#16281F] mt-6">Marking sold and opening the transaction form…</p>
-          <p className="mono text-[12px] text-[#6B6656] mt-2">This takes a moment — please don’t close this window.</p>
+          <p className="mono text-[12px] text-[#6B6656] mt-2">This takes a moment. Please don’t close this window.</p>
         </div>
       )}
     </>

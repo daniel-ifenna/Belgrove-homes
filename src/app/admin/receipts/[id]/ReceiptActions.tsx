@@ -37,7 +37,7 @@ export default function ReceiptActions({
       const res = await fetch(`/api/admin/receipts/${receipt.id}/resend`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Resend failed");
-      setMsg(`Resent to ${data.receipt?.recipientEmail ?? "recipient"} — ${data.receipt?.status}`);
+      setMsg(`Resent to ${data.receipt?.recipientEmail ?? "recipient"} (${data.receipt?.status})`);
       router.refresh();
     } catch (e: any) {
       setErr(e.message ?? "Resend failed");
@@ -75,7 +75,7 @@ export default function ReceiptActions({
           )}
         </div>
       </div>
-      <p className="mono text-[10px] text-[var(--ops-muted)]">Resend reuses the same receipt <span className="font-mono font-medium text-[var(--ops-text)]">{receipt.ref}</span> and records a new send attempt — no new receipt number is created.</p>
+      <p className="mono text-[10px] text-[var(--ops-muted)]">Resend reuses the same receipt <span className="font-mono font-medium text-[var(--ops-text)]">{receipt.ref}</span> and records a new send attempt. No new receipt number is created.</p>
     </div>
   );
 }

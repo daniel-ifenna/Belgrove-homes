@@ -45,7 +45,7 @@ export default async function NewTransactionPage({ searchParams }: { searchParam
       <div className="max-w-[900px] mx-auto px-6 lg:px-8 py-6">
         <div className="mb-6">
           <h1 className="font-serif text-[26px] tracking-[-0.02em] text-[var(--ops-text)]">New Transaction</h1>
-          <p className="public text-[13px] text-[var(--ops-muted)] mt-1">Create a property transaction — select client, property, payment plan. System generates TXN reference and installment schedule. Record initial payment and issue receipt in one flow.</p>
+          <p className="public text-[13px] text-[var(--ops-muted)] mt-1">Create a property transaction: select client, property, payment plan. System generates TXN reference and installment schedule. Record initial payment and issue receipt in one flow.</p>
         </div>
         <NewTransactionForm plans={plans as any} agents={agents} bookings={bookingOptions as any} initialBookingId={bookingId} />
       </div>

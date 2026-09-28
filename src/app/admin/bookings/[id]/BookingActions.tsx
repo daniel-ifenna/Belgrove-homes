@@ -259,7 +259,7 @@ export default function BookingActions({
         <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6 space-y-4">
           <PanelHeader
             title="Review"
-            description="Status transitions — separate from Company Agent binding. One shared note is applied to whichever action you click."
+            description="Status transitions: separate from Company Agent binding. One shared note is applied to whichever action you click."
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.5" /></svg>
             }
@@ -307,7 +307,7 @@ export default function BookingActions({
           </div>
           <div className="auto-note">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16" /><circle cx="12" cy="8" r="0.5" fill="currentColor" /></svg>
-            <span>Auto: <span className="font-medium text-[var(--ops-text)]">Approve → Warm</span> if currently Cold · <span className="font-medium text-[var(--ops-text)]">Interested → Hot</span> and stays open for Sold / Not Sold — both close with an automated email before locking.</span>
+            <span>Auto: <span className="font-medium text-[var(--ops-text)]">Approve → Warm</span> if currently Cold · <span className="font-medium text-[var(--ops-text)]">Interested → Hot</span> and stays open for Sold / Not Sold, both close with an automated email before locking.</span>
           </div>
 
           {isTransitionAllowed("reschedule", status) && (
@@ -359,7 +359,7 @@ export default function BookingActions({
         <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
           <PanelHeader
             title="Mark inspection as held"
-            description="Record what happened — the booking moves to Completed Inspections."
+            description="Record what happened: the booking moves to Completed Inspections."
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9" /></svg>
             }
@@ -375,7 +375,7 @@ export default function BookingActions({
           <input
             value={activeOverride}
             onChange={(e) => setActiveOverride(e.target.value)}
-            placeholder="Override reason — only if marking active before the scheduled time"
+            placeholder="Override reason: only if marking active before the scheduled time"
             className="mt-2 w-full border border-[var(--line)] rounded-xl px-3 py-2 text-sm"
           />
           <button
@@ -393,7 +393,7 @@ export default function BookingActions({
         <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
           <PanelHeader
             title="Record sale outcome"
-            description="Interested heats to Hot and stays open — Sold and Not Sold close with an automated response."
+            description="Interested heats to Hot and stays open; Sold and Not Sold close with an automated response."
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l7 4v6c0 5-4 9-7 11-3-2-7-6-7-11V6l7-4z" /><path d="M9 12l2 2 4-4" /></svg>
             }
@@ -403,17 +403,17 @@ export default function BookingActions({
             <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
               <div className="flex items-center gap-2">
                 <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
-                <span className="text-[13px] font-medium text-[#92400E]">Interested — Hot lead • Awaiting final decision</span>
+                <span className="text-[13px] font-medium text-[#92400E]">Interested: Hot lead • Awaiting final decision</span>
                 <span className="ml-auto px-2 py-1 rounded-full text-[11px] font-medium bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span>
               </div>
-              <p className="public text-[12px] leading-[1.5] text-[#92400E]/80 mt-2">Client signaled as <strong>Interested</strong> and automatically moved to <strong>HOT</strong>. Next, confirm if they <strong>bought (Sold)</strong> or <strong>did not buy (Not Sold)</strong> — the system will send the appropriate automated response and then close.</p>
+              <p className="public text-[12px] leading-[1.5] text-[#92400E]/80 mt-2">Client signaled as <strong>Interested</strong> and automatically moved to <strong>HOT</strong>. Next, confirm if they <strong>bought (Sold)</strong> or <strong>did not buy (Not Sold)</strong>. The system will send the appropriate automated response and then close.</p>
               <div className="flex gap-3 flex-wrap items-center mt-4">
                 <button
                   onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
                   disabled={busy !== null}
                   className="text-sm bg-[#0D3328] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[#08261E] disabled:opacity-50 shadow-sm"
                 >
-                  Bought — Sold
+                  Bought (sold)
                 </button>
                 <button
                   onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
@@ -489,7 +489,7 @@ export default function BookingActions({
       <div id="assign-agent" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6 scroll-mt-20">
         <PanelHeader
           title="Company Agent"
-          description="Typeahead against the Agents table — the visitor's raw text is read-only; confirm the match explicitly."
+          description="Typeahead against the Agents table: the visitor's raw text is read-only; confirm the match explicitly."
           icon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>
           }
@@ -547,12 +547,12 @@ export default function BookingActions({
             </div>
 
             <div className="mt-3">
-              <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Note to agent — will appear in email & internal notes</label>
+              <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Note to agent: will appear in email and internal notes</label>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   value={assignNote}
                   onChange={(e) => setAssignNote(e.target.value)}
-                  placeholder="e.g. Please prioritize — client is hot, call within 2 hours"
+                  placeholder="e.g. Please prioritize: client is hot, call within 2 hours"
                   className="border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
                 />
                 <label className="flex items-center gap-1.5 text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 cursor-pointer">
@@ -560,12 +560,12 @@ export default function BookingActions({
                   Silent (no email)
                 </label>
               </div>
-              <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">Leave a note to give context — it will be saved to the timeline and included in the agent’s email.</p>
+              <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">Leave a note to give context. It will be saved to the timeline and included in the agent’s email.</p>
               <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-2 mb-1">Phone-match override reason (only if the agent shares the customer’s phone)</label>
               <input
                 value={assignOverride}
                 onChange={(e) => setAssignOverride(e.target.value)}
-                placeholder="e.g. Agent is the customer’s spouse — verified by phone call"
+                placeholder="e.g. Agent is the customer’s spouse, verified by phone call"
                 className="border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] w-full bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
               />
             </div>
@@ -659,7 +659,7 @@ export default function BookingActions({
           </div>
         )}
         <div className="mt-4">
-          <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Follow-up message — emailed to assigned agent & logged to timeline</label>
+          <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Follow-up message: emailed to assigned agent and logged to timeline</label>
           <textarea
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
@@ -682,7 +682,7 @@ export default function BookingActions({
       <div id="internal-notes" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
         <PanelHeader
           title="Internal notes"
-          description="Append-only, attributed — visible to staff only."
+          description="Append-only and attributed. Visible to staff only."
           icon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
           }

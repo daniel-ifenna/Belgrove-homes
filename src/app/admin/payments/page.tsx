@@ -97,7 +97,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
           <div>
             <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Payments Ledger</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All confirmed and pending payments — financial truth from the payment ledger.</p>
+            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All confirmed and pending payments: financial truth from the payment ledger.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} payments · Page {page} of {totalPages}</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">Collected <span className="text-[var(--ops-text)] font-medium price">{formatNaira(collected)}</span> · {pendingCount} awaiting verification</p>
           </div>
@@ -163,16 +163,16 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
                 {payments.map((p: any) => (
                   <ClickableRow key={p.id} href={`/admin/transactions/${p.transactionId}#payment-${p.id}`}>
                     <td className="px-4 py-3 font-mono text-[11px] row-lead"><Link href={`/admin/transactions/${p.transactionId}#payment-${p.id}`} className="text-[var(--ops-primary)] hover:underline">{p.paymentReference}</Link></td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[var(--ops-muted)]">{p.bankReference ?? "—"}</td>
-                    <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "—"}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[var(--ops-muted)]">{p.bankReference ?? "-"}</td>
+                    <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "-"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><div className="mono text-[10px] text-[var(--ops-muted)]">{p.transaction.estate}</div></td>
                     <td className="px-4 py-3"><div className="text-[13px] leading-none break-all">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-all">{p.transaction.customerEmail}</div></td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "—"}</td>
+                    <td className="px-4 py-3 mono text-[11px]">{p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "-"}</td>
                     <td className="px-4 py-3 mono text-[12px] font-medium text-right price">{formatNaira(p.amount)}</td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.paymentMethod ?? "—"}</td>
+                    <td className="px-4 py-3 mono text-[11px]">{p.paymentMethod ?? "-"}</td>
                     <td className="px-4 py-3"><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" /></td>
                     <td className="px-4 py-3 mono text-[11px]">{formatDate(p.paymentDate)}</td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.confirmedBy?.name ?? "—"}</td>
+                    <td className="px-4 py-3 mono text-[11px]">{p.confirmedBy?.name ?? "-"}</td>
                   </ClickableRow>
                 ))}
                 {payments.length === 0 && (

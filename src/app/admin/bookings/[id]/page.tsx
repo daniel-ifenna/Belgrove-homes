@@ -103,7 +103,7 @@ export default async function AdminBookingDetailPage({
             <div className="flex items-center gap-2 text-sm">
               <span className="h-6 w-6 rounded-full bg-amber-500 text-white grid place-items-center text-xs">🔒</span>
               <span className="font-medium text-amber-900">Closed & locked</span>
-              <span className="text-amber-700 hidden sm:inline">— read-only. Use Reopen to make changes.</span>
+              <span className="text-amber-700 hidden sm:inline">Read-only. Use Reopen to make changes.</span>
               {booking.lockedAt && <span className="mono text-[11px] text-amber-700 ml-2">{formatDateTime(booking.lockedAt)}</span>}
             </div>
           </div>
@@ -113,7 +113,7 @@ export default async function AdminBookingDetailPage({
           <div className="mb-4 rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
               <span className="h-5 w-5 rounded-full bg-amber-500 text-white grid place-items-center text-[10px]">⚠</span>
-              Possible duplicate — same contact within 3 days
+              Possible duplicate: same contact within 3 days
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {duplicates.map((d) => (
@@ -178,7 +178,7 @@ export default async function AdminBookingDetailPage({
                   <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] ${receipt.status === "sent" ? "bg-[#065F46] text-white" : receipt.status === "failed" ? "bg-[#9F1239] text-white" : "bg-amber-500 text-white"}`}>{receipt.status === "sent" ? "✓" : receipt.status === "failed" ? "!" : "•"}</span>
                   <div>
                     <div className="text-sm font-medium" style={{ color: receipt.status === "sent" ? "#065F46" : receipt.status === "failed" ? "#9F1239" : "#10231E" }}>
-                      Receipt {receipt.ref} — {receipt.status.toUpperCase()}
+                      Receipt {receipt.ref} ({receipt.status.toUpperCase()})
                     </div>
                     <div className="mono text-[11px] text-[var(--ops-muted)]">
                       Issued {formatDateTime(receipt.issuedAt)} {receipt.sentAt ? `· Sent ${formatDateTime(receipt.sentAt)} to ${receipt.recipientEmail}` : `· Recipient ${receipt.recipientEmail}`} {receipt.sendAttempts.length > 1 ? `· ${receipt.sendAttempts.length} attempts` : ""}
@@ -194,7 +194,7 @@ export default async function AdminBookingDetailPage({
               </div>
               {receipt.status === "failed" && (
                 <div className="mt-3 mono text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                  Last send failed: {receipt.error ?? "unknown"} — use the Receipts page to retry. No new receipt number will be created.
+                  Last send failed: {receipt.error ?? "unknown"}. Use the Receipts page to retry. No new receipt number will be created.
                 </div>
               )}
             </div>
@@ -202,7 +202,7 @@ export default async function AdminBookingDetailPage({
             <div className="mt-4 rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="h-6 w-6 rounded-full bg-[#065F46] text-white grid place-items-center text-[10px]">✓</span>
-                <span className="text-sm font-medium text-[#065F46]">Sold — Receipt sent (legacy)</span>
+                <span className="text-sm font-medium text-[#065F46]">Sold: receipt sent (legacy)</span>
                 <span className="mono text-[11px] text-[#065F46]/80">{new Date((booking as any).receiptSentAt as any).toLocaleString("en-GB")}</span>
               </div>
               <div className="flex items-center gap-2">
@@ -232,13 +232,13 @@ export default async function AdminBookingDetailPage({
                 <div>
                   {booking.outcome === "sold" ? (
                     <>
-                      <span className="text-sm font-medium text-[#92400E]">Sold — no transaction yet</span>
+                      <span className="text-sm font-medium text-[#92400E]">Sold: no transaction yet</span>
                       <span className="block mono text-[11px] text-[#92400E]/80">Create the transaction to record payments and issue receipts.</span>
                     </>
                   ) : (
                     <>
                       <span className="text-sm font-medium text-[#92400E]">Intake form completed?</span>
-                      <span className="block mono text-[11px] text-[#92400E]/80">Confirm to auto-create the transaction — pre-filled from this booking, plan selection only.</span>
+                      <span className="block mono text-[11px] text-[#92400E]/80">Confirm to auto-create the transaction: pre-filled from this booking, plan selection only.</span>
                     </>
                   )}
                 </div>
@@ -280,13 +280,13 @@ export default async function AdminBookingDetailPage({
                   <div className="mt-1 font-medium text-[var(--ops-text)]">{(booking as any).estate ?? booking.location}</div>
                   <div className="text-[12px] text-[var(--ops-muted)] mt-0.5">
                     {(booking as any).plotCode ? `${(booking as any).plotCode}${(booking as any).unitType ? ` · ${(booking as any).unitType}` : ""} · ${(booking as any).selectionType === "unit" ? "Unit selected" : ""}` : booking.agentName ? `Agent on file: ${booking.agentName}` : "No agent name on file"}
-                    {(booking as any).selectionType === "sqm_needed" && (booking as any).sqmNeeded ? <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing — {(booking as any).sqmNeeded}sqm requested</span> : (booking as any).sqm ? <span className="ml-1 mono text-[11px] text-[#6B6656]">· {(booking as any).sqm}sqm</span> : null}
+                    {(booking as any).selectionType === "sqm_needed" && (booking as any).sqmNeeded ? <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing: {(booking as any).sqmNeeded}sqm requested</span> : (booking as any).sqm ? <span className="ml-1 mono text-[11px] text-[#6B6656]">· {(booking as any).sqm}sqm</span> : null}
                   </div>
                 </div>
                 <div>
                   <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Location / Company</div>
                   <div className="mt-1 text-[13px] text-[var(--ops-text)]">{booking.location}</div>
-                  <div className="text-[12px] text-[var(--ops-muted)] mt-0.5">—</div>
+                  <div className="text-[12px] text-[var(--ops-muted)] mt-0.5">-</div>
                 </div>
                 <div>
                   <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Inspection Date & Time</div>
@@ -346,8 +346,8 @@ export default async function AdminBookingDetailPage({
                     </div>
                     <div className="rounded-[10px] bg-[#F5F0FF] border border-[#DDD6FE] p-3">
                       <div className="mono text-[10px] tracking-wide uppercase text-[#5B21B6]">Rescheduled to</div>
-                      <div className="text-[13px] font-medium text-[var(--ops-text)] mt-1">{booking.rescheduledDate ? formatDate(booking.rescheduledDate) : "—"}</div>
-                      <div className="text-[12px] text-[var(--ops-muted)]">{booking.rescheduledTime ?? "—"}</div>
+                      <div className="text-[13px] font-medium text-[var(--ops-text)] mt-1">{booking.rescheduledDate ? formatDate(booking.rescheduledDate) : "-"}</div>
+                      <div className="text-[12px] text-[var(--ops-muted)]">{booking.rescheduledTime ?? "-"}</div>
                     </div>
                   </div>
                   {rescheduleHistory.length > 0 ? (
@@ -364,7 +364,7 @@ export default async function AdminBookingDetailPage({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[12px] text-[var(--ops-muted)] bg-[var(--ops-bg)] rounded-lg px-3 py-2 border border-[var(--ops-border)]">Rescheduled once — see current vs original above. Multiple reschedules are preserved chronologically.</p>
+                    <p className="text-[12px] text-[var(--ops-muted)] bg-[var(--ops-bg)] rounded-lg px-3 py-2 border border-[var(--ops-border)]">Rescheduled once: see current vs original above. Multiple reschedules are preserved chronologically.</p>
                   )}
                 </div>
               ) : (

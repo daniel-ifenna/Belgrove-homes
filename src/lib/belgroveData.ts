@@ -59,19 +59,19 @@ export const BELGROVE_ESTATE_INFO: Record<string, { tagline: string; features: s
     instagram: '@belgrove_homes',
   },
   'Belgrove Peninsula': {
-    tagline: 'FCTA Approved — New Price Alert',
+    tagline: 'FCTA Approved: New Price Alert',
     features: ['Perimeter Fence', 'Playground for Kids', 'Proximity to Amenities', '24/7 Hour Security', 'Value Proposition'],
     whatsapp: '+234 810 376 0063',
     instagram: '@belgrove_homes',
   },
   'Aurum Residence': {
-    tagline: 'FCTA Approved — Pre-Sale Extended to 15th Sept',
+    tagline: 'FCTA Approved: Pre-Sale Extended to 15th Sept',
     features: ['FCTA Approved', 'Secure Your Unit Today'],
     whatsapp: '+234 810 376 0063',
     instagram: '@belgrove_homes',
   },
   'Sunrise Estate': {
-    tagline: 'FCTA Approved — Kabusa Ketti-North',
+    tagline: 'FCTA Approved: Kabusa Ketti-North',
     features: ['FCTA Approved'],
     whatsapp: '+234 810 376 0063',
     instagram: '@belgrove_homes',

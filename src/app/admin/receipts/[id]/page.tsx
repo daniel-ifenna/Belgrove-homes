@@ -126,7 +126,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <div className="mt-3 space-y-2 text-sm">
                 {receipt.payment && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Payment</span><Link href={`/admin/transactions/${receipt.transactionId}#payment-${receipt.payment.id}`} className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline">{receipt.payment.paymentReference}</Link></div>}
                 {receipt.transaction && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Transaction</span><Link href={`/admin/transactions/${receipt.transaction.id}`} className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline">{receipt.transaction.ref}</Link></div>}
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sale / Booking</span>{receipt.transaction?.booking ? <Link href={`/admin/bookings/${receipt.transaction.booking.id}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.transaction.booking.ref}</Link> : receipt.transaction?.manualReason ? <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {receipt.transaction.manualReason}</span> : receipt.bookingId ? <Link href={`/admin/bookings/${receipt.bookingId}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.booking?.ref ?? receipt.bookingId}</Link> : <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — no booking</span>}</div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sale / Booking</span>{receipt.transaction?.booking ? <Link href={`/admin/bookings/${receipt.transaction.booking.id}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.transaction.booking.ref}</Link> : receipt.transaction?.manualReason ? <span className="mono text-[11px] text-[var(--ops-muted)]">Manual: {receipt.transaction.manualReason}</span> : receipt.bookingId ? <Link href={`/admin/bookings/${receipt.bookingId}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.booking?.ref ?? receipt.bookingId}</Link> : <span className="mono text-[11px] text-[var(--ops-muted)]">Manual: no booking</span>}</div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Customer</span><Link href={`/admin/search?q=${encodeURIComponent(receipt.customerEmail)}`} className="font-medium text-[var(--ops-primary)] hover:underline">{formatDisplayName(receipt.customerName)}</Link></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Client receipt page</span><a href={receipt.receiptUrl} target="_blank" className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline break-all">Open ↗</a></div>
                 {receipt.agentName && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Agent / Adviser</span><span className="font-medium">{receipt.agentName}</span></div>}
@@ -137,9 +137,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property</h3>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Property</span><span className="font-medium break-words max-w-[60%] text-right">{receipt.property}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Estate</span><span className="font-medium">{receipt.estate ?? "—"}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Unit</span><span className="font-medium">{receipt.unitType ?? "—"}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SKU / Plot Code</span><span className="font-mono text-[12px]">{receipt.plotCode ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Estate</span><span className="font-medium">{receipt.estate ?? "-"}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Unit</span><span className="font-medium">{receipt.unitType ?? "-"}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SKU / Plot Code</span><span className="font-mono text-[12px]">{receipt.plotCode ?? "-"}</span></div>
                 {receipt.sqm && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SQM</span><span className="font-medium">{receipt.sqm}sqm</span></div>}
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Source</span><StatusBadge status={receipt.source} /></div>
               </div>
@@ -152,9 +152,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Status</span><StatusBadge status={receipt.status} /></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Issued</span><span className="font-mono text-[12px]">{formatDateTime(receipt.issuedAt)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sent</span><span className="font-mono text-[12px]">{receipt.sentAt ? formatDateTime(receipt.sentAt) : "—"}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sent</span><span className="font-mono text-[12px]">{receipt.sentAt ? formatDateTime(receipt.sentAt) : "-"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Recipient</span><span className="font-mono text-[12px] break-all">{receipt.recipientEmail}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Created by</span><span className="text-[12px]">{receipt.createdBy?.name ?? receipt.createdBy?.email ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Created by</span><span className="text-[12px]">{receipt.createdBy?.name ?? receipt.createdBy?.email ?? "-"}</span></div>
                 {receipt.error && <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 break-words">Error: {receipt.error}</div>}
                 {outbox.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-[var(--ops-border)]">
@@ -191,7 +191,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                   ))}
                 </ol>
               )}
-              <div className="mono text-[10px] text-[var(--ops-muted)] mt-3">Last sent: {lastSent ? formatDateTime(lastSent.attemptedAt) : "—"} · Attempts: {attemptsCount} · Last status: {receipt.status}</div>
+              <div className="mono text-[10px] text-[var(--ops-muted)] mt-3">Last sent: {lastSent ? formatDateTime(lastSent.attemptedAt) : "-"} · Attempts: {attemptsCount} · Last status: {receipt.status}</div>
             </div>
             <div className="mt-6">
               <ActivitySection entityType="receipt" entityId={receipt.id} />

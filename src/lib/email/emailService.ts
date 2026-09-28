@@ -157,7 +157,7 @@ export async function sendTransactionConfirmation(
   const isOutright = params.planCode === "OUTRIGHT";
   return sendEmail({
     to,
-    subject: `Purchase confirmed ${params.txnRef} — ${params.planName} plan`,
+    subject: `Purchase confirmed ${params.txnRef}: ${params.planName} plan`,
     html: transactionConfirmationTemplate({ ...params, isOutright }),
   });
 }

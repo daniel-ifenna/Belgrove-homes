@@ -31,7 +31,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
               Action inbox{counts.total > 0 ? ` · ${counts.total}` : ""}
             </h1>
             <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">
-              Live work queue — items clear themselves once handled. No dismiss buttons.
+              Live work queue: items clear themselves once handled. No dismiss buttons.
             </p>
           </div>
         </div>

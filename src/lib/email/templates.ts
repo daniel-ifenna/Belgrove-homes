@@ -267,7 +267,7 @@ export function transactionConfirmationTemplate(params: {
 
   const planBlock = isOutright
     ? `
-    <p>You are on the <strong>Outright</strong> plan — the full amount is due in a single payment:</p>
+    <p>You are on the <strong>Outright</strong> plan: the full amount is due in a single payment:</p>
     <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
       <tr><td style="padding:6px 0; color:#6b6055;">Total due now</td><td style="padding:6px 0; font-weight:bold; text-align:right;">${formatNaira(totalPayable)}</td></tr>
     </table>`
@@ -286,9 +286,9 @@ export function transactionConfirmationTemplate(params: {
     "Your purchase is confirmed",
     `
     <p>Hi ${clientName(name)},</p>
-    <p>Your purchase of <strong>${propertyLine}</strong> is confirmed. Your transaction reference is <strong>${txnRef}</strong>${bookingRef ? ` (booking ${bookingRef})` : ""} — keep it for all payments.</p>
+    <p>Your purchase of <strong>${propertyLine}</strong> is confirmed. Your transaction reference is <strong>${txnRef}</strong>${bookingRef ? ` (booking ${bookingRef})` : ""}. Keep it for all payments.</p>
     ${planBlock}
-    <p>A receipt will be emailed to you each time a payment is recorded. Thank you for choosing Belgrove Homes — our team will be in touch with allocation next steps.</p>
+    <p>A receipt will be emailed to you each time a payment is recorded. Thank you for choosing Belgrove Homes. Our team will be in touch with allocation next steps.</p>
     `
   );
 }

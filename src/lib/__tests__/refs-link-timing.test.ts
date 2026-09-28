@@ -72,7 +72,7 @@ describe("booking → transaction handoff", () => {
   it("transaction page shows Booking link or Manual reason", () => {
     const text = fs.readFileSync(path.join(SRC, "app/admin/transactions/[id]/page.tsx"), "utf8");
     expect(text).toContain("Booking {transaction.booking.ref}");
-    expect(text).toContain("Manual — {transaction.manualReason}");
+    expect(text).toContain("Manual: {transaction.manualReason}");
   });
   it("createManualTransaction rejects a blank reason before any DB work", async () => {
     await expect(

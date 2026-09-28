@@ -14,12 +14,12 @@ const PAGE_SIZE = 25;
 const allStatuses = ["pending", "generated", "sent", "failed"] as const;
 
 function formatDate(d: Date | string | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 function formatDateTime(d: Date | string | null): string {
-  if (!d) return "—";
+  if (!d) return "-";
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
@@ -107,7 +107,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
           <div>
             <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Receipts</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All receipts issued from sales — audit trail, resend, and PDF access.</p>
+            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All receipts issued from sales: audit trail, resend, and PDF access.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} receipts · Page {page} of {totalPages}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -196,11 +196,11 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                     </td>
                     <td className="px-4 py-3">
                       {(r as any).transactionId ? (
-                        <Link href={`/admin/transactions/${(r as any).transactionId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).transaction?.ref ?? "—"}</Link>
+                        <Link href={`/admin/transactions/${(r as any).transactionId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).transaction?.ref ?? "-"}</Link>
                       ) : r.bookingId ? (
-                        <Link href={`/admin/bookings/${r.bookingId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).booking?.ref ?? "—"}</Link>
+                        <Link href={`/admin/bookings/${r.bookingId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).booking?.ref ?? "-"}</Link>
                       ) : (
-                        <span className="mono text-[11px] text-[var(--ops-muted)]">—</span>
+                        <span className="mono text-[11px] text-[var(--ops-muted)]">-</span>
                       )}
                       <div className="mono text-[10px] text-[var(--ops-muted)]">{r.source === "ADMIN_MANUAL" ? "Manual" : "Booking"}</div>
                     </td>
@@ -210,7 +210,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                       <div className="mono text-[10px] text-[var(--ops-muted)]">Before {formatNaira(r.amountBeforeDiscount)}</div>
                     </td>
                     <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{formatDate(r.issuedAt)}</td>
-                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{r.sentAt ? formatDateTime(r.sentAt) : "—"}</td>
+                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{r.sentAt ? formatDateTime(r.sentAt) : "-"}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={r.status} />
                       {r.error && <div className="mono text-[10px] text-red-600 mt-1 max-w-[160px] break-words">{r.error.slice(0, 80)}</div>}
@@ -255,7 +255,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Property</div><div className="text-[13px] text-[var(--ops-text)] break-words">{r.property}</div></div>
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Amount</div><div className="mono text-[12px] font-medium price">{formatNaira(r.finalAmount)}</div></div>
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Issued</div><div className="mono text-[11px]">{formatDate(r.issuedAt)}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Sent</div><div className="mono text-[11px]">{r.sentAt ? formatDateTime(r.sentAt) : "—"}</div></div>
+                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Sent</div><div className="mono text-[11px]">{r.sentAt ? formatDateTime(r.sentAt) : "-"}</div></div>
               </div>
             </Link>
           ))}

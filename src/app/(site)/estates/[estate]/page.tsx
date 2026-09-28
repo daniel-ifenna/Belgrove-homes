@@ -98,7 +98,7 @@ export default async function EstateDetailPage({
                 ))}
             </div>
           </div>
-          <p className="mono text-[11px] text-[#8B6B4E] mt-3">Photos show the FCTA-approved building prototype for {estateName}. Final finish may vary — walk the land to see boundaries pegged on site.</p>
+          <p className="mono text-[11px] text-[#8B6B4E] mt-3">Photos show the FCTA-approved building prototype for {estateName}. Final finish may vary. Walk the land to see boundaries pegged on site.</p>
         </div>
 
         {/* Two-col: details + specs */}
@@ -107,10 +107,10 @@ export default async function EstateDetailPage({
             <div className="bg-white border border-[#E4DCC7] rounded-xl p-6">
               <h2 className="fraunces text-[20px] text-[#16281F]">About this estate</h2>
               <p className="public text-[14px] leading-[1.65] text-[#6B6656] mt-3">
-                {estateName} is located at {location}. This {phase ? `${phase} of ` : ""}estate offers verified, titled land in sizes from {sizeRange}, with documented ownership and surveyed boundaries. What you see in the gallery is the FCTA-approved prototype for this estate — the form the building takes when you develop.
+                {estateName} is located at {location}. This {phase ? `${phase} of ` : ""}estate offers verified, titled land in sizes from {sizeRange}, with documented ownership and surveyed boundaries. What you see in the gallery is the FCTA-approved prototype for this estate, the form the building takes when you develop.
               </p>
               <p className="public text-[14px] leading-[1.65] text-[#6B6656] mt-3">
-                Every plot here has passed our 7-point verification — title, boundaries, access and documentation checked before listing. Bring your adviser or lawyer to inspection; we welcome it.
+                Every plot here has passed our 7-point verification: title, boundaries, access and documentation checked before listing. Bring your adviser or lawyer to inspection; we welcome it.
               </p>
               <div className="mt-6 grid sm:grid-cols-3 gap-4">
                 <div className="rounded-lg bg-[#FBF8F0] border border-[#E4DCC7] p-4">
@@ -203,7 +203,7 @@ export default async function EstateDetailPage({
           <div className="space-y-4 lg:sticky lg:top-[112px]">
             <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
               <h3 className="fraunces text-[16px] text-[#16281F]">Book an inspection</h3>
-              <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">See the land pegged and surveyed before you commit. Walk the plot with a named adviser — no booking fee, no pressure.</p>
+              <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">See the land pegged and surveyed before you commit. Walk the plot with a named adviser. No booking fee, no pressure.</p>
               <Link
                 href={`/book-inspection?estate=${encodeURIComponent(estateName)}${phase ? `&phase=${encodeURIComponent(phase)}` : ""}`}
                 className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors"
@@ -220,7 +220,7 @@ export default async function EstateDetailPage({
             <div className="bg-white border border-[#E4DCC7] rounded-xl p-6">
               <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B6B4E]">Floor plan & specification</h4>
               <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">
-                Floor plans are not currently published online. Detailed specifications and surveyed dimensions are shared directly by your adviser at inspection — no hidden documents are withheld, what you see here is the full information available.
+                Floor plans are not currently published online. Detailed specifications and surveyed dimensions are shared directly by your adviser at inspection. No hidden documents are withheld; what you see here is the full information available.
               </p>
               <ul className="public text-[13px] leading-[1.6] text-[#6B6656] mt-3 list-disc pl-5 space-y-1">
                 <li>Survey pegs and photographs on record</li>
@@ -237,7 +237,7 @@ export default async function EstateDetailPage({
             href={`/book-inspection?estate=${encodeURIComponent(estateName)}${phase ? `&phase=${encodeURIComponent(phase)}` : ""}`}
             className="mono text-[14px] font-semibold bg-[#C79A46] text-[#16281F] px-8 py-3 rounded-full hover:bg-[#D4B368] transition-colors"
           >
-            Book Inspection — {estateName} →
+            Book Inspection: {estateName} →
           </Link>
         </div>
       </div>

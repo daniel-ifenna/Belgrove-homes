@@ -30,8 +30,8 @@ export async function sendReceiptEmail(opts: {
       <p>Hi ${formatDisplayName(opts.clientName)},</p>
       <p>Your receipt for <strong>${opts.ref}</strong> is attached as PDF. You can also view or re-download it anytime at:</p>
       <p><a href="${opts.receiptUrl}" style="color:#1E3A2E; font-weight:bold; word-break:break-all;">${opts.receiptUrl}</a></p>
-      <p>Scan the QR code on the receipt to verify it instantly — it points to the same link above.</p>
-      <p>Thank you — pleasure doing business with you.</p>
+      <p>Scan the QR code on the receipt to verify it instantly. It points to the same link above.</p>
+      <p>Thank you. It is a pleasure doing business with you.</p>
       <div style="margin-top:20px; padding:12px 14px; background:#fdfbf7; border:1px solid #efe8dc; font-size:12px; color:#6b6055; line-height:1.5;">
         <span style="color:#6b6055; text-decoration:none;">Belgrove Homes and Properties Limited<br/>
         <span style="color:#6b6055; text-decoration:none;">Ste 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory</span><br/>

@@ -145,7 +145,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
         {total === 0 ? (
           <p className="public text-[14px] text-[var(--ops-muted)] bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] px-5 py-12 text-center">
-            Nothing found for “{q}” — try a name, email, phone or reference (BEL-, BKG-, TXN-, PAY-, RCT- all work).
+            Nothing found for “{q}”. Try a name, email, phone or reference (BEL-, BKG-, TXN-, PAY-, RCT- all work).
           </p>
         ) : (
           <div className="space-y-4">

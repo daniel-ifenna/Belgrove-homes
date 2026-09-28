@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         confirmationQueued = true;
         kickOutbox();
         if (bookingId) {
-          const line = `Transaction ${created.ref} created (${created.paymentPlan.name} plan) — confirmation email ${confirmationQueued ? "queued" : `failed: ${confirmationEmail.error ?? "unknown"}`}.`;
+          const line = `Transaction ${created.ref} created (${created.paymentPlan.name} plan), confirmation email ${confirmationQueued ? "queued" : `failed: ${confirmationEmail.error ?? "unknown"}`}.`;
           await prisma.bookingMessage.create({
             data: { bookingId, authorId: null, authorName: "System", message: line },
           });

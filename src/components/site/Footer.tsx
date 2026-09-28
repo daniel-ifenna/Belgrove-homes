@@ -11,7 +11,7 @@ export default function Footer() {
               <span className="font-serif text-[20px] tracking-[-0.02em] text-[#C89B3C] font-semibold">Homes</span>
             </div>
             <p className="public text-[13px] leading-[1.6] text-[#B9C4B8] mt-3 max-w-[32ch]">Verified land. Honest pricing. A named adviser.</p>
-            <p className="public text-[12px] leading-[1.6] text-[#B9C4B8]/70 mt-3 max-w-[32ch]">Headquartered in Abuja — FCTA approved. Building trust plot by plot since 2025.</p>
+            <p className="public text-[12px] leading-[1.6] text-[#B9C4B8]/70 mt-3 max-w-[32ch]">Headquartered in Abuja. FCTA approved. Building trust plot by plot since 2025.</p>
           </div>
           <div>
             <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Contact</h4>

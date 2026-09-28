@@ -339,7 +339,7 @@ export async function PATCH(
             },
           });
         }
-        note = "Interested — auto hot, subscription form sent";
+        note = "Interested: auto hot, subscription form sent";
         if (input.note) note += ` ${input.note}`;
         const propertyName = booking.location;
         const text = getInterestedMessageText(propertyName);
@@ -396,7 +396,7 @@ export async function PATCH(
         // No email at the raw Sold step by design (§2.3): the single
         // confirmation email fires at Transaction creation (form-confirmation
         // time), branched by payment plan. The timeline still records the close.
-        note = "Sold — closing, confirmation email will fire on transaction creation";
+        note = "Sold: closing, confirmation email will fire on transaction creation";
         if (input.note) note += ` ${input.note}`;
         const soldText = `Congratulations! Your interest in ${booking.location} (ref ${booking.ref}) is now confirmed as SOLD. Our team will contact you within 24 hours with next steps and payment allocation details.`;
         await prisma.bookingMessage.create({
@@ -406,11 +406,11 @@ export async function PATCH(
           data: { bookingId: id, authorId: null, authorName: "System", body: `[Sold] ${soldText}` },
         });
       } else {
-        note = "Not sold — follow-up required, closing";
+        note = "Not sold: follow-up required, closing";
         if (input.note) note += ` ${input.note}`;
         // Automated not-sold response (queued, custom copy)
-        const notSoldText = `Thank you for visiting ${booking.location} with Belgrove Homes (ref ${booking.ref}). We understand you’ve decided not to proceed at this time — your feedback helps us serve you better. Your file remains warm for 30 days; reply to this email or call +234 810 376 0063 if you’d like to revisit, and we’ll keep you notified of similar plots.`;
-        const notSoldSubject = `Following up on ${booking.location} — ${booking.ref}`;
+        const notSoldText = `Thank you for visiting ${booking.location} with Belgrove Homes (ref ${booking.ref}). We understand you’ve decided not to proceed at this time. Your feedback helps us serve you better. Your file remains warm for 30 days; reply to this email or call +234 810 376 0063 if you’d like to revisit, and we’ll keep you notified of similar plots.`;
+        const notSoldSubject = `Following up on ${booking.location}: ${booking.ref}`;
         const notSoldHtml = `<div style="font-family:Inter, sans-serif; max-width:560px; margin:0 auto; color:#10231E;"><div style="background:#0D3328; padding:18px 20px; color:#C8A04A; font-weight:bold;">Belgrove Homes</div><div style="padding:20px; background:#fff; border:1px solid #E3E6E1;"><p>Hi ${updated.name},</p><p>${notSoldText}</p><p style="margin-top:16px; font-size:12px; color:#65736E;">Ref: ${updated.ref} • ${booking.location}</p></div></div>`;
         await queue("not_sold_followup", updated.email, { to: updated.email, subject: notSoldSubject, html: notSoldHtml });
         emailAttempted = true;
@@ -525,7 +525,7 @@ export async function PATCH(
           });
         }
         note = prevAgent ? `Unassigned from ${prevAgent.name}` : "Unassigned agent";
-        if (input.note) note += ` — ${input.note}`;
+        if (input.note) note += `: ${input.note}`;
         break;
       }
 
@@ -589,7 +589,7 @@ export async function PATCH(
             bookingId: id,
             authorId: actorId,
             authorName: actorName,
-            message: `Assigned to ${agent.name} — ${input.note.trim()}`,
+            message: `Assigned to ${agent.name}: ${input.note.trim()}`,
           },
         });
       }
@@ -616,7 +616,7 @@ export async function PATCH(
       }
 
       note = `Assigned to ${agent.name} (${agent.category.replace("_", " ")})${input.silent ? " silent" : ""}`;
-      if (input.note) note += ` — ${input.note}`;
+      if (input.note) note += `: ${input.note}`;
       break;
     }
     case "edit_booking": {
@@ -665,7 +665,7 @@ export async function PATCH(
         return NextResponse.json({ error: "No property fields to update" }, { status: 400 });
       }
       updated = await prisma.inspectionBooking.update({ where: { id }, data });
-      note = `Updated property: ${Object.keys(data).join(", ")} — ${JSON.stringify(data)}`;
+      note = `Updated property: ${Object.keys(data).join(", ")}: ${JSON.stringify(data)}`;
       break;
     }
     default:

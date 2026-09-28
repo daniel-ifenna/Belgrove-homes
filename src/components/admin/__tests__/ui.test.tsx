@@ -57,16 +57,16 @@ describe("receipt amounts wording", () => {
   const txn = { estate: "Belgrove Peninsula", unitType: "3-Bedroom Terrace Duplex", plotCode: "PEN-150SQM" };
   it("initial payment reads like the spec example", () => {
     expect(describePayment({ type: "INITIAL", installmentNumber: 0 }, txn)).toBe(
-      "Initial payment — Belgrove Peninsula, 3-Bedroom Terrace Duplex (PEN-150SQM)"
+      "Initial payment: Belgrove Peninsula, 3-Bedroom Terrace Duplex (PEN-150SQM)"
     );
   });
   it("monthly payments name the month, never 'Payment for'", () => {
     const d = describePayment({ type: "MONTHLY", installmentNumber: 3 }, txn);
-    expect(d).toBe("Month 3 payment — Belgrove Peninsula, 3-Bedroom Terrace Duplex (PEN-150SQM)");
+    expect(d).toBe("Month 3 payment: Belgrove Peninsula, 3-Bedroom Terrace Duplex (PEN-150SQM)");
     expect(d).not.toMatch(/payment for/i);
   });
   it("omits missing unit/plot cleanly", () => {
-    expect(describePayment(null, { estate: "Estate" })).toBe("Initial payment — Estate");
+    expect(describePayment(null, { estate: "Estate" })).toBe("Initial payment: Estate");
   });
 
   it("amounts block uses the shared order with no legacy labels", () => {

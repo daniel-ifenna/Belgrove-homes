@@ -85,8 +85,8 @@ export default function RecordPaymentForm({
       }
       setSuccess(
         data.deduped
-          ? "Identical payment was just recorded — showing the existing entry instead of a duplicate."
-          : "Payment recorded as pending verification — confirm it in Payment History below to issue the receipt and update totals."
+          ? "Identical payment was just recorded; showing the existing entry instead of a duplicate."
+          : "Payment recorded as pending verification. Confirm it in Payment History below to issue the receipt and update totals."
       );
       setAmount("");
       setNotes("");
@@ -104,7 +104,7 @@ export default function RecordPaymentForm({
   return (
     <div className="mt-6 border-t border-[var(--ops-border)] pt-6">
       <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Record Payment</h3>
-      <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Two steps: record here (pending), then confirm in Payment History — confirming issues the receipt, emails the client, and updates totals atomically.</p>
+      <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Two steps: record here (pending), then confirm in Payment History. Confirming issues the receipt, emails the client, and updates totals atomically.</p>
       {error && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">{error}</div>}
       {success && <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl px-3 py-2">{success}</div>}
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
@@ -122,7 +122,7 @@ export default function RecordPaymentForm({
             >
               {installments.map((inst) => (
                 <option key={inst.id} value={inst.id}>
-                  {inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`} — Due {new Date(inst.dueDate).toLocaleDateString("en-GB")} — Scheduled {formatNaira(inst.scheduledAmount)} — Paid {formatNaira(inst.paidAmount)} — {inst.status} {inst.scheduledAmount - inst.paidAmount > 0 ? `· Due ${formatNaira(inst.scheduledAmount - inst.paidAmount)}` : ""}
+                  {inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`}: due {new Date(inst.dueDate).toLocaleDateString("en-GB")}, scheduled {formatNaira(inst.scheduledAmount)}, paid {formatNaira(inst.paidAmount)}, {inst.status} {inst.scheduledAmount - inst.paidAmount > 0 ? `· Due ${formatNaira(inst.scheduledAmount - inst.paidAmount)}` : ""}
                 </option>
               ))}
             </select>
@@ -133,7 +133,7 @@ export default function RecordPaymentForm({
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Amount received (₦) *</label>
             <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={due ? String(due) : "2905000"} inputMode="numeric" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
-            {selected && amountNum > 0 && amountNum !== due && <div className="mono text-[10px] text-amber-700 mt-1">{amountNum < due ? `Partial — remaining ${formatNaira(due - amountNum)} for this installment` : amountNum > due ? `Over scheduled by ${formatNaira(amountNum - due)} — will still be applied` : ""}</div>}
+            {selected && amountNum > 0 && amountNum !== due && <div className="mono text-[10px] text-amber-700 mt-1">{amountNum < due ? `Partial: remaining ${formatNaira(due - amountNum)} for this installment` : amountNum > due ? `Over scheduled by ${formatNaira(amountNum - due)}; will still be applied` : ""}</div>}
           </div>
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Payment date *</label>
