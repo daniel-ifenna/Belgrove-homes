@@ -150,7 +150,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                       <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] shrink-0 ${a.status === "sent" ? "bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]" : a.status === "failed" ? "bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]" : "bg-[#FFFBEB] text-[#92400E] border"}`}>{a.status === "sent" ? "✓" : a.status === "failed" ? "✕" : "…"}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-[12px] font-medium capitalize">{a.status} → {a.recipientEmail}</span>
+                          <span className="text-[12px] font-medium"><span className="capitalize">{a.status}</span> → <span className="font-mono normal-case">{a.recipientEmail}</span></span>
                           <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDateTime(a.attemptedAt)}</span>
                         </div>
                         {a.actorName && <div className="mono text-[11px] text-[var(--ops-muted)]">by {a.actorName}</div>}

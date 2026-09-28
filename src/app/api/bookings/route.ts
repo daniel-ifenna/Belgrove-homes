@@ -74,15 +74,22 @@ export async function POST(request: NextRequest) {
   }
 
   let ref = await generateUniqueRef();
+  const { findOrCreateCustomer } = await import("@/lib/customer");
+  const { normalizeEmail, normalizeName, normalizePhoneE164 } = await import("@/lib/phone");
+  const customerName = normalizeName(name) ?? name;
+  const customerEmail = normalizeEmail(email) ?? email;
+  const customerPhone = normalizePhoneE164(phone);
+  const customer = await findOrCreateCustomer({ name: customerName, email: customerEmail, phone: customerPhone });
   let booking;
   for (let attempt = 0; ; attempt++) {
     try {
       booking = await prisma.inspectionBooking.create({
         data: {
           ref,
-          name,
-          email,
-          phone,
+          name: customerName,
+          email: customerEmail,
+          phone: customerPhone,
+          customerId: customer.id,
           preferredDate: preferredDateObj,
           preferredTime,
           location,

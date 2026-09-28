@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { generateRef } from "@/lib/ref";
 import { calculateTransactionAmounts, generateInstallmentSchedule } from "@/lib/paymentCalculation";
+import { findOrCreateCustomer } from "@/lib/customer";
+import { normalizeName } from "@/lib/phone";
 import { randomInt } from "node:crypto";
 
 function generateTransactionRef(): string {
@@ -40,13 +42,15 @@ export async function createTransactionFromBooking(
 
   const ref = await generateUniqueTransactionRef();
   const now = new Date();
+  const customer = await findOrCreateCustomer({ name: booking.name, email: booking.email, phone: booking.phone });
 
   return prisma.$transaction(async (tx) => {
     const transaction = await tx.transaction.create({
       data: {
         ref,
         bookingId: booking.id,
-        customerName: booking.name,
+        customerId: customer.id,
+        customerName: normalizeName(booking.name) ?? booking.name,
         customerEmail: booking.email,
         customerPhone: booking.phone,
         estate: booking.estate ?? booking.location.split("·")[0].trim(),
@@ -113,13 +117,19 @@ export async function createManualTransaction(params: {
 
   const ref = await generateUniqueTransactionRef();
   const now = new Date();
+  const customer = await findOrCreateCustomer({
+    name: params.customerName,
+    email: params.customerEmail,
+    phone: params.customerPhone,
+  });
 
   return prisma.$transaction(async (tx) => {
     const transaction = await tx.transaction.create({
       data: {
         ref,
         bookingId: null,
-        customerName: params.customerName,
+        customerId: customer.id,
+        customerName: normalizeName(params.customerName) ?? params.customerName,
         customerEmail: params.customerEmail,
         customerPhone: params.customerPhone,
         estate: params.estate,
