@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import StatusBadge from "@/components/admin/StatusBadge";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
@@ -17,22 +18,20 @@ function formatDateTime(d: Date | string | null): string {
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
-function statusBadge(status: string) {
-  switch (status) {
-    case "sent": return "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]";
-    case "failed": return "bg-[#FEF2F2] text-[#9F1239] border-[#FECACA]";
-    case "generated": return "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]";
-    default: return "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]";
-  }
-}
-
 export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const receipt = await prisma.receipt.findUnique({
     where: { id },
     include: {
       booking: { select: { id: true, ref: true, status: true, location: true } },
-      transaction: { select: { id: true, ref: true, bookingId: true, manualReason: true, booking: { select: { id: true, ref: true } } } },
+      payment: { select: { id: true, paymentReference: true, amount: true, paymentDate: true, installment: { select: { type: true, installmentNumber: true } } } },
+      transaction: {
+        select: {
+          id: true, ref: true, bookingId: true, manualReason: true, totalPayable: true,
+          booking: { select: { id: true, ref: true } },
+          payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } },
+        },
+      },
       agent: { select: { name: true, email: true } },
       createdBy: { select: { name: true, email: true } },
       sendAttempts: { orderBy: { attemptedAt: "desc" } },
@@ -42,6 +41,31 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
 
   const lastSent = receipt.sendAttempts.find((a) => a.status === "sent");
   const attemptsCount = receipt.sendAttempts.length;
+
+  // As-of-issue figures: confirmed payments strictly before this one.
+  const receiptPayment = receipt.payment;
+  const previouslyPaid = receipt.transaction && receiptPayment
+    ? receipt.transaction.payments
+        .filter(
+          (p) =>
+            p.paymentDate < receiptPayment.paymentDate ||
+            (p.paymentDate.getTime() === receiptPayment.paymentDate.getTime() && p.id < receiptPayment.id)
+        )
+        .reduce((s, p) => s + p.amount, 0)
+    : 0;
+  const paidToDate = previouslyPaid + receipt.finalAmount;
+  const balanceRemaining = (receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount) - paidToDate;
+  const installmentLabel = receipt.payment?.installment
+    ? receipt.payment.installment.type === "INITIAL"
+      ? "Initial payment"
+      : `Month ${receipt.payment.installment.installmentNumber} payment`
+    : null;
+  const outbox = await prisma.emailOutbox.findMany({
+    where: { type: "receipt", relatedId: receipt.id },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: { id: true, status: true, attempts: true, lastError: true, createdAt: true },
+  });
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -58,65 +82,58 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <div className="mono text-[11px] tracking-[0.14em] uppercase text-[var(--ops-muted)]">Receipt</div>
               <div className="flex flex-wrap items-baseline gap-3 mt-1">
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{receipt.ref}</h1>
-                <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${statusBadge(receipt.status)}`}>{receipt.status.toUpperCase()}</span>
+                <StatusBadge status={receipt.status} className="px-3 py-1.5 text-xs" />
                 {receipt.booking && <Link href={`/admin/bookings/${receipt.booking.id}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">View sale ↗</Link>}
               </div>
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Issued {formatDateTime(receipt.issuedAt)} · {attemptsCount} send attempt{attemptsCount !== 1 ? "s" : ""} {lastSent ? `· Last sent ${formatDateTime(lastSent.attemptedAt)}` : ""}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <a href={receipt.receiptUrl} target="_blank" className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">View Receipt</a>
-              <a href={`/api/receipts/${receipt.ref}/pdf`} target="_blank" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 hover:bg-[var(--ops-deep)]">Download PDF</a>
+              <ReceiptActions
+                receipt={{ id: receipt.id, ref: receipt.ref, receiptUrl: receipt.receiptUrl, status: receipt.status }}
+                pdfHref={`/api/admin/receipts/${receipt.id}/pdf`}
+              />
             </div>
           </div>
-          <ReceiptActions receipt={{ id: receipt.id, ref: receipt.ref, receiptUrl: receipt.receiptUrl, status: receipt.status }} />
         </div>
 
         <div className="mt-6 grid lg:grid-cols-[1.6fr_1fr] gap-6 items-start">
           <div className="space-y-6">
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Receipt reference</h2>
-              <div className="mt-3 font-mono text-[14px] font-medium text-[var(--ops-primary)]">{receipt.ref}</div>
-              <div className="mt-4 space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Receipt URL</span><a href={receipt.receiptUrl} target="_blank" className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline break-all">{receipt.receiptUrl}</a></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">QR target</span><span className="font-mono text-[12px] break-all">{receipt.qrTargetUrl}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">PDF</span><span className="font-mono text-[12px]">{receipt.pdfPath ?? "—"}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Currency</span><span className="font-medium">{receipt.currency}</span></div>
-              </div>
-            </div>
-
-            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Customer information</h3>
+              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Amounts</h2>
               <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Name</span><span className="font-medium">{formatDisplayName(receipt.customerName)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Email</span><span className="font-mono text-[12px] break-all">{receipt.customerEmail}</span></div>
-                {receipt.customerPhone && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Phone</span><span className="font-mono text-[12px]">{receipt.customerPhone}</span></div>}
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Recipient email</span><span className="font-mono text-[12px] break-all">{receipt.recipientEmail}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">This payment</span><span className="font-mono font-bold price">{formatNaira(receipt.finalAmount)}</span></div>
+                {installmentLabel && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Installment</span><span className="font-medium">{installmentLabel}</span></div>}
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Total price</span><span className="font-mono price">{formatNaira(receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount)}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Paid to date</span><span className="font-mono price">{formatNaira(paidToDate)}</span></div>
+                <div className="flex justify-between border-t border-[var(--ops-border)] pt-2"><span className="font-medium">Balance remaining</span><span className="font-mono font-bold price">{formatNaira(balanceRemaining)}</span></div>
+                {receipt.discount > 0 && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Discount</span><span className="font-mono price">{formatNaira(receipt.discount)}</span></div>}
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Amount in words</span><span className="text-[12px] text-right max-w-[60%]">{receipt.amountInWords}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Description</span><span className="text-[12px] text-right max-w-[60%]">{receipt.paymentDescription}</span></div>
+                {receipt.paymentMethod && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Method</span><span className="font-medium">{receipt.paymentMethod}</span></div>}
               </div>
             </div>
 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property information</h3>
+              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Links</h2>
+              <div className="mt-3 space-y-2 text-sm">
+                {receipt.payment && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Payment</span><Link href={`/admin/transactions/${receipt.transactionId}#payment-${receipt.payment.id}`} className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline">{receipt.payment.paymentReference}</Link></div>}
+                {receipt.transaction && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Transaction</span><Link href={`/admin/transactions/${receipt.transaction.id}`} className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline">{receipt.transaction.ref}</Link></div>}
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sale / Booking</span>{receipt.transaction?.booking ? <Link href={`/admin/bookings/${receipt.transaction.booking.id}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.transaction.booking.ref}</Link> : receipt.transaction?.manualReason ? <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {receipt.transaction.manualReason}</span> : receipt.bookingId ? <Link href={`/admin/bookings/${receipt.bookingId}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.booking?.ref ?? receipt.bookingId}</Link> : <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — no booking</span>}</div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Customer</span><Link href={`/admin/search?q=${encodeURIComponent(receipt.customerEmail)}`} className="font-medium text-[var(--ops-primary)] hover:underline">{formatDisplayName(receipt.customerName)}</Link></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Client receipt page</span><a href={receipt.receiptUrl} target="_blank" className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline break-all">Open ↗</a></div>
+                {receipt.agentName && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Agent / Adviser</span><span className="font-medium">{receipt.agentName}</span></div>}
+              </div>
+            </div>
+
+            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property</h3>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Property</span><span className="font-medium break-words max-w-[60%] text-right">{receipt.property}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Estate</span><span className="font-medium">{receipt.estate ?? "—"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Unit</span><span className="font-medium">{receipt.unitType ?? "—"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SKU / Plot Code</span><span className="font-mono text-[12px]">{receipt.plotCode ?? "—"}</span></div>
                 {receipt.sqm && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SQM</span><span className="font-medium">{receipt.sqm}sqm</span></div>}
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sale / Booking</span>{receipt.transaction?.booking ? <Link href={`/admin/bookings/${receipt.transaction.booking.id}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.transaction.booking.ref}</Link> : receipt.transaction?.manualReason ? <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {receipt.transaction.manualReason}</span> : receipt.bookingId ? <Link href={`/admin/bookings/${receipt.bookingId}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.booking?.ref ?? receipt.bookingId.slice(0, 8)}</Link> : <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — no booking</span>}</div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Source</span><span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${receipt.source === "ADMIN_MANUAL" ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]"}`}>{receipt.source === "ADMIN_MANUAL" ? "Manual" : "Booking"}</span></div>
-              </div>
-            </div>
-
-            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment information</h3>
-              <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Amount before discount</span><span className="font-mono font-medium price">{formatNaira(receipt.amountBeforeDiscount)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Discount</span><span className="font-mono price">{formatNaira(receipt.discount)}</span></div>
-                <div className="flex justify-between border-t border-[var(--ops-border)] pt-2"><span className="font-medium">Final amount paid</span><span className="font-mono font-bold price">{formatNaira(receipt.finalAmount)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Amount in words</span><span className="text-[12px] text-right max-w-[60%]">{receipt.amountInWords}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Payment description</span><span className="text-[12px] text-right max-w-[60%]">{receipt.paymentDescription}</span></div>
-                {receipt.paymentMethod && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Method</span><span className="font-medium">{receipt.paymentMethod}</span></div>}
-                {receipt.agentName && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Agent / Adviser</span><span className="font-medium">{receipt.agentName}</span></div>}
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Source</span><StatusBadge status={receipt.source} /></div>
               </div>
             </div>
           </div>
@@ -125,19 +142,23 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
               <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Receipt status</h3>
               <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Status</span><span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${statusBadge(receipt.status)}`}>{receipt.status.toUpperCase()}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Status</span><StatusBadge status={receipt.status} /></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Issued</span><span className="font-mono text-[12px]">{formatDateTime(receipt.issuedAt)}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sent</span><span className="font-mono text-[12px]">{receipt.sentAt ? formatDateTime(receipt.sentAt) : "—"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Recipient</span><span className="font-mono text-[12px] break-all">{receipt.recipientEmail}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Created by</span><span className="text-[12px]">{receipt.createdBy?.name ?? receipt.createdBy?.email ?? "—"}</span></div>
                 {receipt.error && <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 break-words">Error: {receipt.error}</div>}
-              </div>
-              <div className="mt-4 pt-4 border-t border-[var(--ops-border)]">
-                <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">PDF preview</div>
-                <a href={`/api/receipts/${receipt.ref}/pdf`} target="_blank" className="mt-2 block rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)] p-4 text-center hover:bg-white">
-                  <div className="mono text-[11px] text-[var(--ops-muted)]">View / Download PDF</div>
-                  <div className="font-mono text-[12px] font-medium text-[var(--ops-primary)] mt-1">{receipt.ref}.pdf</div>
-                </a>
+                {outbox.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[var(--ops-border)]">
+                    <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Delivery queue</div>
+                    {outbox.map((o) => (
+                      <div key={o.id} className="mono text-[11px] text-[var(--ops-muted)] mt-1 flex justify-between gap-2">
+                        <StatusBadge status={o.status} className="px-2 py-0.5 text-[10px]" />
+                        <span>{o.attempts} attempt{o.attempts === 1 ? "" : "s"}{o.lastError ? ` · ${o.lastError.slice(0, 60)}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

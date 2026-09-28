@@ -13,7 +13,9 @@ export type UsableTokenReceipt = {
   accessTokenRevokedAt: null;
 };
 
-export function isTokenUsable(receipt: TokenedReceipt): receipt is UsableTokenReceipt {
+export function isTokenUsable<T extends TokenedReceipt>(
+  receipt: T | null
+): receipt is T & { accessToken: string; accessTokenRevokedAt: null } {
   if (!receipt) return false;
   if (!receipt.accessToken) return false;
   if (receipt.accessTokenRevokedAt) return false;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import StatusBadge from "@/components/admin/StatusBadge";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { auth } from "@/auth";
@@ -12,22 +13,6 @@ type SearchParams = { q?: string; status?: string; source?: string; page?: strin
 
 const PAGE_SIZE = 25;
 const allStatuses = ["pending", "generated", "sent", "failed"] as const;
-
-function statusBadge(status: string) {
-  switch (status) {
-    case "sent":
-      return "bg-[#1F6B3E] text-white border-[#1F6B3E]";
-    case "failed":
-      return "bg-[#A6402F] text-white border-[#A6402F]";
-    case "generated":
-      return "bg-transparent text-[#1E3A5F] border-[#C7D2E0]";
-    case "pending":
-      return "bg-transparent text-[#8B6B1F] border-[#C89B3C]";
-    case "draft":
-    default:
-      return "bg-transparent text-[#6B6252] border-[#D8CFC0]";
-  }
-}
 
 function formatDate(d: Date | string | null): string {
   if (!d) return "—";
@@ -229,7 +214,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                     <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{formatDate(r.issuedAt)}</td>
                     <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{r.sentAt ? formatDateTime(r.sentAt) : "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium border ${statusBadge(r.status)}`}>{r.status.toUpperCase()}</span>
+                      <StatusBadge status={r.status} />
                       {r.error && <div className="mono text-[10px] text-red-600 mt-1 max-w-[160px] break-words">{r.error.slice(0, 80)}</div>}
                     </td>
                     <td className="px-4 py-3">
@@ -266,7 +251,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                   <div className="text-[14px] font-medium text-[var(--ops-text)] mt-1 break-all">{r.customerName}</div>
                   <div className="text-[12px] text-[var(--ops-muted)] break-all">{r.customerEmail}</div>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${statusBadge(r.status)}`}>{r.status.toUpperCase()}</span>
+                <StatusBadge status={r.status} />
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Property</div><div className="text-[13px] text-[var(--ops-text)] break-words">{r.property}</div></div>

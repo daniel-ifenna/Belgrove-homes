@@ -52,6 +52,7 @@ export type TransactionSummary = {
 export type FinanceDb = {
   payment: {
     aggregate(args: unknown): Promise<{ _sum: { amount: number | null } }>;
+    count(args: unknown): Promise<number>;
     findMany(args: unknown): Promise<
       { amount: number; paymentDate: Date; status: string; installmentId: string | null; transactionId: string }[]
     >;
@@ -213,6 +214,23 @@ export async function getTransactionSummary(
 
 // Re-exported for call sites that still need the stored-label derivation.
 export { deriveInstallmentStatus };
+
+// Awaiting verification: count + naira total of PENDING_VERIFICATION payments
+// on real transactions. Never counted as collected.
+export async function getPendingVerification(
+  db: FinanceDb = realDb,
+  opts: { includeTest?: boolean } = {}
+): Promise<{ count: number; total: number }> {
+  const where = {
+    status: "PENDING_VERIFICATION" as const,
+    ...(opts.includeTest ? {} : { transaction: { isTest: false } }),
+  };
+  const [agg, count] = await Promise.all([
+    db.payment.aggregate({ where, _sum: { amount: true } }),
+    db.payment.count({ where }),
+  ]);
+  return { count, total: agg._sum.amount ?? 0 };
+}
 
 export type TransactionOverview = {
   id: string;

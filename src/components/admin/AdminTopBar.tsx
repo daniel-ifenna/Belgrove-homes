@@ -25,11 +25,11 @@ function TopBarInner() {
 
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
-    const params = new URLSearchParams(searchParams.toString());
-    if (q.trim()) params.set("q", q.trim());
-    else params.delete("q");
-    params.delete("page");
-    router.push(`/admin/bookings?${params.toString()}`);
+    if (!q.trim()) return;
+    const params = new URLSearchParams();
+    params.set("q", q.trim());
+    if (searchParams.get("showTest") === "1") params.set("showTest", "1");
+    router.push(`/admin/search?${params.toString()}`);
   }
 
   return (
@@ -85,50 +85,34 @@ function TopBarInner() {
   );
 }
 
-// Right-aligned quick-action split button: contextual primary create plus a
-// caret dropdown for the other common creates — one predictable location.
+// One consistent "+ New" menu everywhere: Booking, Transaction.
 function QuickActionSplit({ pathname }: { pathname: string }) {
+  void pathname;
   const [open, setOpen] = useState(false);
 
   const creates = [
-    { label: "New Booking", href: "/book-inspection" },
-    { label: "New Transaction", href: "/admin/transactions/new" },
-    { label: "Add Agent", href: "/admin/agents" },
+    { label: "Booking", href: "/book-inspection" },
+    { label: "Transaction", href: "/admin/transactions/new" },
   ];
-
-  const primary = pathname.startsWith("/admin/transactions")
-    ? creates[1]
-    : pathname.startsWith("/admin/agents")
-      ? creates[2]
-      : creates[0];
-
-  const others = creates.filter((c) => c.href !== primary.href);
 
   return (
     <div className="relative hidden md:block">
-      <div className="flex items-stretch rounded-full overflow-hidden bg-[var(--ops-primary)] shadow-sm">
-        <Link
-          href={primary.href}
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white pl-4 pr-3 py-2 hover:bg-[var(--ops-deep)] transition-colors"
-        >
-          <span className="text-[15px] leading-none">+</span> {primary.label.replace(/^(New|Add) /, "")}
-        </Link>
-        <button
-          onClick={() => setOpen((o) => !o)}
-          onBlur={(e) => {
-            if (!e.currentTarget.parentElement?.parentElement?.contains(e.relatedTarget as Node)) setOpen(false);
-          }}
-          aria-label="More create actions"
-          aria-expanded={open}
-          className="px-2.5 text-white/80 hover:text-white hover:bg-[var(--ops-deep)] border-l border-white/15 transition-colors"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
-        </button>
-      </div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        onBlur={(e) => {
+          if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) setOpen(false);
+        }}
+        aria-label="Create new"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white pl-4 pr-4 py-2 rounded-full bg-[var(--ops-primary)] shadow-sm hover:bg-[var(--ops-deep)] transition-colors"
+      >
+        <span className="text-[15px] leading-none">+</span> New
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
+      </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-[var(--ops-border)] rounded-xl shadow-[var(--ops-shadow-md)] p-1.5 z-30">
           <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)] px-3 pt-2 pb-1">Create</div>
-          {others.map((c) => (
+          {creates.map((c) => (
             <Link
               key={c.href}
               href={c.href}
@@ -265,56 +249,7 @@ function SidebarInner() {
           </div>
         ))}
       </nav>
-
-      <MonthlyTargetWidget />
     </aside>
-  );
-}
-
-function MonthlyTargetWidget() {
-  const [data, setData] = useState<{ soldThisMonth: number; goal: number; pct: number } | null>(null);
-  const searchParams = useSearchParams();
-  const showTest = searchParams.get("showTest") === "1";
-
-  useEffect(() => {
-    let cancelled = false;
-    setData(null);
-    fetch(`/api/admin/summary${showTest ? "?showTest=1" : ""}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled && j && typeof j.soldThisMonth === "number") setData(j);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [showTest]);
-
-  return (
-    <div className="px-3 pb-5">
-      <div className="rounded-[12px] border border-white/[0.08] bg-white/[0.04] p-4">
-        <div className="mono text-[11px] tracking-[0.08em] uppercase text-white/40">Monthly target</div>
-        <div className="mt-2 font-mono text-[15px] font-medium text-white price">
-          {data ? (
-            <>
-              {formatCompactNaira(data.soldThisMonth)}{" "}
-              <span className="text-white/40 text-[12px] font-normal">of {formatCompactNaira(data.goal)}</span>
-            </>
-          ) : (
-            <span className="text-white/40">—</span>
-          )}
-        </div>
-        <div className="mt-2 flex items-center justify-end">
-          <span className="mono text-[11px] text-white/60">{data ? `${data.pct}%` : "—"}</span>
-        </div>
-        <div className="mt-1.5 h-[6px] rounded-full bg-white/[0.08] overflow-hidden">
-          <div
-            className="h-full rounded-full bg-[var(--ops-gold)] transition-[width] duration-500"
-            style={{ width: `${data ? data.pct : 0}%` }}
-          />
-        </div>
-      </div>
-    </div>
   );
 }
 

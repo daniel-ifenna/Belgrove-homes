@@ -15,7 +15,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const session = await auth();
   if (!isInternalRole(session?.user?.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
-  const receipt = await prisma.receipt.findUnique({ where: { id }, include: { booking: true } });
+  const receipt = await prisma.receipt.findUnique({
+    where: { id },
+    include: {
+      booking: true,
+      payment: { include: { installment: true } },
+      transaction: { select: { totalPayable: true, payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } } } },
+    },
+  });
   if (!receipt) return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
 
   // Reuse same ref, same receipt record — do not create new receipt number
@@ -34,6 +41,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     // Regenerate from receipt snapshot + booking
     try {
       const qr = await generateQrDataUrl(receipt.qrTargetUrl);
+      const regenPreviously =
+        receipt.transaction && receipt.payment
+          ? receipt.transaction.payments
+              .filter(
+                (p) =>
+                  p.paymentDate < receipt.payment!.paymentDate ||
+                  (p.paymentDate.getTime() === receipt.payment!.paymentDate.getTime() && p.id < receipt.paymentId)
+              )
+              .reduce((s, p) => s + p.amount, 0)
+          : 0;
+      const regenTotal = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
       pdfBuffer = generateReceiptPdf({
         ref: receipt.ref,
         issuedDate: new Date(receipt.issuedAt).toLocaleDateString("en-GB").split("/").join("-"),
@@ -52,6 +70,15 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           | null) ?? [{ date: new Date().toLocaleDateString("en-GB").split("/").join("-"), method: receipt.paymentMethod ?? "Bank Transfer", amount: receipt.finalAmount }],
         receiptUrl: receipt.receiptUrl,
         qrDataUrl: qr,
+        totalPayable: regenTotal,
+        previouslyPaid: regenPreviously,
+        totalPaidAfter: regenPreviously + receipt.finalAmount,
+        outstandingBalance: regenTotal - regenPreviously - receipt.finalAmount,
+        installmentLabel: receipt.payment?.installment
+          ? receipt.payment.installment.type === "INITIAL"
+            ? "Initial payment"
+            : `Month ${receipt.payment.installment.installmentNumber} payment`
+          : undefined,
       });
       const outDir = path.join(process.cwd(), "storage", "receipts");
       fs.mkdirSync(outDir, { recursive: true });

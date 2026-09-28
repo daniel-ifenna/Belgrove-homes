@@ -147,6 +147,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         totalPaidAfter: confirmed.newTotalPaid,
         outstandingBalance: confirmed.newOutstanding,
         transactionRef: txn.ref,
+        installmentLabel: confirmed.installment
+          ? confirmed.installment.type === "INITIAL"
+            ? "Initial payment"
+            : `Month ${confirmed.installment.installmentNumber} payment`
+          : undefined,
       }),
     writeFile: (filePath, buf) => writeReceiptPdf(filePath, buf),
   });

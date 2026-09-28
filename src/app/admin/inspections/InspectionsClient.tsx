@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { BELGROVE_PLOTS } from "@/lib/belgroveData";
 import { formatNaira } from "@/lib/currency";
+import { formatDate } from "@/lib/booking-ui";
 
 type Row = {
   id: string;
@@ -206,6 +207,7 @@ export default function InspectionsClient({ rows }: { rows: Row[] }) {
                         {sqmTag && <span className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] border font-medium ${sqmTag.startsWith("Sizing") ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]"}`}>{sqmTag}</span>}
                         {!hasSqm && <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] border font-medium bg-amber-50 text-amber-800 border-amber-200">Missing SQM — click to add</span>}
                         <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">{r.ref} · {r.name}</div>
+                        <div className="mono text-[11px] text-[var(--ops-muted)]">Inspected {r.inspectedAt ? formatDate(r.inspectedAt) : "—"}</div>
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {r.agent ? (

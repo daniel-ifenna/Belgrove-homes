@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import StatusBadge from "@/components/admin/StatusBadge";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
@@ -9,21 +10,8 @@ import { formatDisplayName } from "@/lib/formatName";
 import { getTransactionSummary } from "@/lib/finance";
 import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
-import RecordPaymentForm from "./RecordPaymentForm";
+import PaymentSchedule from "./PaymentSchedule";
 import PaymentVerificationButtons from "./PaymentVerificationButtons";
-
-function paymentStatusBadge(status: string) {
-  switch (status) {
-    case "CONFIRMED":
-      return "bg-[#1F6B3E] text-white border-[#1F6B3E]";
-    case "PENDING_VERIFICATION":
-      return "bg-transparent text-[#8B6B1F] border-[#C89B3C]";
-    case "FAILED":
-      return "bg-[#A6402F] text-white border-[#A6402F]";
-    default:
-      return "bg-transparent text-[#6B6252] border-[#D8CFC0]";
-  }
-}
 
 // Finance display labels (Paid / Late / Partial / Pending) are rendered
 // directly from getTransactionSummary — no local status mapping.
@@ -64,6 +52,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
   const progress = summary.progressPct.toFixed(2);
   const totalPaid = summary.confirmedPaid;
   const outstanding = summary.outstanding;
+  const nextDue = summary.installments.find((i) => i.status !== "Paid");
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -94,6 +83,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
               <div className="font-medium mt-1">{formatDisplayName(transaction.customerName)}</div>
               <div className="mono text-[12px] text-[var(--ops-muted)]">{transaction.customerEmail}</div>
               {transaction.customerPhone && <div className="mono text-[12px] text-[var(--ops-muted)]">{transaction.customerPhone}</div>}
+              <Link href={`/admin/search?q=${encodeURIComponent(transaction.customerEmail)}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">Customer ↗</Link>
             </div>
             <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-4">
               <div className="mono text-[10px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property</div>
@@ -107,70 +97,50 @@ export default async function TransactionDetailPage({ params }: { params: Promis
             </div>
           </div>
 
-          <div className="mt-6 grid md:grid-cols-4 gap-4">
-            <div className="bg-[#16281F] rounded-xl p-4 text-white">
-              <div className="mono text-[10px] uppercase text-[#D4B368]">Base Amount</div><div className="price fraunces text-[16px] font-bold">{formatNaira(transaction.baseAmount)}</div><div className="mono text-[10px] text-white/60">{formatNaira(transaction.unitPrice)} × {transaction.plotQuantity}</div>
+          {/* Summary strip: one place for the money — total · paid · outstanding · progress · next due */}
+          <div className="mt-6 bg-[#16281F] rounded-xl p-4 lg:p-5 text-white">
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div><div className="mono text-[10px] uppercase text-[#D4B368]">Total price</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(transaction.totalPayable)}</div></div>
+              <div><div className="mono text-[10px] uppercase text-[#D4B368]">Paid</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(totalPaid)}</div></div>
+              <div><div className="mono text-[10px] uppercase text-white">Outstanding</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(outstanding)}</div></div>
             </div>
-            <div className="bg-[#16281F] rounded-xl p-4 text-white">
-              <div className="mono text-[10px] uppercase text-[#D4B368]">Interest</div><div className="price fraunces text-[16px] font-bold">{formatNaira(transaction.interestAmount)}</div><div className="mono text-[10px] text-white/60">{Number(transaction.interestRate) > 0 ? `${Number(transaction.interestRate)}% one-time` : "0%"}</div>
+            <div className="mt-3 h-[6px] rounded-full bg-white/15 overflow-hidden">
+              <div className="h-full rounded-full bg-[#D4B368]" style={{ width: `${progress}%` }} />
             </div>
-            <div className="bg-[#16281F] rounded-xl p-4 text-white">
-              <div className="mono text-[10px] uppercase text-white">Total Payable</div><div className="price fraunces text-[16px] font-bold">{formatNaira(transaction.totalPayable)}</div>
-            </div>
-            <div className={`rounded-xl p-4 border ${outstanding === 0 ? "bg-[#ECFDF5] border-[#A7F3D0] text-[#065F46]" : "bg-white border-[var(--ops-border)] text-[var(--ops-text)]"}`}>
-              <div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Outstanding</div><div className="price fraunces text-[16px] font-bold">{formatNaira(outstanding)}</div><div className="mono text-[10px] text-[var(--ops-muted)]">{totalPaid > 0 ? `${progress}% paid` : "No payments yet"}</div>
-            </div>
-          </div>
-
-          <div className="mt-4 grid md:grid-cols-3 gap-4 mono text-[11px]">
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Total Paid</div><div className="font-bold price">{formatNaira(totalPaid)}</div></div>
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Outstanding</div><div className="font-bold price">{formatNaira(outstanding)}</div></div>
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Progress</div><div className="font-bold">{progress}%</div></div>
+            <div className="mono text-[11px] text-white/70 mt-2">{progress}% paid{nextDue ? ` · Next due: ${nextDue.type === "INITIAL" ? "Initial" : `Month ${nextDue.installmentNumber}`} ${formatNaira(Math.max(0, nextDue.scheduledAmount - nextDue.confirmedPaid))} on ${formatDate(nextDue.dueDate)}` : " · Fully paid"}</div>
           </div>
         </div>
 
         <div className="mt-6 grid lg:grid-cols-[1.6fr_1fr] gap-6 items-start">
           <div className="space-y-6">
-            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment Schedule</h2>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
-                      <th className="px-3 py-2">Payment</th><th className="px-3 py-2">Due Date</th><th className="px-3 py-2 text-right">Scheduled</th><th className="px-3 py-2 text-right">Paid</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--ops-border)]/60">
-                    {summary.installments.map((inst) => {
-                      const paid = inst.confirmedPaid;
-                      const isOverdue = inst.overdue;
-                      const statusColor = inst.status === "Paid" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : inst.status === "Partial" ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : isOverdue ? "bg-[#FEF2F2] text-[#9F1239] border-[#FECACA]" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]";
-                      // Receipt column rule: link only when a receipt row exists for
-                      // this installment (via a CONFIRMED payment). Pending
-                      // payments count as nothing — never "Paid", never a link.
-                      const confirmedPaymentForInst = transaction.payments.find(
-                        (p: any) => p.installmentId === inst.id && p.status === "CONFIRMED"
-                      );
-                      const receiptLink = confirmedPaymentForInst
-                        ? transaction.receipts.find((r: any) => r.paymentId === confirmedPaymentForInst.id)
-                        : null;
-                      // Fallback: for initial, check if receipt exists for that amount
-                      return (
-                        <tr key={inst.id} className="hover:bg-[var(--ops-bg)]/30">
-                          <td className="px-3 py-2"><span className="font-medium">{inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`}</span><div className="mono text-[10px] text-[var(--ops-muted)]">#{inst.installmentNumber}</div></td>
-                          <td className="px-3 py-2 mono text-[11px]">{formatDate(inst.dueDate)}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(inst.scheduledAmount)}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(paid)}</td>
-                          <td className="px-3 py-2"><span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-medium border ${statusColor}`}>{inst.status}</span></td>
-                          <td className="px-3 py-2 text-right">{receiptLink ? <Link href={`/admin/receipts/${receiptLink.id}`} className="text-xs text-[var(--ops-primary)] hover:underline">View</Link> : "—"}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <RecordPaymentForm transactionId={transaction.id} installments={summary.installments.map((i) => ({ ...i, dueDate: i.dueDate.toISOString(), paidAmount: i.confirmedPaid, status: i.status })) as any} outstanding={outstanding} />
-            </div>
+            <PaymentSchedule
+              transactionId={transaction.id}
+              installments={summary.installments.map((i) => ({
+                id: i.id,
+                installmentNumber: i.installmentNumber,
+                type: i.type,
+                dueDate: i.dueDate.toISOString(),
+                scheduledAmount: i.scheduledAmount,
+                confirmedPaid: i.confirmedPaid,
+                pendingTotal: i.pendingTotal,
+                status: i.status,
+                overdue: i.overdue,
+              }))}
+              payments={transaction.payments.map((p: any) => ({
+                id: p.id,
+                installmentId: p.installmentId,
+                amount: p.amount,
+                paymentDate: new Date(p.paymentDate).toISOString(),
+                paymentMethod: p.paymentMethod,
+                paymentReference: p.paymentReference,
+                bankReference: p.bankReference,
+                notes: p.notes,
+                status: p.status,
+              }))}
+              receipts={transaction.receipts.map((r: any) => ({ id: r.id, paymentId: r.paymentId }))}
+              outstanding={outstanding}
+              totals={{ totalPaid, totalPayable: transaction.totalPayable }}
+            />
 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
               <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment History</h2>
@@ -178,30 +148,34 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                 <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No payments recorded yet.</p>
               ) : (
                 <div className="mt-4 space-y-3">
-                  {transaction.payments.map((p: any) => {
+                  {[...transaction.payments]
+                    .sort((a: any, b: any) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime())
+                    .map((p: any) => {
                     const inst = transaction.installments.find((i: any) => i.id === p.installmentId);
                     const receipt = transaction.receipts.find((r: any) => r.paymentId === p.id);
+                    const instLabel = inst ? (inst.type === "INITIAL" ? "Initial payment" : `Month ${inst.installmentNumber}`) : "Payment";
                     return (
-                      <div key={p.id} id={`payment-${p.id}`} className="flex gap-3 p-3 rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)]/30 scroll-mt-20">
+                      <div key={p.id} className="flex gap-3 p-3 rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)]/30">
                         <div className="h-8 w-8 rounded-full bg-[#0D3328] text-white grid place-items-center text-[11px]">₦</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="text-[13px] font-medium price">{formatNaira(p.amount)}</span>
                             <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(p.paymentDate)}</span>
                           </div>
-                          <div className="mono text-[11px] text-[var(--ops-muted)]">{inst ? `${inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`}` : "Payment"} · {p.paymentMethod ?? "—"}{p.notes ? ` · ${p.notes}` : ""}</div>
-                          <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{(p as any).paymentReference ?? ""}{(p as any).bankReference ? ` · bank: ${(p as any).bankReference}` : ""}</div>
+                          <div className="mono text-[11px] text-[var(--ops-muted)]">{instLabel} · {p.paymentMethod ?? "—"}{p.bankReference ? ` · bank: ${p.bankReference}` : ""}{p.notes ? ` · ${p.notes}` : ""}</div>
+                          <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{p.paymentReference}</div>
                           <div className="mt-1.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border ${paymentStatusBadge(p.status)}`}>
-                              {p.status === "PENDING_VERIFICATION" ? "Pending verification" : p.status.replace("_", " ")}
-                            </span>
+                            <StatusBadge status={p.status} className="px-2 py-0.5 text-[10px]" />
                           </div>
                           {receipt && <div className="mono text-[11px] mt-1"><Link href={`/admin/receipts/${receipt.id}`} className="text-[var(--ops-primary)] hover:underline">Receipt: {receipt.ref}</Link> · {receipt.status}</div>}
-                          {p.status === "PENDING_VERIFICATION" && (
-                            <PaymentVerificationButtons transactionId={transaction.id} paymentId={p.id} />
-                          )}
                           {p.status === "CONFIRMED" && (
-                            <PaymentVerificationButtons transactionId={transaction.id} paymentId={p.id} allowConfirm={false} />
+                            <PaymentVerificationButtons
+                              transactionId={transaction.id}
+                              paymentId={p.id}
+                              allowConfirm={false}
+                              payment={{ amount: p.amount, installmentLabel: instLabel }}
+                              totals={{ totalPaid, totalPayable: transaction.totalPayable }}
+                            />
                           )}
                         </div>
                       </div>

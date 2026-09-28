@@ -95,6 +95,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
 
   // ---- Post-commit side effects (recoverable) ----
   const issuedDateStr = formatDateDMY(confirmed.payment.paymentDate);
+  const previouslyPaid = confirmed.newTotalPaid - confirmed.payment.amount;
 
   const qrDataUrl = await generateQrDataUrl(receiptUrl).catch((e) => {
     logServerError(`receipt ${receiptRef}: QR generation failed`, e);
@@ -123,6 +124,20 @@ export async function recordPaymentAndGenerateReceipt(params: {
         payments: [{ date: issuedDateStr, method: params.paymentMethod ?? "Bank Transfer", amount: params.amount }],
         receiptUrl,
         qrDataUrl,
+        unitPrice: transaction.unitPrice,
+        plotQuantity: transaction.plotQuantity,
+        paymentPlanName: transaction.paymentPlan?.name,
+        interestAmount: transaction.interestAmount,
+        totalPayable: transaction.totalPayable,
+        previouslyPaid,
+        totalPaidAfter: confirmed.newTotalPaid,
+        outstandingBalance: confirmed.newOutstanding,
+        transactionRef: transaction.ref,
+        installmentLabel: confirmed.installment
+          ? confirmed.installment.type === "INITIAL"
+            ? "Initial payment"
+            : `Month ${confirmed.installment.installmentNumber} payment`
+          : undefined,
       }),
     writeFile: (filePath, buf) => writeReceiptPdf(filePath, buf),
   });

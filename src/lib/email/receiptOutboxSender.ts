@@ -13,7 +13,13 @@ import type { EmailResult } from "./sendEmail";
 // when missing), sends, then records receipt emailStatus + a
 // ReceiptSendAttempt audit row (decision a: attempts stay the audit history).
 export async function sendReceiptForOutbox(receiptId: string): Promise<EmailResult> {
-  const receipt = await prisma.receipt.findUnique({ where: { id: receiptId } });
+  const receipt = await prisma.receipt.findUnique({
+    where: { id: receiptId },
+    include: {
+      payment: { include: { installment: true } },
+      transaction: { select: { totalPayable: true, payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } } } },
+    },
+  });
   if (!receipt) return { sent: false, error: "Receipt no longer exists" };
 
   let pdfBuffer: Buffer | null = null;
@@ -26,6 +32,17 @@ export async function sendReceiptForOutbox(receiptId: string): Promise<EmailResu
   if (!pdfBuffer) {
     try {
       const qr = await generateQrDataUrl(receipt.qrTargetUrl);
+      const outboxPreviously =
+        receipt.transaction && receipt.payment
+          ? receipt.transaction.payments
+              .filter(
+                (p) =>
+                  p.paymentDate < receipt.payment!.paymentDate ||
+                  (p.paymentDate.getTime() === receipt.payment!.paymentDate.getTime() && p.id < receipt.paymentId)
+              )
+              .reduce((s, p) => s + p.amount, 0)
+          : 0;
+      const outboxTotal = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
       pdfBuffer = generateReceiptPdf({
         ref: receipt.ref,
         issuedDate: receipt.issuedAt.toLocaleDateString("en-GB").split("/").join("-"),
@@ -48,6 +65,15 @@ export async function sendReceiptForOutbox(receiptId: string): Promise<EmailResu
         ],
         receiptUrl: receipt.receiptUrl,
         qrDataUrl: qr,
+        totalPayable: outboxTotal,
+        previouslyPaid: outboxPreviously,
+        totalPaidAfter: outboxPreviously + receipt.finalAmount,
+        outstandingBalance: outboxTotal - outboxPreviously - receipt.finalAmount,
+        installmentLabel: receipt.payment?.installment
+          ? receipt.payment.installment.type === "INITIAL"
+            ? "Initial payment"
+            : `Month ${receipt.payment.installment.installmentNumber} payment`
+          : undefined,
       });
       const pdfPath = receipt.pdfPath ?? receiptPdfPath(receipt.ref);
       const abs = receiptPdfAbsolute(pdfPath);

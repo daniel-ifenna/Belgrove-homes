@@ -17,7 +17,18 @@ function formatDateDMY(d: Date): string {
 // URL is the authorization. Revoked or unknown tokens render notFound.
 export default async function ClientReceiptPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const receipt = await prisma.receipt.findUnique({ where: { accessToken: token } });
+  const receipt = await prisma.receipt.findUnique({
+    where: { accessToken: token },
+    include: {
+      payment: { include: { installment: { select: { type: true, installmentNumber: true } } } },
+      transaction: {
+        select: {
+          totalPayable: true,
+          payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } },
+        },
+      },
+    },
+  });
   if (!isTokenUsable(receipt)) {
     notFound();
   }
@@ -27,6 +38,24 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
     | null) ?? [
     { date: formatDateDMY(receipt.issuedAt), method: receipt.paymentMethod ?? "Bank Transfer", amount: receipt.finalAmount },
   ];
+  const installmentLabel = receipt.payment?.installment
+    ? receipt.payment.installment.type === "INITIAL"
+      ? "Initial payment"
+      : `Month ${receipt.payment.installment.installmentNumber} payment`
+    : null;
+  const clientPayment = receipt.payment;
+  const previouslyPaid =
+    receipt.transaction && clientPayment
+      ? receipt.transaction.payments
+          .filter(
+            (p) =>
+              p.paymentDate < clientPayment.paymentDate ||
+              (p.paymentDate.getTime() === clientPayment.paymentDate.getTime() && p.id < clientPayment.id)
+          )
+          .reduce((s, p) => s + p.amount, 0)
+      : 0;
+  const totalPrice = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
+  const paidToDate = previouslyPaid + receipt.finalAmount;
 
   return (
     <div className="min-h-screen bg-[#F7F2E7] py-8 px-6">
@@ -60,14 +89,17 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
               <div className="mono text-[12px] text-[#6B6656]">{receipt.customerEmail}</div>
             </div>
             <div className="bg-[#C79A46] rounded-lg p-4 text-white">
-              <div className="mono text-[10px] tracking-[0.12em] uppercase opacity-90">Amount</div>
+              <div className="mono text-[10px] tracking-[0.12em] uppercase opacity-90">This payment</div>
               <div className="fraunces text-[20px] font-bold mt-1">{formatNaira(receipt.finalAmount)}</div>
-              <div className="mono text-[11px] mt-2 opacity-90">SOLD PRICE: {formatNaira(receipt.amountBeforeDiscount)}</div>
-              {receipt.discount > 0 && <div className="mono text-[11px] opacity-90">DISCOUNTS: {formatNaira(receipt.discount)}</div>}
+              <div className="mono text-[11px] mt-2 opacity-90">TOTAL PRICE: {formatNaira(totalPrice)}</div>
+              <div className="mono text-[11px] opacity-90">PAID TO DATE: {formatNaira(paidToDate)}</div>
+              <div className="mono text-[11px] opacity-90">BALANCE: {formatNaira(totalPrice - paidToDate)}</div>
+              {receipt.discount > 0 && <div className="mono text-[11px] opacity-90">DISCOUNT: {formatNaira(receipt.discount)}</div>}
             </div>
           </div>
 
           <div className="mono text-[11px] font-bold text-[#16281F] mt-6">{receipt.property}</div>
+          {installmentLabel && <div className="mono text-[11px] text-[#6B6656] mt-1">{installmentLabel}</div>}
 
           <div className="mt-4 border border-[#E4DCC7] rounded-lg overflow-hidden">
             <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[11px] font-medium">

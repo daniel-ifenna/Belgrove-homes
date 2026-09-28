@@ -5,16 +5,39 @@ import { formatNaira } from "@/lib/currency";
 
 type Installment = { id: string; installmentNumber: number; type: string; dueDate: string; scheduledAmount: number; paidAmount: number; status: string };
 
-export default function RecordPaymentForm({ transactionId, installments, outstanding }: { transactionId: string; installments: Installment[]; outstanding: number }) {
+const LAST_METHOD_KEY = "belgrove-last-payment-method";
+
+export default function RecordPaymentForm({
+  transactionId,
+  installments,
+  outstanding,
+  initialInstallmentId,
+  lockInstallment = false,
+  onDone,
+}: {
+  transactionId: string;
+  installments: Installment[];
+  outstanding: number;
+  initialInstallmentId?: string;
+  lockInstallment?: boolean;
+  onDone?: () => void;
+}) {
   const router = useRouter();
-  const firstUnpaid = installments.find((i) => i.status !== "PAID") ?? installments[0];
+  const firstUnpaid = installments.find((i) => i.id === initialInstallmentId) ?? installments.find((i) => i.status !== "Paid") ?? installments[0];
   const dueOf = (inst: Installment | undefined) => (inst ? Math.max(0, inst.scheduledAmount - (inst.paidAmount ?? 0)) : 0);
   const [installmentId, setInstallmentId] = useState(firstUnpaid?.id ?? "");
   // Amount is pre-filled from the schedule — the admin confirms date/method,
   // and may reduce it for a partial payment, but never types it blind.
   const [amount, setAmount] = useState(() => String(dueOf(firstUnpaid) || ""));
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [paymentMethod, setPaymentMethod] = useState("Bank Transfer");
+  const [paymentMethod, setPaymentMethod] = useState(() => {
+    try {
+      return localStorage.getItem(LAST_METHOD_KEY) || "Bank Transfer";
+    } catch {
+      return "Bank Transfer";
+    }
+  });
+  const [bankReference, setBankReference] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,10 +74,15 @@ export default function RecordPaymentForm({ transactionId, installments, outstan
       const res = await fetch(`/api/admin/transactions/${transactionId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ installmentId, amount: amountNum, paymentDate, paymentMethod, notes }),
+        body: JSON.stringify({ installmentId, amount: amountNum, paymentDate, paymentMethod, bankReference: bankReference.trim() || undefined, notes }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to record payment");
+      try {
+        localStorage.setItem(LAST_METHOD_KEY, paymentMethod);
+      } catch {
+        // ignore storage failures
+      }
       setSuccess(
         data.deduped
           ? "Identical payment was just recorded — showing the existing entry instead of a duplicate."
@@ -62,7 +90,9 @@ export default function RecordPaymentForm({ transactionId, installments, outstan
       );
       setAmount("");
       setNotes("");
+      setBankReference("");
       router.refresh();
+      if (onDone) setTimeout(onDone, 1200);
       setTimeout(() => setSuccess(null), 4000);
     } catch (e: any) {
       setError(e.message ?? "Failed");
@@ -80,7 +110,12 @@ export default function RecordPaymentForm({ transactionId, installments, outstan
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
         <div>
           <label className="mono text-[11px] text-[var(--ops-muted)]">Installment *</label>
-          <select value={installmentId} onChange={(e) => onInstallmentChange(e.target.value)} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white">
+          <select
+            value={installmentId}
+            onChange={(e) => onInstallmentChange(e.target.value)}
+            disabled={lockInstallment}
+            className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white disabled:bg-[var(--ops-bg)] disabled:text-[var(--ops-muted)]"
+          >
             {installments.map((inst) => (
               <option key={inst.id} value={inst.id}>
                 {inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`} — Due {new Date(inst.dueDate).toLocaleDateString("en-GB")} — Scheduled {formatNaira(inst.scheduledAmount)} — Paid {formatNaira(inst.paidAmount)} — {inst.status} {inst.scheduledAmount - inst.paidAmount > 0 ? `· Due ${formatNaira(inst.scheduledAmount - inst.paidAmount)}` : ""}
@@ -104,6 +139,10 @@ export default function RecordPaymentForm({ transactionId, installments, outstan
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Payment method</label>
             <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white"><option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>POS</option><option>Installment</option></select>
+          </div>
+          <div>
+            <label className="mono text-[11px] text-[var(--ops-muted)]">Bank / teller reference <span className="normal-case">(optional)</span></label>
+            <input value={bankReference} onChange={(e) => setBankReference(e.target.value)} placeholder="e.g. TRF-88231" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Notes</label>

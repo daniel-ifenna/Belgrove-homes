@@ -55,8 +55,9 @@ async function main() {
 
     const qrDataUrl = await generateQrDataUrl(receiptUrl).catch(() => undefined);
     const issuedDateStr = formatDateDMY(r.payment.paymentDate);
-    const installment = r.payment.installment;
-    void installment;
+    const inst = r.payment.installment;
+    const installmentLabel = !inst || inst.type === "INITIAL" ? "Initial payment" : `Month ${inst.installmentNumber} payment`;
+    const paymentDescription = `${installmentLabel} — ${txn.estate}${txn.unitType ? `, ${txn.unitType}` : ""}${txn.plotCode ? ` (${txn.plotCode})` : ""}`;
     const pdfBuffer = generateReceiptPdf({
       ref: r.ref,
       issuedDate: issuedDateStr,
@@ -82,6 +83,7 @@ async function main() {
       totalPaidAfter: previouslyPaid + r.payment.amount,
       outstandingBalance: txn.totalPayable - previouslyPaid - r.payment.amount,
       transactionRef: txn.ref,
+      installmentLabel,
     });
     await writeReceiptPdf(pdfPath, pdfBuffer);
     await prisma.receipt.update({
@@ -93,6 +95,7 @@ async function main() {
         pdfPath,
         pdfStatus: "GENERATED",
         lastError: null,
+        paymentDescription,
       },
     });
     if (RESEND) {

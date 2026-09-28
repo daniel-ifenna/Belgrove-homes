@@ -4,47 +4,29 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { formatNaira, formatCompactNaira } from "@/lib/currency";
-import { excludeTestRows, excludeTestTransactions } from "@/lib/test-data";
-import { getCollectedRevenue, getMonthlyTargetProgress, getRevenueSparkline } from "@/lib/finance";
+import { excludeTestRows } from "@/lib/test-data";
+import { getCollectedRevenue, getMonthlyTargetProgress, getOverdueInstallments, getPendingVerification, getRevenueSparkline } from "@/lib/finance";
 import { getActionCounts, getActionItems, INBOX_CATEGORIES } from "@/lib/inbox";
+import { lagosMonthRange } from "@/lib/time";
 import TestDataToggle from "@/components/admin/TestDataToggle";
+import TrendChip from "@/components/admin/TrendChip";
 
 export const dynamic = "force-dynamic";
 
 const DAY = 86_400_000;
 
-function pctChange(cur: number, prev: number): number | null {
-  if (prev > 0) return Math.round(((cur - prev) / prev) * 100);
-  if (cur > 0) return 100;
-  return 0;
-}
-
-function TrendChip({ delta }: { delta: number | null }) {
-  if (delta === null || delta === 0) {
-    return (
-      <span className="fraunces italic text-[13px] text-[var(--ops-muted)]">— 0%</span>
-    );
-  }
-  const up = delta > 0;
-  return (
-    <span
-      className={`fraunces italic text-[13px] ${up ? "text-[#1F6B3E]" : "text-[#A6402F]"}`}
-    >
-      {up ? "▲" : "▼"} {Math.abs(delta)}%
-    </span>
-  );
-}
-
 function StatCard({
   label,
   figure,
-  delta,
+  cur,
+  prev,
   context,
   icon,
 }: {
   label: string;
   figure: string;
-  delta: number | null;
+  cur?: number;
+  prev?: number;
   context: string;
   icon: React.ReactNode;
 }) {
@@ -58,7 +40,7 @@ function StatCard({
       </div>
       <div className="mt-3 flex items-baseline gap-2 flex-wrap">
         <span className="font-serif text-[32px] leading-none text-[var(--ops-text)] price">{figure}</span>
-        <TrendChip delta={delta} />
+        {cur !== undefined && prev !== undefined && <TrendChip cur={cur} prev={prev} />}
       </div>
       <div className="public text-[12px] text-[var(--ops-muted)] mt-1.5">{context}</div>
     </div>
@@ -90,34 +72,28 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const testOpts = { includeTest: showTest };
   const realTx = excludeTestRows(showTest);
   const realBooking = excludeTestRows(showTest);
-  const realReceipt = excludeTestTransactions(showTest);
+  const prevMonthRange = lagosMonthRange(new Date(now.getFullYear(), now.getMonth() - 1, 1));
   const [
     totalBookings,
-    bookings30,
-    bookingsPrior,
     activeTx,
     newTx30,
     newTxPrior,
-    receipts30,
-    receiptsPrior,
-    revenue30Sum,
-    revenuePriorSum,
     target,
+    priorMonthCollected,
+    pending,
+    overdueList,
     actionItems,
     actionCounts,
     sparkDays,
   ] = await Promise.all([
     prisma.inspectionBooking.count({ where: realBooking }),
-    prisma.inspectionBooking.count({ where: { ...realBooking, createdAt: { gte: d30 } } }),
-    prisma.inspectionBooking.count({ where: { ...realBooking, createdAt: { gte: d60, lt: d30 } } }),
     prisma.transaction.count({ where: { ...realTx, status: "ACTIVE" } }),
     prisma.transaction.count({ where: { ...realTx, createdAt: { gte: d30 } } }),
     prisma.transaction.count({ where: { ...realTx, createdAt: { gte: d60, lt: d30 } } }),
-    prisma.receipt.count({ where: { ...realReceipt, issuedAt: { gte: d30 }, status: { in: ["sent", "generated"] } } }),
-    prisma.receipt.count({ where: { ...realReceipt, issuedAt: { gte: d60, lt: d30 }, status: { in: ["sent", "generated"] } } }),
-    getCollectedRevenue({ from: d30, ...testOpts }),
-    getCollectedRevenue({ from: d60, to: d30, ...testOpts }),
     getMonthlyTargetProgress(now, undefined, testOpts),
+    getCollectedRevenue({ from: prevMonthRange.start, to: prevMonthRange.end, ...testOpts }),
+    getPendingVerification(undefined, testOpts),
+    getOverdueInstallments(undefined, undefined, testOpts),
     getActionItems({ includeTest: showTest, now }),
     getActionCounts({ includeTest: showTest }),
     getRevenueSparkline(14, undefined, undefined, testOpts),
@@ -126,6 +102,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const soldSum = target.collected;
   const goal = target.goal;
   const pct = target.pct;
+  const overdueTotal = overdueList.reduce((s, o) => s + (o.scheduledAmount - o.confirmedPaid), 0);
   const days = sparkDays;
   const maxDay = Math.max(1, ...days);
   const sparkPoints = days
@@ -161,39 +138,39 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         {/* Stat cards */}
         <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard
-            label="Total Bookings"
-            figure={totalBookings.toLocaleString("en-NG")}
-            delta={pctChange(bookings30, bookingsPrior)}
-            context="vs. prior 30 days"
+            label="Collected this month"
+            figure={formatCompactNaira(soldSum)}
+            cur={soldSum}
+            prev={priorMonthCollected}
+            context={`${pct}% of ${formatCompactNaira(goal)} target`}
             icon={
-              <svg {...iconProps}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></svg>
+              <svg {...iconProps}><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
+            }
+          />
+          <StatCard
+            label="Pending verification"
+            figure={pending.count.toLocaleString("en-NG")}
+            context={formatNaira(pending.total)}
+            icon={
+              <svg {...iconProps}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+            }
+          />
+          <StatCard
+            label="Overdue"
+            figure={overdueList.length.toLocaleString("en-NG")}
+            context={formatNaira(overdueTotal)}
+            icon={
+              <svg {...iconProps}><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>
             }
           />
           <StatCard
             label="Active Transactions"
             figure={activeTx.toLocaleString("en-NG")}
-            delta={pctChange(newTx30, newTxPrior)}
+            cur={newTx30}
+            prev={newTxPrior}
             context="new transactions vs. prior 30 days"
             icon={
               <svg {...iconProps}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
-            }
-          />
-          <StatCard
-            label="Receipts Issued · 30d"
-            figure={receipts30.toLocaleString("en-NG")}
-            delta={pctChange(receipts30, receiptsPrior)}
-            context="vs. prior 30 days"
-            icon={
-              <svg {...iconProps}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-            }
-          />
-          <StatCard
-            label="Revenue Collected · 30d"
-            figure={formatCompactNaira(revenue30Sum)}
-            delta={pctChange(revenue30Sum, revenuePriorSum)}
-            context={`${formatNaira(revenue30Sum)} · vs. prior 30 days`}
-            icon={
-              <svg {...iconProps}><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
             }
           />
         </div>
@@ -243,14 +220,10 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
             )}
           </div>
 
-          {/* Right stack: target only (attention merged into Needs action) */}
+          {/* Right rail: sparkline only (figures live in the top card) */}
           <div className="space-y-4">
             <div className="bg-white border border-[var(--border-hairline)] rounded-[var(--ops-radius)] p-5 shadow-[var(--shadow-sm)]">
-              <div className="mono text-[11px] tracking-[0.08em] uppercase text-[var(--ops-muted)]">Monthly target</div>
-              <div className="mt-2 font-mono text-[20px] font-medium text-[var(--ops-text)] price">
-                {formatCompactNaira(soldSum)}{" "}
-                <span className="text-[13px] font-normal text-[var(--ops-muted)]">of {formatCompactNaira(goal)}</span>
-              </div>
+              <div className="mono text-[11px] tracking-[0.08em] uppercase text-[var(--ops-muted)]">Last 14 days</div>
               <svg viewBox="0 0 100 28" className="mt-3 w-full h-[36px]" preserveAspectRatio="none" aria-hidden="true">
                 <polyline
                   points={sparkPoints}
@@ -262,13 +235,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                   vectorEffect="non-scaling-stroke"
                 />
               </svg>
-              <div className="mt-1 flex items-center justify-end">
-                <span className="mono text-[11px] text-[var(--ops-muted)]">{pct}%</span>
-              </div>
-              <div className="mt-1.5 h-[6px] rounded-full bg-[rgba(28,43,32,0.08)] overflow-hidden">
-                <div className="h-full rounded-full bg-[var(--accent-gold)]" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="public text-[12px] text-[var(--ops-muted)] mt-2">Receipted sales this month · last 14 days above</div>
+              <div className="public text-[12px] text-[var(--ops-muted)] mt-2">Daily collected revenue</div>
             </div>
           </div>
         </div>

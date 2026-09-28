@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
-import { allStatuses, allTemperatures, statusColors, statusLabels, temperatureColors, formatDate } from "@/lib/booking-ui";
+import { allStatuses, allTemperatures, formatDate } from "@/lib/booking-ui";
 import AdminPagination from "@/components/admin/AdminPagination";
 import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
+import StatusBadge from "@/components/admin/StatusBadge";
+import { lagosDayKey, lagosTodayInput } from "@/lib/time";
+import { phonesMatch } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +22,11 @@ type SearchParams = {
   showTest?: string;
 };
 
-function AgentCell({ agent }: { agent: { name: string; category: string } | null }) {
+function AgentCell({ agent, customerEmail, customerPhone }: { agent: { name: string; category: string; email: string; phone: string } | null; customerEmail?: string; customerPhone?: string | null }) {
+  const selfAssigned =
+    !!agent &&
+    !!customerEmail &&
+    (agent.email.trim().toLowerCase() === customerEmail.trim().toLowerCase() || phonesMatch(agent.phone, customerPhone));
   if (agent) {
     return (
       <div className="flex items-center gap-2.5">
@@ -31,6 +38,11 @@ function AgentCell({ agent }: { agent: { name: string; category: string } | null
           <span className={`mt-1 inline-flex w-fit px-1.5 py-0.5 rounded-full text-[10px] leading-none border font-medium ${agent.category === "staff" ? "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>
             {agent.category === "hire_purchase" ? "Hire Purchase" : "Staff"}
           </span>
+          {selfAssigned && (
+            <span className="mt-1 inline-flex w-fit px-1.5 py-0.5 rounded-full text-[10px] leading-none border font-medium bg-[#FEF2F2] text-[#9F1239] border-[#FECACA]">
+              ⚠ Same as customer
+            </span>
+          )}
         </div>
       </div>
     );
@@ -41,6 +53,20 @@ function AgentCell({ agent }: { agent: { name: string; category: string } | null
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-white border border-[var(--ops-border)] text-[var(--ops-muted)]">Unassigned</span>
     </div>
   );
+}
+
+// Upcoming / today / past chip for the scheduled inspection day (Lagos).
+function InspectionTiming({ date }: { date: Date | string | null }) {
+  if (!date) return null;
+  const day = lagosDayKey(date);
+  const today = lagosTodayInput();
+  if (day === today) {
+    return <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] bg-[#C89B3C] text-white border border-[#C89B3C]">Today</span>;
+  }
+  if (day > today) {
+    return <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] bg-transparent text-[#1E3A5F] border border-[#C7D2E0]">Upcoming</span>;
+  }
+  return <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] bg-transparent text-[#6B6252] border border-[#D8CFC0]">Past</span>;
 }
 
 export default async function AdminBookingsPage({
@@ -328,33 +354,28 @@ export default async function AdminBookingsPage({
                           <div className="text-[13px] font-medium text-[var(--ops-text)]">{formatDate(b.rescheduledDate)}</div>
                           <div className="text-[11px] text-[var(--ops-muted)]">{b.rescheduledTime}</div>
                           <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] bg-transparent text-[#1E3A5F] border border-[#C7D2E0]">Rescheduled</span>
+                          <InspectionTiming date={b.rescheduledDate} />
                         </div>
                       ) : (
                         <div>
                           <div className="text-[13px] text-[var(--ops-text)]">{formatDate(b.preferredDate)}</div>
                           <div className="text-[11px] text-[var(--ops-muted)]">{b.preferredTime}</div>
+                          <InspectionTiming date={b.preferredDate} />
                         </div>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium border ${statusColors[b.status]}`}>{statusLabels[b.status]}</span>
+                      <StatusBadge status={b.status === "closed" && b.outcome ? "closed" : b.status} />{b.status === "closed" && b.outcome ? <span className="ml-1"><StatusBadge status={b.outcome} /></span> : null}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium border ${temperatureColors[b.leadTemperature]}`}>{b.leadTemperature.toUpperCase()}</span>
+                      <StatusBadge status={b.leadTemperature} />
                     </td>
                     <td className="px-4 py-3">
-                      <AgentCell agent={(b as any).agent} />
+                      <AgentCell agent={(b as any).agent} customerEmail={b.email} customerPhone={b.phone} />
                     </td>
                     <td className="px-4 py-3">
                       {b.outcome ? (
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className={`inline-flex px-2 py-1 rounded-full text-[11px] font-medium border ${b.outcome === "sold" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : b.outcome === "interested" ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]"}`}>{b.outcome}</span>
-                          {(b as any).receiptSentAt && b.outcome === "sold" ? (
-                            <a href={`/receipts/${b.ref}`} target="_blank" className="inline-flex items-center gap-1 mono text-[10px] px-2 py-0.5 rounded-full bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] hover:bg-[#D1FAE5]">
-                              Receipt sent ↗
-                            </a>
-                          ) : null}
-                        </div>
+                        <StatusBadge status={b.outcome} />
                       ) : (
                         <span className="text-[12px] text-[var(--ops-muted)]">—</span>
                       )}
@@ -398,8 +419,8 @@ export default async function AdminBookingsPage({
                   <div className="text-[12px] text-[var(--ops-muted)] break-all">{b.email}</div>
                 </div>
                 <div className="flex flex-col gap-1.5 items-end shrink-0">
-                  <span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${statusColors[b.status]}`}>{statusLabels[b.status]}</span>
-                  <span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${temperatureColors[b.leadTemperature]}`}>{b.leadTemperature.toUpperCase()}</span>
+                  <StatusBadge status={b.status} />
+                  <StatusBadge status={b.leadTemperature} />
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -413,7 +434,7 @@ export default async function AdminBookingsPage({
                 </div>
                 <div>
                   <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Agent</div>
-                  <div className="mt-1"><AgentCell agent={(b as any).agent} /></div>
+                  <div className="mt-1"><AgentCell agent={(b as any).agent} customerEmail={b.email} customerPhone={b.phone} /></div>
                 </div>
                 <div>
                   <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Outcome</div>

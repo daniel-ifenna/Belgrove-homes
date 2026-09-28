@@ -6,6 +6,8 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
+import StatusBadge from "@/components/admin/StatusBadge";
+import { formatDate } from "@/lib/booking-ui";
 import { getCollectedRevenue } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 
@@ -44,10 +46,11 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
   // Remove undefined OR entries
   if (where.OR) where.OR = where.OR.filter((v: any) => v.amount === undefined || typeof v.amount === "number");
 
-  const [payments, total, collected, pendingCount] = await Promise.all([
+  const [payments, total, collected, pendingCount, statusCounts] = await Promise.all([
     prisma.payment.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      // Pending first, then newest — the queue floats to the top.
+      orderBy: [{ status: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: {
@@ -55,7 +58,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
         installment: { select: { installmentNumber: true, type: true } },
         recordedBy: { select: { name: true } },
         confirmedBy: { select: { name: true } },
-        receipt: { select: { ref: true, status: true } },
+        receipt: { select: { id: true, ref: true, status: true } },
       },
     }),
     prisma.payment.count({ where }),
@@ -63,6 +66,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
     // CONFIRMED payments on real transactions only.
     getCollectedRevenue(),
     prisma.payment.count({ where: { transaction: { isTest: false }, status: "PENDING_VERIFICATION" } }),
+    prisma.payment.groupBy({ by: ["status"], where, _count: { status: true } }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -112,7 +116,8 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
                 { label: "Failed", value: "FAILED" },
               ].map((f) => {
                 const active = (status ?? "") === f.value;
-                return <Link key={f.label} href={`/admin/payments${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}>{f.label}</Link>;
+                const n = f.value ? (statusCounts.find((c) => c.status === f.value)?._count.status ?? 0) : total;
+                return <Link key={f.label} href={`/admin/payments${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}>{f.label} ({n})</Link>;
               })}
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -145,6 +150,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
               <thead>
                 <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
                   <th className="px-4 py-3">Payment Ref</th>
+                  <th className="px-4 py-3">Bank Ref</th>
                   <th className="px-4 py-3">Receipt</th>
                   <th className="px-4 py-3">Transaction</th>
                   <th className="px-4 py-3">Customer</th>
@@ -153,22 +159,23 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
                   <th className="px-4 py-3">Method</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3">Confirmed By</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--ops-border)]/60">
                 {payments.map((p: any) => (
                   <tr key={p.id} className="hover:bg-[var(--ops-bg)]/50">
-                    <td className="px-4 py-3 font-mono text-[11px] row-lead">{p.paymentReference}{p.bankReference && <div className="mono text-[10px] text-[var(--ops-muted)]">bank: {p.bankReference}</div>}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] row-lead"><Link href={`/admin/transactions/${p.transactionId}#payment-${p.id}`} className="text-[var(--ops-primary)] hover:underline">{p.paymentReference}</Link></td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-[var(--ops-muted)]">{p.bankReference ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "—"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><div className="mono text-[10px] text-[var(--ops-muted)]">{p.transaction.estate}</div></td>
                     <td className="px-4 py-3"><div className="text-[13px] leading-none break-all">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-all">{p.transaction.customerEmail}</div></td>
                     <td className="px-4 py-3 mono text-[11px]">{p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "—"}</td>
                     <td className="px-4 py-3 mono text-[12px] font-medium text-right price">{formatNaira(p.amount)}</td>
                     <td className="px-4 py-3 mono text-[11px]">{p.paymentMethod ?? "—"}</td>
-                    <td className="px-4 py-3"><span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-medium border ${p.status === "CONFIRMED" ? "bg-[#1F6B3E] text-white border-[#1F6B3E]" : p.status === "PENDING_VERIFICATION" ? "bg-transparent text-[#8B6B1F] border-[#C89B3C]" : "bg-[#A6402F] text-white border-[#A6402F]"}`}>{p.status.replace("_", " ")}</span></td>
-                    <td className="px-4 py-3 mono text-[11px]">{new Date(p.paymentDate).toLocaleDateString("en-GB")}</td>
-                    <td className="px-4 py-3 text-right"><Link href={`/admin/transactions/${p.transactionId}`} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 hover:bg-[var(--ops-bg)]">View</Link></td>
+                    <td className="px-4 py-3"><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" /></td>
+                    <td className="px-4 py-3 mono text-[11px]">{formatDate(p.paymentDate)}</td>
+                    <td className="px-4 py-3 mono text-[11px]">{p.confirmedBy?.name ?? "—"}</td>
                   </tr>
                 ))}
                 {payments.length === 0 && (

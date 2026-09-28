@@ -1,4 +1,5 @@
 import Link from "next/link";
+import StatusBadge from "@/components/admin/StatusBadge";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { auth } from "@/auth";
@@ -12,21 +13,6 @@ export const dynamic = "force-dynamic";
 type SearchParams = { q?: string; status?: string; plan?: string; page?: string; showTest?: string };
 
 const PAGE_SIZE = 25;
-
-function statusBadge(status: string) {
-  switch (status) {
-    case "PAID_IN_FULL":
-      return "bg-[#16281D] text-white border-[#16281D]";
-    case "ACTIVE":
-      return "bg-[#1F6B3E] text-white border-[#1F6B3E]";
-    case "DRAFT":
-      return "bg-transparent text-[#6B6252] border-[#D8CFC0]";
-    case "CANCELLED":
-      return "bg-[#A6402F] text-white border-[#A6402F]";
-    default:
-      return "bg-[#E4D8C1] text-[#6B6252] border-[#E4D8C1]";
-  }
-}
 
 export default async function TransactionsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const session = await auth();
@@ -175,7 +161,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                         {overdue > 0 && <div className="mono text-[10px] text-[#9F1239]">{overdue} overdue</div>}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium border ${statusBadge(t.status)}`}>{t.status.replace("_", " ")}</span>
+                        <StatusBadge status={t.status} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link href={`/admin/transactions/${t.id}`} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 hover:bg-[var(--ops-bg)]">View</Link>
@@ -207,7 +193,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                   <div className="font-mono text-[12px] font-medium text-[var(--ops-primary)]">{t.ref}</div>
                   <div className="text-[14px] font-medium mt-1 break-all">{t.customerName}</div>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${statusBadge(t.status)}`}>{t.status}</span>
+                <StatusBadge status={t.status} />
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Property</div><div className="text-[13px] break-words">{t.estate}</div></div>

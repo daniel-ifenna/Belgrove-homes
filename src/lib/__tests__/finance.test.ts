@@ -3,6 +3,7 @@ import {
   getCollectedRevenue,
   getMonthlyTargetProgress,
   getOverdueInstallments,
+  getPendingVerification,
   getRevenueSparkline,
   getTransactionOverviews,
   getTransactionSummary,
@@ -71,6 +72,7 @@ const fakeDb: FinanceDb = {
     aggregate: async (args: { where: Where }) => ({
       _sum: { amount: PAYMENTS.filter((p) => matchPayment(p, args.where)).reduce((s, p) => s + p.amount, 0) || null },
     }),
+    count: async (args: { where: Where }) => PAYMENTS.filter((p) => matchPayment(p, args.where)).length,
     findMany: async (args: { where: Where }) => PAYMENTS.filter((p) => matchPayment(p, args.where)),
   },
   installment: {
@@ -105,6 +107,11 @@ describe("finance: collected revenue", () => {
     await expect(getTransactionSummary("tX", fakeDb, NOW)).resolves.toBe(null);
     const shown = await getTransactionSummary("tX", fakeDb, NOW, { includeTest: true });
     expect(shown?.confirmedPaid).toBe(10_000_000);
+  });
+
+  it("pending verification counts but never collects", async () => {
+    await expect(getPendingVerification(fakeDb)).resolves.toEqual({ count: 1, total: 1_450_000 });
+    await expect(getPendingVerification(fakeDb, { includeTest: true })).resolves.toEqual({ count: 1, total: 1_450_000 });
   });
 });
 

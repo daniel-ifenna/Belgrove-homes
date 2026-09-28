@@ -38,6 +38,7 @@ export type ReceiptData = {
   totalPaidAfter?: number;
   outstandingBalance?: number;
   transactionRef?: string;
+  installmentLabel?: string;
 };
 
 const COMPANY = {
@@ -254,12 +255,14 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
     const details: [string, string][] = [];
     if (ext.paymentPlanName) details.push(["Payment Plan:", ext.paymentPlanName]);
     if (ext.interestAmount !== undefined) details.push(["Interest:", formatNaira(ext.interestAmount)]);
-    if (ext.totalPayable !== undefined) details.push(["Total Payable:", formatNaira(ext.totalPayable)]);
+    if (typeof data.discount === "number" && data.discount > 0) details.push(["Discount:", formatNaira(data.discount)]);
+    if (ext.installmentLabel) details.push(["Installment:", ext.installmentLabel]);
+    if (ext.totalPayable !== undefined) details.push(["Total price:", formatNaira(ext.totalPayable)]);
     if (ext.previouslyPaid !== undefined) details.push(["Previously Paid:", formatNaira(ext.previouslyPaid)]);
-    details.push(["Current Payment:", formatNaira(data.amountPaid)]);
-    if (ext.totalPaidAfter !== undefined) details.push(["Total Paid:", formatNaira(ext.totalPaidAfter)]);
-    else details.push(["Total Paid:", formatNaira(data.amountPaid)]);
-    if (ext.outstandingBalance !== undefined) details.push(["Outstanding Balance:", formatNaira(ext.outstandingBalance)]);
+    details.push(["This payment:", formatNaira(data.amountPaid)]);
+    if (ext.totalPaidAfter !== undefined) details.push(["Paid to date:", formatNaira(ext.totalPaidAfter)]);
+    else details.push(["Paid to date:", formatNaira(data.amountPaid)]);
+    if (ext.outstandingBalance !== undefined) details.push(["Balance remaining:", formatNaira(ext.outstandingBalance)]);
     for (const [label, val] of details) {
       doc.setFont(fontName, "bold");
       doc.text(label, margin, y);

@@ -263,7 +263,7 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       finalAmount: payment.amount,
       amountInWords: amountToWords(payment.amount),
       currency: "NGN",
-      paymentDescription: `Payment for ${installment ? (installment.type === "INITIAL" ? "Initial Payment" : `Month ${installment.installmentNumber}`) : "Payment"} — ${transaction.estate}`,
+      paymentDescription: describePayment(installment, transaction),
       paymentMethod: payment.paymentMethod,
       paymentHistory: [{ date: issuedDateStr, method: payment.paymentMethod ?? "Bank Transfer", amount: payment.amount }],
       unitPrice: transaction.unitPrice,
@@ -325,6 +325,20 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
     newOutstanding,
     isPaidInFull,
   };
+}
+
+// Human payment description, e.g.
+// "Initial payment — Belgrove Peninsula, 3-Bedroom Terrace Duplex (PEN-150SQM)".
+// Never "Payment for Initial Payment".
+export function describePayment(
+  installment: { type: string; installmentNumber: number } | null,
+  transaction: { estate: string; unitType?: string | null; plotCode?: string | null }
+): string {
+  const kind =
+    !installment || installment.type === "INITIAL" ? "Initial payment" : `Month ${installment.installmentNumber} payment`;
+  const unit = transaction.unitType ? `, ${transaction.unitType}` : "";
+  const plot = transaction.plotCode ? ` (${transaction.plotCode})` : "";
+  return `${kind} — ${transaction.estate}${unit}${plot}`;
 }
 
 export type VoidDbResult = {
