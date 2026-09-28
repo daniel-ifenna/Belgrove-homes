@@ -5,10 +5,8 @@ import { useState, useEffect } from "react";
 import ContactModal from "./ContactModal";
 
 const links = [
-  { href: "/#estates", label: "ESTATES" },
   { href: "/gallery", label: "GALLERY" },
   { href: "/about", label: "ABOUT" },
-  { href: "/faq", label: "FAQ" },
 ];
 
 export default function Nav() {
