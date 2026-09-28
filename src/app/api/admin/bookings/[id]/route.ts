@@ -5,6 +5,7 @@ import { bookingActionSchema } from "@/lib/validation";
 import { isTransitionAllowed, actionLabels, isEscalation } from "@/lib/booking-transitions";
 import { isInternalRole } from "@/lib/authz";
 import { phonesMatch } from "@/lib/phone";
+import { scheduledInspectionStart } from "@/lib/inspection-time";
 import type { EmailResult } from "@/lib/email/sendEmail";
 import type { InspectionBooking, BookingStatus } from "@/generated/prisma/client";
 import {
@@ -275,19 +276,38 @@ export async function PATCH(
     }
 
     case "mark_active": {
+      // Inspection timing rule: the inspection cannot be marked complete
+      // before its scheduled start unless an override reason is given
+      // (recorded in the audit trail).
+      const start = scheduledInspectionStart(booking);
+      const override = (input as { overrideReason?: string }).overrideReason?.trim();
+      if (start && new Date() < start && !override) {
+        return NextResponse.json(
+          { error: `The inspection is scheduled for ${start.toLocaleString("en-GB")}. Provide an override reason to mark it active early.` },
+          { status: 400 }
+        );
+      }
       // internalNote now appends to InternalNote + activity; still store latest in internalNote for backward compat
       updated = await prisma.inspectionBooking.update({
         where: { id },
-        data: { status: "active", internalNote: input.internalNote },
+        data: { status: "active", internalNote: input.internalNote, inspectedAt: new Date() },
       });
       await prisma.internalNote.create({
         data: { bookingId: id, authorId: actorId, authorName: actorName, body: input.internalNote },
       });
-      note = input.internalNote;
+      note = override ? `${input.internalNote} (early-activation override: ${override})` : input.internalNote;
       break;
     }
 
     case "record_outcome": {
+      // New outcomes require a recorded inspection time — the inspection must
+      // have been marked active first. (Legacy closed rows predate the rule.)
+      if (!booking.inspectedAt) {
+        return NextResponse.json(
+          { error: "Record the inspection first (mark active) before recording an outcome." },
+          { status: 400 }
+        );
+      }
       // Interested is an intermediate state — auto hot, do NOT close, allow next step to Sold/Not Sold
       if (input.outcome === "interested") {
         const shouldHeat = booking.leadTemperature !== "hot";

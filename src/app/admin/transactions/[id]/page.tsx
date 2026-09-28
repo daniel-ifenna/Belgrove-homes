@@ -80,6 +80,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{transaction.ref}</h1>
                 <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${transaction.status === "PAID_IN_FULL" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : transaction.status === "ACTIVE" ? "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>{transaction.status.replace("_", " ")}</span>
                 {transaction.booking && <Link href={`/admin/bookings/${transaction.booking.id}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">Booking {transaction.booking.ref} ↗</Link>}
+                {!transaction.booking && transaction.manualReason && <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {transaction.manualReason}</span>}
               </div>
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Created {formatDateTime(transaction.createdAt)} · {transaction.installments.length} installments · {overdueCount} overdue</div>
             </div>
@@ -187,6 +188,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                             <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(p.paymentDate)}</span>
                           </div>
                           <div className="mono text-[11px] text-[var(--ops-muted)]">{inst ? `${inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`}` : "Payment"} · {p.paymentMethod ?? "—"}{p.notes ? ` · ${p.notes}` : ""}</div>
+                          <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{(p as any).paymentReference ?? ""}</div>
                           <div className="mt-1.5">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border ${paymentStatusBadge(p.status)}`}>
                               {p.status === "PENDING_VERIFICATION" ? "Pending verification" : p.status.replace("_", " ")}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
+import { generateUniquePaymentRef } from "@/lib/ref";
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       data: {
         transactionId: id,
         installmentId: installmentIdToUse,
+        paymentReference: await generateUniquePaymentRef(),
         amount: amt,
         paymentDate: date,
         paymentMethod: paymentMethod || "Bank Transfer",

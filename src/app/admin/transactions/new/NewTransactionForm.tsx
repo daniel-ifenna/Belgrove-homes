@@ -28,6 +28,7 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
 
   const [paymentPlanCode, setPaymentPlanCode] = useState(plans[0]?.code ?? "OUTRIGHT");
   const [agentId, setAgentId] = useState("");
+  const [manualReason, setManualReason] = useState("");
 
   const [initialAmount, setInitialAmount] = useState("");
   const [initialDate, setInitialDate] = useState(new Date().toISOString().slice(0, 10));
@@ -106,7 +107,7 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
     }
   }
 
-  const canSubmit = customerName.trim() && customerEmail.trim() && estate.trim() && unitPriceNum > 0 && qtyNum > 0 && selectedPlan;
+  const canSubmit = customerName.trim() && customerEmail.trim() && estate.trim() && unitPriceNum > 0 && qtyNum > 0 && selectedPlan && (bookingLinked || manualReason.trim());
 
   async function handleSubmit() {
     setBusy(true);
@@ -128,6 +129,7 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
           paymentPlanCode,
           bookingId: bookingId || undefined,
           agentId: agentId || undefined,
+          manualReason: bookingId ? undefined : manualReason.trim() || undefined,
           initialPayment: withInitialPayment && initAmtNum > 0 ? { amount: initAmtNum, paymentDate: initialDate, paymentMethod: initialMethod } : undefined,
         }),
       });
@@ -168,6 +170,12 @@ export default function NewTransactionForm({ plans, agents, bookings, initialBoo
               ))}
             </select>
             <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">If selected, client/property auto-fills and transaction will be linked to that booking.</p>
+            {!bookingLinked && (
+              <div className="mt-3">
+                <label className="mono text-[11px] text-[var(--ops-muted)]">Reason for no booking *</label>
+                <input value={manualReason} onChange={(e) => setManualReason(e.target.value)} placeholder="e.g. Walk-in client, no inspection booked" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white" />
+              </div>
+            )}
           </>
         )}
       </div>

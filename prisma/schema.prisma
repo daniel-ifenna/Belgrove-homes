@@ -95,6 +95,10 @@ model InspectionBooking {
   // Locking — once closed, only reopen can mutate
   lockedAt DateTime?
 
+  // When the inspection actually happened (set by mark_active). record_outcome
+  // requires it; the Completed Inspections page orders by it.
+  inspectedAt DateTime?
+
   // Test-data flag (Phase 1): records marked here never appear in metrics,
   // queues, or default list results. See scripts/mark-test-data.ts.
   isTest Boolean @default(false)
@@ -431,6 +435,9 @@ model Transaction {
   // Canonical customer link (nullable during migration/backfill)
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // Why this transaction exists without a booking (required when bookingId
+  // is null — enforced server-side; legacy rows predate the rule).
+  manualReason String?
   createdById String?
   createdBy User? @relation("TransactionCreatedBy", fields: [createdById], references: [id])
   createdAt DateTime @default(now())
@@ -477,7 +484,7 @@ model Payment {
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   installmentId String?
   installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
-  paymentReference String @unique @default(cuid()) // internal payment ref, or could be PAY-YYYY-XXXXX
+  paymentReference String @unique // PAY-YYYY-XXXXX (backfilled; generator-required, no default)
   amount Int
   paymentDate DateTime
   paymentMethod String?

@@ -23,6 +23,7 @@ type Row = {
   agentName: string | null;
   status: string;
   preferredDate: string;
+  inspectedAt: string | null;
 };
 
 function getPlotPrice(estate: string | null, plotCode: string | null, sqm: number | null): number | null {

@@ -68,10 +68,15 @@ export async function POST(request: NextRequest) {
     paymentPlanCode,
     bookingId,
     agentId,
+    manualReason,
   } = body;
 
   if (!customerName?.trim() || !customerEmail?.trim() || !estate?.trim() || !unitPrice || !paymentPlanCode) {
     return NextResponse.json({ error: "Missing required fields: customerName, customerEmail, estate, unitPrice, paymentPlanCode" }, { status: 400 });
+  }
+  // Server-side rule: a transaction must have bookingId OR a non-empty manualReason.
+  if (!bookingId && !manualReason?.trim()) {
+    return NextResponse.json({ error: "A reason is required for transactions without a booking" }, { status: 400 });
   }
 
   const qty = Number(plotQuantity) || 1;
@@ -104,6 +109,7 @@ export async function POST(request: NextRequest) {
         paymentPlanCode,
         agentId: agentId || null,
         createdById: session!.user.id,
+        manualReason: manualReason.trim(),
       });
     }
 

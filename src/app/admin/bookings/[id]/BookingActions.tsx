@@ -58,6 +58,7 @@ export default function BookingActions({
   const [rescheduledTime, setRescheduledTime] = useState("");
   const [notifyClient, setNotifyClient] = useState(true);
   const [activeNote, setActiveNote] = useState("");
+  const [activeOverride, setActiveOverride] = useState("");
 
   // Assign + typeahead search-only, no full dropdown
   const [agentQuery, setAgentQuery] = useState("");
@@ -370,8 +371,14 @@ export default function BookingActions({
             rows={3}
             className="w-full border border-[var(--line)] rounded-xl px-3 py-2 text-sm"
           />
+          <input
+            value={activeOverride}
+            onChange={(e) => setActiveOverride(e.target.value)}
+            placeholder="Override reason — only if marking active before the scheduled time"
+            className="mt-2 w-full border border-[var(--line)] rounded-xl px-3 py-2 text-sm"
+          />
           <button
-            onClick={() => run("mark_active", { internalNote: activeNote })}
+            onClick={() => run("mark_active", { internalNote: activeNote, overrideReason: activeOverride || undefined })}
             disabled={busy !== null || !activeNote.trim()}
             className="mt-3 text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50"
           >

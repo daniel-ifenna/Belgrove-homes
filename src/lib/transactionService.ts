@@ -1,24 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { generateRef } from "@/lib/ref";
+import { generateUniqueTransactionRef } from "@/lib/ref";
 import { calculateTransactionAmounts, generateInstallmentSchedule } from "@/lib/paymentCalculation";
 import { findOrCreateCustomer } from "@/lib/customer";
 import { normalizeName } from "@/lib/phone";
-import { randomInt } from "node:crypto";
-
-function generateTransactionRef(): string {
-  const year = new Date().getFullYear();
-  const seq = randomInt(10000, 100000);
-  return `TXN-${year}-${seq}`;
-}
-
-async function generateUniqueTransactionRef(): Promise<string> {
-  for (let i = 0; i < 5; i++) {
-    const ref = generateTransactionRef();
-    const existing = await prisma.transaction.findUnique({ where: { ref }, select: { id: true } });
-    if (!existing) return ref;
-  }
-  throw new Error("Failed to generate unique transaction ref");
-}
 
 export async function createTransactionFromBooking(
   bookingId: string,
@@ -104,7 +88,11 @@ export async function createManualTransaction(params: {
   paymentPlanCode: string;
   agentId?: string | null;
   createdById?: string | null;
+  manualReason: string;
 }) {
+  if (!params.manualReason?.trim()) {
+    throw new Error("A reason is required for transactions without a booking");
+  }
   const plan = await prisma.paymentPlan.findUnique({ where: { code: params.paymentPlanCode } });
   if (!plan || !plan.isActive) throw new Error("Payment plan not found");
 
@@ -129,6 +117,7 @@ export async function createManualTransaction(params: {
         ref,
         bookingId: null,
         customerId: customer.id,
+        manualReason: params.manualReason.trim(),
         customerName: normalizeName(params.customerName) ?? params.customerName,
         customerEmail: params.customerEmail,
         customerPhone: params.customerPhone,

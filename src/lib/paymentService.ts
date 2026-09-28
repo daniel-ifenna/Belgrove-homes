@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { generateUniqueReceiptRef } from "@/lib/ref";
+import { generateUniquePaymentRef, generateUniqueReceiptRef } from "@/lib/ref";
 import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/lib/app-url";
 import { receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
@@ -60,6 +60,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
   }
 
   const receiptRef = await generateUniqueReceiptRef();
+  const paymentRef = await generateUniquePaymentRef();
   getAppUrl(); // throws in production when APP_URL is missing — fail before any write
   const accessToken = generateReceiptAccessToken();
   const receiptUrl = getReceiptAccessUrl(accessToken);
@@ -72,6 +73,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
         data: {
           transactionId: transaction.id,
           installmentId: installment!.id,
+          paymentReference: paymentRef,
           amount: params.amount,
           paymentDate: params.paymentDate,
           paymentMethod: params.paymentMethod,

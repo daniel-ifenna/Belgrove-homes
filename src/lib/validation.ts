@@ -67,6 +67,8 @@ export const bookingActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("mark_active"),
     internalNote: z.string().trim().min(1, "Internal note is required"),
+    // Required to mark the inspection active before its scheduled start.
+    overrideReason: z.string().trim().max(500).optional(),
     ...concurrency,
   }),
   z.object({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { generateRef, generateUniqueRef } from "@/lib/ref";
+import { prefixedRef, generateUniqueBookingRef } from "@/lib/ref";
 import { bookingSubmissionSchema } from "@/lib/validation";
 import { sendBookingReceived, sendAdminNewBookingAlert } from "@/lib/email/emailService";
 
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Preferred date cannot be in the past" }, { status: 400 });
   }
 
-  // generateUniqueRef checks for a collision before insert, but that check
+  // generateUniqueBookingRef checks for a collision before insert, but that check
   // and the insert aren't atomic under concurrent submissions two requests
   // could both pass the check for the same ref. Retry on the DB's unique
   // constraint as the actual source of truth.
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     console.error("Booking duplicate-window lookup failed", e);
   }
 
-  let ref = await generateUniqueRef();
+  let ref = await generateUniqueBookingRef();
   const { findOrCreateCustomer } = await import("@/lib/customer");
   const { normalizeEmail, normalizeName, normalizePhoneE164 } = await import("@/lib/phone");
   const customerName = normalizeName(name) ?? name;
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       break;
     } catch (err) {
       if (isUniqueRefConflict(err) && attempt < 4) {
-        ref = generateRef();
+        ref = prefixedRef("BKG");
         continue;
       }
       throw err;

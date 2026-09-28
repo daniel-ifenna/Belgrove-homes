@@ -11,7 +11,7 @@ export default async function CompletedInspectionsPage({ searchParams }: { searc
   const testFilter = showTest ? {} : { isTest: false };
   const rows = await prisma.inspectionBooking.findMany({
     where: { status: "active", ...testFilter },
-    orderBy: [{ updatedAt: "desc" }],
+    orderBy: [{ inspectedAt: "desc" }, { updatedAt: "desc" }],
     include: { agent: true },
     take: 100,
   });
@@ -38,6 +38,7 @@ export default async function CompletedInspectionsPage({ searchParams }: { searc
     agentName: b.agentName,
     status: b.status,
     preferredDate: b.preferredDate.toISOString(),
+    inspectedAt: b.inspectedAt ? b.inspectedAt.toISOString() : null,
   }));
 
   return (

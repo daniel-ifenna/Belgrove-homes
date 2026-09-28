@@ -31,6 +31,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
     where: { id },
     include: {
       booking: { select: { id: true, ref: true, status: true, location: true } },
+      transaction: { select: { id: true, ref: true, bookingId: true, manualReason: true, booking: { select: { id: true, ref: true } } } },
       agent: { select: { name: true, email: true } },
       createdBy: { select: { name: true, email: true } },
       sendAttempts: { orderBy: { attemptedAt: "desc" } },
@@ -100,7 +101,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Unit</span><span className="font-medium">{receipt.unitType ?? "—"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SKU / Plot Code</span><span className="font-mono text-[12px]">{receipt.plotCode ?? "—"}</span></div>
                 {receipt.sqm && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SQM</span><span className="font-medium">{receipt.sqm}sqm</span></div>}
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sale / Booking</span>{receipt.bookingId ? <Link href={`/admin/bookings/${receipt.bookingId}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.booking?.ref ?? receipt.bookingId.slice(0, 8)}</Link> : <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — no booking</span>}</div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sale / Booking</span>{receipt.transaction?.booking ? <Link href={`/admin/bookings/${receipt.transaction.booking.id}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.transaction.booking.ref}</Link> : receipt.transaction?.manualReason ? <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — {receipt.transaction.manualReason}</span> : receipt.bookingId ? <Link href={`/admin/bookings/${receipt.bookingId}`} className="text-[var(--ops-primary)] hover:underline font-mono text-[12px]">{receipt.booking?.ref ?? receipt.bookingId.slice(0, 8)}</Link> : <span className="mono text-[11px] text-[var(--ops-muted)]">Manual — no booking</span>}</div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Source</span><span className={`px-2 py-1 rounded-full text-[11px] font-medium border ${receipt.source === "ADMIN_MANUAL" ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]"}`}>{receipt.source === "ADMIN_MANUAL" ? "Manual" : "Booking"}</span></div>
               </div>
             </div>
