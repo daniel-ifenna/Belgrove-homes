@@ -65,3 +65,10 @@ export async function findOrCreateCustomer(input: CustomerInput, db: CustomerDb 
   const created = await db.customer.create({ data: { name, email, phone } });
   return { id: created.id };
 }
+
+// Test-data propagation (scripts/mark-test-data.ts): a customer is flagged
+// isTest when it has at least one linked record and every linked record is
+// itself flagged isTest. Unlinked or mixed customers stay real.
+export function customerShouldBeTest(linkedIsTestFlags: boolean[]): boolean {
+  return linkedIsTestFlags.length > 0 && linkedIsTestFlags.every(Boolean);
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findOrCreateCustomer, type CustomerDb } from "../customer";
+import { findOrCreateCustomer, customerShouldBeTest, type CustomerDb } from "../customer";
 import { normalizeEmail, normalizeName, normalizePhoneE164, phonesMatch } from "../phone";
 
 type Row = { id: string; name: string; email: string; phone: string | null; secondaryPhones: string[] };
@@ -91,5 +91,15 @@ describe("findOrCreateCustomer", () => {
     const { db } = mockDb();
     await expect(findOrCreateCustomer({ name: "  ", email: "a@x.com" }, db)).rejects.toThrow(/name/i);
     await expect(findOrCreateCustomer({ name: "A", email: "  " }, db)).rejects.toThrow(/email/i);
+  });
+});
+
+describe("customerShouldBeTest", () => {
+  it("flags only when linked rows exist and all are test", () => {
+    expect(customerShouldBeTest([true, true])).toBe(true);
+    expect(customerShouldBeTest([true])).toBe(true);
+    expect(customerShouldBeTest([true, false])).toBe(false);
+    expect(customerShouldBeTest([false])).toBe(false);
+    expect(customerShouldBeTest([])).toBe(false);
   });
 });

@@ -6,6 +6,7 @@
 // Default is --dry-run: prints exactly what would change.
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma.js";
+import { customerShouldBeTest } from "../src/lib/customer.js";
 
 const APPLY = process.argv.includes("--apply");
 
@@ -38,10 +39,35 @@ async function main() {
   console.log(`receipts inheriting test status via transaction: ${receipts.length}`);
   for (const r of receipts) console.log(`  RECEIPT ${r.ref} ₦${r.finalAmount.toLocaleString("en-NG")}`);
 
+  // Propagate to customers whose linked records are ALL test (unlinked or
+  // mixed customers stay real).
+  const customers = await prisma.customer.findMany({
+    where: { isTest: false },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      bookings: { select: { ref: true, isTest: true } },
+      transactions: { select: { ref: true, isTest: true } },
+    },
+    orderBy: { email: "asc" },
+  });
+  const flaggable = customers.filter((c) =>
+    customerShouldBeTest([...c.bookings.map((b) => b.isTest), ...c.transactions.map((t) => t.isTest)])
+  );
+  console.log(`customers to flag (all linked rows test): ${flaggable.length}`);
+  for (const c of flaggable) {
+    const refs = [...c.bookings.map((b) => b.ref), ...c.transactions.map((t) => t.ref)].join(", ");
+    console.log(`  CUSTOMER ${c.name} <${c.email}> [${refs}] → isTest=true`);
+  }
+  const skipped = customers.length - flaggable.length;
+  if (skipped > 0) console.log(`  (${skipped} customers left real: unlinked or mixed)`);
+
   if (APPLY) {
     const b = await prisma.inspectionBooking.updateMany({ where: { isTest: false }, data: { isTest: true } });
     const t = await prisma.transaction.updateMany({ where: { isTest: false }, data: { isTest: true } });
-    console.log(`Applied: ${b.count} bookings, ${t.count} transactions flagged isTest=true.`);
+    const c = await prisma.customer.updateMany({ where: { id: { in: flaggable.map((x) => x.id) } }, data: { isTest: true } });
+    console.log(`Applied: ${b.count} bookings, ${t.count} transactions, ${c.count} customers flagged isTest=true.`);
   } else {
     console.log("Dry run complete — re-run with --apply to write changes.");
   }
