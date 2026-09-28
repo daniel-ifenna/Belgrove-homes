@@ -1,55 +1,63 @@
 import Link from "next/link";
+import { SITE_CONTACT } from "@/lib/site";
 
 export default function Footer() {
   return (
-    <footer className="bg-[#16281D] text-[#F5EFE2] mt-0">
-      <div className="max-w-[1280px] mx-auto px-6 lg:px-8 py-12 lg:py-14">
+    <footer id="contact" className="text-[#F5EFE2] scroll-mt-20" style={{ background: "#0E2019" }}>
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-12 py-12 lg:py-14">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
-          <div>
+          <div className="lg:col-span-2">
             <div className="flex items-baseline gap-1">
               <span className="font-serif text-[20px] tracking-[-0.02em] text-[#F5EFE2] font-semibold">Belgrove</span>
               <span className="font-serif text-[20px] tracking-[-0.02em] text-[#C89B3C] font-semibold">Homes</span>
             </div>
-            <p className="public text-[13px] leading-[1.6] text-[#B9C4B8] mt-3 max-w-[32ch]">Verified land. Honest pricing. A named adviser.</p>
-            <p className="public text-[12px] leading-[1.6] text-[#B9C4B8]/70 mt-3 max-w-[32ch]">Headquartered in Abuja. FCTA approved. Building trust plot by plot since 2025.</p>
+            <p className="public text-[13px] leading-[1.6] text-[#B9C4B8] mt-3">Verified land in Abuja.</p>
+            <p className="mono text-[11px] tracking-[0.1em] uppercase text-[#B9C4B8]/80 mt-2">
+              Belgrove Homes and Properties Limited
+              {SITE_CONTACT.rcNumber ? ` · RC ${SITE_CONTACT.rcNumber}` : ""}
+            </p>
           </div>
-          <div>
-            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Contact</h4>
-            <div className="mt-4 space-y-2">
-              <p className="public text-[13px] leading-[1.5] text-[#B9C4B8]">Ste 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory</p>
-              <p className="public text-[13px] leading-none text-[#B9C4B8]"><a href="mailto:info@belgrovehomes.com" className="hover:text-[#F5EFE2] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#E8C77A] focus-visible:outline-offset-2">info@belgrovehomes.com</a> · <a href="https://www.belgrovehomes.com" className="hover:text-[#F5EFE2] transition-colors">www.belgrovehomes.com</a></p>
-              <p className="public text-[13px] leading-none text-[#B9C4B8]"><a href="tel:+2348103760063" className="hover:text-[#F5EFE2] transition-colors">+234 8103760063</a></p>
-            </div>
-          </div>
-          <div>
-            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Estates</h4>
+          <nav aria-label="Estates">
+            <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C]">Estates</h4>
             <ul className="mt-4 space-y-2.5">
               <li><Link href="/estates/aurum-residence" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Aurum Residence</Link></li>
               <li><Link href="/estates/belgrove-peninsula" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Belgrove Peninsula</Link></li>
               <li><Link href="/estates/sunrise-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Sunrise Estate</Link></li>
               <li><Link href="/estates/starlight-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Starlight Estate</Link></li>
             </ul>
-          </div>
-          <div>
-            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Company</h4>
+          </nav>
+          <nav aria-label="Company">
+            <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C]">Company</h4>
             <ul className="mt-4 space-y-2.5">
               <li><Link href="/about" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">About</Link></li>
+              <li><Link href="/about#leadership" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Leadership</Link></li>
+              <li><Link href="/blog" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Guides</Link></li>
               <li><Link href="/faq" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">FAQ</Link></li>
-              <li><Link href="/gallery" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Gallery</Link></li>
-              <li><Link href="/book-inspection" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Book Inspection</Link></li>
             </ul>
-          </div>
+          </nav>
           <div>
-            <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#E8C77A]">Follow</h4>
-            <div className="mt-4 flex gap-4">
-              <a href="https://www.instagram.com/belgrove_homes?stkn=MTdjZWgyeW9jMWY3Nw==" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#E8C77A] focus-visible:outline-offset-2">Instagram</a>
-              <a href="https://www.tiktok.com/@belgrove.homes?_r=1&_t=ZS-99fISorFEkD" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#E8C77A] focus-visible:outline-offset-2">TikTok</a>
+            <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C]">Contact</h4>
+            <div className="mt-4 space-y-2">
+              {SITE_CONTACT.phones.map((p) => (
+                <p key={p} className="public text-[13px] leading-[1.5] text-[#B9C4B8]">
+                  <a href={`tel:${p.replace(/\s/g, "")}`} className="hover:text-[#F5EFE2] transition-colors">{p}</a>
+                </p>
+              ))}
+              <p className="public text-[13px] leading-[1.5] text-[#B9C4B8]">
+                <a href={`mailto:${SITE_CONTACT.email}`} className="hover:text-[#F5EFE2] transition-colors">{SITE_CONTACT.email}</a>
+              </p>
+              <p className="public text-[13px] leading-[1.5] text-[#B9C4B8]">{SITE_CONTACT.address}</p>
+            </div>
+            <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C] mt-6">Follow</h4>
+            <div className="mt-3 flex gap-5">
+              <a href="https://www.instagram.com/belgrove_homes?stkn=MTdjZWgyeW9jMWY3Nw==" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Instagram</a>
+              <a href="https://www.tiktok.com/@belgrove.homes?_r=1&_t=ZS-99fISorFEkD" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">TikTok</a>
             </div>
           </div>
         </div>
-        <div className="mt-10 pt-6 border-t border-[rgba(245,239,226,0.15)] text-center">
-          <p className="mono text-[11px] tracking-[0.02em] text-[#B9C4B8]/60">© {new Date().getFullYear()} Belgrove Homes &amp; Properties Limited. All rights reserved.</p>
-          <p className="public text-[11px] leading-[1.5] text-[#B9C4B8]/50 mt-1">Belgrove Homes &amp; Properties Limited is FCTA approved. Real estate carries risk; verify all documentation independently.</p>
+        <div className="mt-10 pt-6 border-t border-[rgba(245,239,226,0.15)] flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <p className="public text-[12px] text-[#B9C4B8]/70">© 2026 Belgrove Homes and Properties Limited.</p>
+          <p className="public text-[12px] text-[#B9C4B8]/70">Images marked &lsquo;Artist&rsquo;s impression&rsquo; are illustrative.</p>
         </div>
       </div>
     </footer>

@@ -106,7 +106,7 @@ export default function AboutPage() {
       </section>
 
       {/* 7. General Manager welcome (moved from homepage) */}
-      <section className="bg-white py-16 lg:py-24 border-y border-[#E4D8C1]">
+      <section id="leadership" className="bg-white py-16 lg:py-24 border-y border-[#E4D8C1] scroll-mt-20">
         <div className="max-w-[980px] mx-auto px-6 lg:px-8">
           <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#1C2B20] font-medium text-center">A Welcome from the General Manager</div>
           <div className="relative mt-6">
