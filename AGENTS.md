@@ -25,7 +25,9 @@ Next.js (App Router, Turbopack) + Prisma. Admin app for inspection bookings, tra
    as paid or as revenue. Records flagged isTest never appear in metrics or queues.
 5. Receipts are only ever created from a confirmed payment. No manual receipt path.
 6. Schema changes go through `prisma migrate dev` with descriptive names. Never edit
-   existing migrations.
+   existing migrations. Never use prisma db push. All schema changes go through migration
+   files. Run `npm run check:migrations` after any migration change — it deploys history
+   to a fresh database and requires an empty diff against schema.prisma.
 7. Data-changing scripts live in /scripts, default to --dry-run, print exactly what they
    would change, and only apply with --apply.
 8. Never render raw errors, stack traces, Prisma messages or file paths in the UI. Return
