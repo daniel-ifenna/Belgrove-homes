@@ -65,6 +65,7 @@ type MockState = {
   installments: MockInstallment[];
   transactions: MockTransaction[];
   receipts: Record<string, unknown>[];
+  outbox: Record<string, unknown>[];
 };
 
 function makeMockTx(state: MockState): TxClient {
@@ -153,6 +154,14 @@ function makeMockTx(state: MockState): TxClient {
         return row;
       },
     },
+    emailOutbox: {
+      create: async (args: unknown) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const row = { id: `out-${state.outbox.length + 1}`, ...data };
+        state.outbox.push(row);
+        return row;
+      },
+    },
   } as unknown as TxClient;
 }
 
@@ -189,7 +198,7 @@ function seed2900(): MockState {
     paymentPlan: { code: "OUTRIGHT", name: "Outright" },
     installments: [installment],
   };
-  return { payments: [], installments: [installment], transactions: [transaction], receipts: [] };
+  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], outbox: [] };
 }
 
 function pendingPayment(id: string): MockPayment {
@@ -272,6 +281,10 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.receipts).toHaveLength(1);
     expect((state.receipts[0] as { pdfStatus: string }).pdfStatus).toBe("PENDING");
     expect((state.receipts[0] as { paymentId: string }).paymentId).toBe("pay-1");
+    // Receipt email queued in the SAME atomic unit (no post-commit enqueue).
+    expect(state.outbox).toHaveLength(1);
+    expect((state.outbox[0] as { type: string }).type).toBe("receipt");
+    expect((state.outbox[0] as { relatedId: string }).relatedId).toBe((state.receipts[0] as { id: string }).id);
   });
 
   it("double-confirm applies only once (idempotent claim)", async () => {

@@ -282,6 +282,19 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
     },
   });
 
+  // Receipt email queued in the SAME atomic unit (DB work only — delivery
+  // happens post-commit via the outbox processor). If confirmation commits,
+  // the email is durably queued; no post-commit enqueue can be lost.
+  await tx.emailOutbox.create({
+    data: {
+      type: "receipt",
+      to: transaction.customerEmail,
+      payload: { receiptId: receipt.id },
+      relatedType: "receipt",
+      relatedId: receipt.id,
+    },
+  });
+
   return {
     payment: {
       id: payment.id,

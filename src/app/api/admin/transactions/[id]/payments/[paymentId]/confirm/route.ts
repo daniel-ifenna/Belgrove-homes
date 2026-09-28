@@ -180,17 +180,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     });
   }
 
-  // The outbox sender reads (or regenerates) the stored PDF itself, so no
-  // file read is needed here. Queue the receipt email — durable delivery
-  // with retries. The response returns after the enqueue, never after SMTP.
-  const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
-  await enqueueEmail(prisma, {
-    type: "receipt",
-    to: txn.customerEmail,
-    payload: { receiptId: confirmed.receiptId },
-    relatedType: "receipt",
-    relatedId: confirmed.receiptId,
-  });
+  // The receipt email was queued inside the confirmation transaction;
+  // kick delivery without ever blocking on SMTP.
+  const { kickOutbox } = await import("@/lib/email/outbox");
   kickOutbox();
 
   return NextResponse.json({

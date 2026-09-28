@@ -138,15 +138,9 @@ export async function recordPaymentAndGenerateReceipt(params: {
     }
   }
 
-  // Queue the receipt email — durable outbox delivery with retries.
-  const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
-  await enqueueEmail(prisma, {
-    type: "receipt",
-    to: transaction.customerEmail,
-    payload: { receiptId: confirmed.receiptId },
-    relatedType: "receipt",
-    relatedId: confirmed.receiptId,
-  });
+  // The receipt email was queued inside the confirmation transaction;
+  // kick delivery without ever blocking on SMTP.
+  const { kickOutbox } = await import("@/lib/email/outbox");
   kickOutbox();
 
   const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId } });
