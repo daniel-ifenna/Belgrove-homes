@@ -64,7 +64,16 @@ describe("scheduledInspectionStart", () => {
   });
 });
 
-describe("transaction requires bookingId or manualReason", () => {
+describe("booking → transaction handoff", () => {
+  it("is idempotent: the form redirects to the already-linked transaction", () => {
+    const text = fs.readFileSync(path.join(SRC, "app/admin/transactions/new/page.tsx"), "utf8");
+    expect(text).toContain("if (existing) redirect(");
+  });
+  it("transaction page shows Booking link or Manual reason", () => {
+    const text = fs.readFileSync(path.join(SRC, "app/admin/transactions/[id]/page.tsx"), "utf8");
+    expect(text).toContain("Booking {transaction.booking.ref}");
+    expect(text).toContain("Manual — {transaction.manualReason}");
+  });
   it("createManualTransaction rejects a blank reason before any DB work", async () => {
     await expect(
       createManualTransaction({
