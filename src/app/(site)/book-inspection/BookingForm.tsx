@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { timeSlots } from "@/lib/content";
 import { lagosTodayInput } from "@/lib/time";
 import { BELGROVE_PLOTS } from "@/lib/belgroveData";
-import { formatNaira } from "@/lib/currency";
 
 type FormState = {
   name: string;
@@ -35,15 +34,12 @@ const initialState: FormState = {
   selectionType: "unit",
 };
 
-type CompanyAgentSuggestion = { name: string; category: "staff" | "hire_purchase" };
-
 export default function BookingForm() {
   const searchParams = useSearchParams();
   const [form, setForm] = useState<FormState>(initialState);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ref, setRef] = useState<string | null>(null);
-  const [agentSuggestions, setAgentSuggestions] = useState<CompanyAgentSuggestion[]>([]);
 
   const estates = useMemo(() => [...new Set(BELGROVE_PLOTS.map((p) => p.estate))], []);
   const plotsForEstate = useMemo(
@@ -51,13 +47,6 @@ export default function BookingForm() {
     [form.estate]
   );
   const selectedPlot = useMemo(() => plotsForEstate.find((p) => p.id === form.plotId) ?? null, [plotsForEstate, form.plotId]);
-
-  useEffect(() => {
-    fetch("/api/agents")
-      .then((r) => (r.ok ? r.json() : { agents: [] }))
-      .then((d) => setAgentSuggestions(d.agents ?? []))
-      .catch(() => {});
-  }, []);
 
   // Prefill from estate/plot detail or gallery: /book-inspection?estate=...&size=...&code=...&unit=...&price=...&phase=...
   // Homepage inspection form also passes name, phone and date.
@@ -123,22 +112,6 @@ export default function BookingForm() {
       setForm((f) => (f.location !== loc ? { ...f, location: loc } : f));
     }
   }, [form.estate, form.selectionType, form.sqmNeeded, selectedPlot]);
-
-  function isAgentMatch(input: string, agentName: string): boolean {
-    const q = input.trim().toLowerCase();
-    if (q.length < 2) return false;
-    const name = agentName.toLowerCase();
-    if (name.includes(q)) return true;
-    const qTokens = q.split(/\s+/).filter(Boolean);
-    const nameTokens = name.split(/\s+/).filter(Boolean);
-    return qTokens.some((qt) => nameTokens.some((nt) => nt === qt || (qt.length >= 3 && nt.includes(qt)) || (nt.length >= 3 && qt.includes(nt))));
-  }
-
-  const filteredAgents = form.agentName.trim()
-    ? agentSuggestions.filter((a) => isAgentMatch(form.agentName, a.name))
-    : agentSuggestions;
-
-  const matchedAgent = form.agentName.trim() ? agentSuggestions.find((a) => isAgentMatch(form.agentName, a.name)) ?? null : null;
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -356,7 +329,7 @@ export default function BookingForm() {
             </option>
           ))}
         </select>
-        <p className="mono text-[11px] text-[#8B5E3C] mt-1">Pick the estate first, then choose a specific unit or enter the SQM the client needs.</p>
+        <p className="mono text-[11px] text-[#8B5E3C] mt-1">Choose a plot, or tell us the size you need.</p>
 
         {form.estate && (
           <div className="mt-4 space-y-3">
@@ -387,12 +360,12 @@ export default function BookingForm() {
                   </option>
                   {plotsForEstate.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.unitType ? `${p.unitType}, ` : ""}
-                      {p.size}sqm · {p.code} {p.phase ? ` · ${p.phase}` : ""} {p.price ? ` · ${formatNaira(p.price)}` : ""}
+                      {p.unitType ? `${p.unitType} · ` : ""}
+                      {p.size}sqm{p.phase ? ` · ${p.phase}` : ""}
                     </option>
                   ))}
                 </select>
-                <p className="mono text-[11px] text-stone-500 mt-1">Choose the exact platted unit when the client has one in mind.</p>
+                <p className="mono text-[11px] text-stone-500 mt-1">Pick a specific plot if you already have one in mind.</p>
               </div>
             ) : (
               <div>
@@ -412,7 +385,7 @@ export default function BookingForm() {
                   />
                   <span className="mono text-xs text-stone-500">sqm</span>
                 </div>
-                <p className="mono text-[11px] text-stone-500 mt-1">Record the size the client is asking for. An adviser will match to the nearest available unit later. No exact plot required.</p>
+                <p className="mono text-[11px] text-stone-500 mt-1">Tell us the size you need and an adviser will match it to the nearest available unit. No exact plot required.</p>
               </div>
             )}
           </div>
@@ -425,28 +398,13 @@ export default function BookingForm() {
         </label>
         <input
           id="agentName"
-          list="company-agents"
           value={form.agentName}
           onChange={(e) => update("agentName", e.target.value)}
-          placeholder={agentSuggestions.length ? "Start typing company agents appear" : "Optional e.g. Ada Okafor"}
+          placeholder="Optional e.g. Ada Okafor"
           className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+          autoComplete="off"
         />
-        <datalist id="company-agents">
-          {filteredAgents.map((a) => (
-            <option key={a.name} value={a.name}>
-              {a.category === "hire_purchase" ? "Hire Purchase" : "Staff"}
-            </option>
-          ))}
-        </datalist>
-        {form.agentName.trim() ? (
-          matchedAgent ? (
-            <p className="mono text-[11px] mt-1 text-emerald-700">
-              ✓ Agent name matches that of DB: <span className="font-medium">{matchedAgent.name}</span> {matchedAgent.category === "hire_purchase" ? "Hire Purchase" : "Staff"} admin will see tally
-            </p>
-          ) : null
-        ) : agentSuggestions.length > 0 ? (
-          <p className="mono text-[11px] mt-1 text-stone-400">{agentSuggestions.length} company agents available pick one (search by first name or surname) or leave blank for admin to assign</p>
-        ) : null}
+        <p className="mono text-[11px] mt-1 text-stone-500">If an adviser invited you, write their name here so we can thank them.</p>
       </div>
 
       {/* location hidden but shown for transparency when manually entered */}
