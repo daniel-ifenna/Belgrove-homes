@@ -11,8 +11,8 @@ export function formatNairaRange(min: number, max: number): string {
   return `${formatNaira(min)} – ${formatNaira(max)}`;
 }
 
-// Compact ledger figure: 67400000 → "₦67.4M". For dashboard cards,
-// sidebar target widget, and anywhere a full figure won't fit.
+// Compact ledger figure: 67400000 → "₦67.4M". For dashboard cards
+// and anywhere a full figure won't fit.
 export function formatCompactNaira(n: number): string {
   if (!Number.isFinite(n)) return "₦0";
   if (n >= 1_000_000_000) {

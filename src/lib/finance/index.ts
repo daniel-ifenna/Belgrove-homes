@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { deriveInstallmentStatus } from "@/lib/paymentConfirmation";
-import { lagosMonthRange, startOfTodayLagos } from "@/lib/time";
+import { startOfTodayLagos } from "@/lib/time";
 
 // Single source of truth for every financial figure in the app
 // (AGENTS.md rule 3). Pages and API routes must call these functions —
-// never their own ad-hoc money queries — so dashboard, sidebar and
+// never their own ad-hoc money queries — so dashboard, ledger and
 // transaction pages always agree.
 //
 // Definitions:
@@ -95,18 +95,6 @@ export async function getCollectedRevenue(
   return agg._sum.amount ?? 0;
 }
 
-export async function getMonthlyTargetProgress(
-  month: Date = new Date(),
-  db: FinanceDb = realDb,
-  opts: { includeTest?: boolean } = {}
-): Promise<{ collected: number; goal: number; pct: number }> {
-  const goal = Number(process.env.MONTHLY_SALES_TARGET) || 150_000_000;
-  // Month boundary in Lagos time (rule: business timezone).
-  const { start, end } = lagosMonthRange(month);
-  const collected = await getCollectedRevenue({ from: start, to: end, includeTest: opts.includeTest }, db);
-  return { collected, goal, pct: goal > 0 ? Math.min(100, Math.round((collected / goal) * 100)) : 0 };
-}
-
 export async function getOverdueInstallments(
   db: FinanceDb = realDb,
   now: Date = startOfTodayLagos(),
@@ -134,27 +122,6 @@ export async function getOverdueInstallments(
   return rows
     .map((r) => ({ ...r, confirmedPaid: paidByInst.get(r.id) ?? 0 }))
     .filter((r) => r.confirmedPaid < r.scheduledAmount);
-}
-
-export async function getRevenueSparkline(
-  days: number = 14,
-  db: FinanceDb = realDb,
-  now: Date = new Date(),
-  opts: { includeTest?: boolean } = {}
-): Promise<number[]> {
-  // Day buckets anchored at Lagos midnight so every server agrees.
-  const end = new Date(startOfTodayLagos(now).getTime() + 86_400_000);
-  const start = new Date(end.getTime() - days * 86_400_000);
-  const payments = await db.payment.findMany({
-    where: { ...confirmedWhere(start, end, opts.includeTest) },
-    select: { amount: true, paymentDate: true },
-  });
-  const buckets = Array.from({ length: days }, () => 0);
-  for (const p of payments) {
-    const idx = Math.floor((new Date(p.paymentDate).getTime() - start.getTime()) / 86_400_000);
-    if (idx >= 0 && idx < days) buckets[idx] += p.amount;
-  }
-  return buckets;
 }
 
 export async function getTransactionSummary(

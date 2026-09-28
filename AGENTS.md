@@ -19,7 +19,7 @@ Next.js (App Router, Turbopack) + Prisma. Admin app for inspection bookings, tra
 2. Transactions: prisma.$transaction callbacks contain DB work ONLY. No PDF generation,
    file I/O, email, HTTP, or heavy computation inside. Side effects run after commit.
 3. Single source of truth: all financial figures (collected revenue, paid, outstanding,
-   overdue, target progress) come from the shared finance service in src/lib/finance/.
+   overdue) come from the shared finance service in src/lib/finance/.
    No page or component computes money totals with its own query.
 4. Confirmed payments are the financial truth. Pending and voided payments never count
    as paid or as revenue. Records flagged isTest never appear in metrics or queues.
@@ -39,3 +39,5 @@ Next.js (App Router, Turbopack) + Prisma. Admin app for inspection bookings, tra
     of files changed, migrations, scripts, and open TODOs.
 12. Keep the existing visual identity (colors, fonts, Belgrove branding). No unrelated
     refactors.
+13. There is no monthly sales target feature. Do not build, display or reference a
+    monthly target, target progress, or MONTHLY_SALES_TARGET anywhere.

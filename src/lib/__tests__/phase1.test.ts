@@ -93,12 +93,9 @@ describe("metrics exclude isTest", () => {
     expect(excludeTestRows(true)).toEqual({});
     expect(excludeTestTransactions(false)).toEqual({ transaction: { isTest: false } });
   });
-  it("dashboard, summary and queues filter test rows", () => {
+  it("dashboard and queues filter test rows", () => {
     const dash = fs.readFileSync(path.join(SRC, "app/admin/page.tsx"), "utf8");
     expect(dash).toContain("excludeTest");
-    const summary = fs.readFileSync(path.join(SRC, "app/api/admin/summary/route.ts"), "utf8");
-    // Summary delegates to the finance service (which excludes test rows).
-    expect(summary).toMatch(/excludeTest|getMonthlyTargetProgress/);
     for (const f of [
       "app/admin/bookings/page.tsx",
       "app/admin/transactions/page.tsx",

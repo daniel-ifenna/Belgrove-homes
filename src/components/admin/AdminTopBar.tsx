@@ -5,7 +5,6 @@ import { signOut } from "next-auth/react";
 import Link from "next/link";
 import NotificationBell from "./NotificationBell";
 import { useState, useEffect } from "react";
-import { formatCompactNaira } from "@/lib/currency";
 
 export default function AdminTopBar() {
   const pathname = usePathname();

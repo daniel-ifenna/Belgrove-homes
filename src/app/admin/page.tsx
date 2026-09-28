@@ -5,7 +5,7 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { formatNaira, formatCompactNaira } from "@/lib/currency";
 import { excludeTestRows } from "@/lib/test-data";
-import { getCollectedRevenue, getMonthlyTargetProgress, getOverdueInstallments, getPendingVerification, getRevenueSparkline } from "@/lib/finance";
+import { getCollectedRevenue, getOverdueInstallments, getPendingVerification } from "@/lib/finance";
 import { getActionCounts, getActionItems, INBOX_CATEGORIES } from "@/lib/inbox";
 import { lagosMonthRange } from "@/lib/time";
 import TestDataToggle from "@/components/admin/TestDataToggle";
@@ -73,41 +73,32 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const realTx = excludeTestRows(showTest);
   const realBooking = excludeTestRows(showTest);
   const prevMonthRange = lagosMonthRange(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const monthRange = lagosMonthRange(now);
   const [
     totalBookings,
     activeTx,
     newTx30,
     newTxPrior,
-    target,
+    soldSum,
     priorMonthCollected,
     pending,
     overdueList,
     actionItems,
     actionCounts,
-    sparkDays,
   ] = await Promise.all([
     prisma.inspectionBooking.count({ where: realBooking }),
     prisma.transaction.count({ where: { ...realTx, status: "ACTIVE" } }),
     prisma.transaction.count({ where: { ...realTx, createdAt: { gte: d30 } } }),
     prisma.transaction.count({ where: { ...realTx, createdAt: { gte: d60, lt: d30 } } }),
-    getMonthlyTargetProgress(now, undefined, testOpts),
+    getCollectedRevenue({ from: monthRange.start, to: monthRange.end, ...testOpts }),
     getCollectedRevenue({ from: prevMonthRange.start, to: prevMonthRange.end, ...testOpts }),
     getPendingVerification(undefined, testOpts),
     getOverdueInstallments(undefined, undefined, testOpts),
     getActionItems({ includeTest: showTest, now }),
     getActionCounts({ includeTest: showTest }),
-    getRevenueSparkline(14, undefined, undefined, testOpts),
   ]);
 
-  const soldSum = target.collected;
-  const goal = target.goal;
-  const pct = target.pct;
   const overdueTotal = overdueList.reduce((s, o) => s + (o.scheduledAmount - o.confirmedPaid), 0);
-  const days = sparkDays;
-  const maxDay = Math.max(1, ...days);
-  const sparkPoints = days
-    .map((v, i) => `${(i / 13) * 100},${28 - (v / maxDay) * 24}`)
-    .join(" ");
 
   // Needs-action groups in priority order; top items inline, rest via inbox.
   const groups = INBOX_CATEGORIES.map((c) => ({
@@ -142,7 +133,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
             figure={formatCompactNaira(soldSum)}
             cur={soldSum}
             prev={priorMonthCollected}
-            context={`${pct}% of ${formatCompactNaira(goal)} target`}
+            context="Confirmed payments vs prior month"
             icon={
               <svg {...iconProps}><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
             }
@@ -175,7 +166,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
           />
         </div>
 
-        <div className="mt-4 grid lg:grid-cols-[1.85fr_1fr] gap-4 items-start">
+        <div className="mt-4">
           {/* Needs action — live work queue, clears itself as items resolve */}
           <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
             <div className="flex items-center justify-between px-5 pt-4 pb-3">
@@ -218,25 +209,6 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Right rail: sparkline only (figures live in the top card) */}
-          <div className="space-y-4">
-            <div className="bg-white border border-[var(--border-hairline)] rounded-[var(--ops-radius)] p-5 shadow-[var(--shadow-sm)]">
-              <div className="mono text-[11px] tracking-[0.08em] uppercase text-[var(--ops-muted)]">Last 14 days</div>
-              <svg viewBox="0 0 100 28" className="mt-3 w-full h-[36px]" preserveAspectRatio="none" aria-hidden="true">
-                <polyline
-                  points={sparkPoints}
-                  fill="none"
-                  stroke="var(--accent-gold)"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              </svg>
-              <div className="public text-[12px] text-[var(--ops-muted)] mt-2">Daily collected revenue</div>
-            </div>
           </div>
         </div>
       </div>

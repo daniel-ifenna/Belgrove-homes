@@ -1,17 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
   getCollectedRevenue,
-  getMonthlyTargetProgress,
   getOverdueInstallments,
   getPendingVerification,
-  getRevenueSparkline,
   getTransactionOverviews,
   getTransactionSummary,
   toDisplayStatus,
   type FinanceDb,
 } from "../finance";
 
-// One dataset, three surfaces: dashboard revenue, sidebar target and the
+// One dataset, three surfaces: dashboard revenue, ledger totals and the
 // transaction summary must return identical figures for the same data.
 const NOW = new Date("2026-09-28T12:00:00Z");
 const PAST = new Date("2026-09-10T12:00:00Z");
@@ -102,8 +100,6 @@ describe("finance: collected revenue", () => {
 
   it("includeTest reveals fixtures (toggle behavior)", async () => {
     await expect(getCollectedRevenue({ includeTest: true }, fakeDb)).resolves.toBe(12_900_000);
-    const target = await getMonthlyTargetProgress(new Date("2026-09-15T00:00:00Z"), fakeDb, { includeTest: true });
-    expect(target.collected).toBe(12_900_000);
     await expect(getTransactionSummary("tX", fakeDb, NOW)).resolves.toBe(null);
     const shown = await getTransactionSummary("tX", fakeDb, NOW, { includeTest: true });
     expect(shown?.confirmedPaid).toBe(10_000_000);
@@ -116,11 +112,9 @@ describe("finance: collected revenue", () => {
 });
 
 describe("finance: one dataset, identical figures on all surfaces", () => {
-  it("dashboard revenue == sidebar target == transaction summary", async () => {
+  it("dashboard revenue == ledger total == transaction summary", async () => {
     const revenue = await getCollectedRevenue({ from: new Date("2026-09-01T00:00:00Z") }, fakeDb);
-    const target = await getMonthlyTargetProgress(new Date("2026-09-15T00:00:00Z"), fakeDb);
     const summary = await getTransactionSummary("t1", fakeDb, NOW);
-    expect(target.collected).toBe(revenue);
     expect(summary?.confirmedPaid).toBe(revenue);
     expect(summary?.outstanding).toBe(5_800_000 - revenue);
     expect(summary?.progressPct).toBe(50);
@@ -148,12 +142,6 @@ describe("finance: installments", () => {
     expect(i1?.confirmedPaid).toBe(0);
     expect(i1?.pendingTotal).toBe(1_450_000);
     expect(i1?.status).toBe("Pending");
-  });
-
-  it("sparkline buckets confirmed revenue by day", async () => {
-    const days = await getRevenueSparkline(14, fakeDb, new Date("2026-09-28T12:00:00Z"));
-    expect(days).toHaveLength(14);
-    expect(days.reduce((s, v) => s + v, 0)).toBe(2_900_000);
   });
 
   it("overviews agree with the summary for the same transaction", async () => {
