@@ -20,7 +20,15 @@ export function generateRef(): string {
   return prefixedRef("BEL");
 }
 
-async function uniqueRef(prefix: RefPrefix, exists: (ref: string) => Promise<boolean>, label: string): Promise<string> {
+// Shared generator: mints PREFIX-YYYY-XXXXX, re-rolling while `exists` reports
+// a collision (5 attempts, then throws). check-then-insert is not atomic
+// under concurrency: callers must ALSO retry on the DB unique constraint
+// (P2002) as the actual source of truth — see the bookings route.
+export async function generatePrefixedRef(
+  prefix: Exclude<RefPrefix, "BEL">,
+  exists: (ref: string) => Promise<boolean>,
+  label: string
+): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const ref = prefixedRef(prefix);
     if (!(await exists(ref))) return ref;
@@ -31,19 +39,19 @@ async function uniqueRef(prefix: RefPrefix, exists: (ref: string) => Promise<boo
 // check-then-insert is not atomic under concurrency: callers must also retry
 // on the DB unique constraint (P2002) as the actual source of truth.
 export async function generateUniqueBookingRef(): Promise<string> {
-  return uniqueRef("BKG", async (ref) => !!(await prisma.inspectionBooking.findUnique({ where: { ref }, select: { id: true } })), "booking");
+  return generatePrefixedRef("BKG", async (ref) => !!(await prisma.inspectionBooking.findUnique({ where: { ref }, select: { id: true } })), "booking");
 }
 
 export async function generateUniqueTransactionRef(): Promise<string> {
-  return uniqueRef("TXN", async (ref) => !!(await prisma.transaction.findUnique({ where: { ref }, select: { id: true } })), "transaction");
+  return generatePrefixedRef("TXN", async (ref) => !!(await prisma.transaction.findUnique({ where: { ref }, select: { id: true } })), "transaction");
 }
 
 export async function generateUniquePaymentRef(): Promise<string> {
-  return uniqueRef("PAY", async (ref) => !!(await prisma.payment.findFirst({ where: { paymentReference: ref }, select: { id: true } })), "payment");
+  return generatePrefixedRef("PAY", async (ref) => !!(await prisma.payment.findFirst({ where: { paymentReference: ref }, select: { id: true } })), "payment");
 }
 
 export async function generateUniqueReceiptRef(): Promise<string> {
-  return uniqueRef("RCT", async (ref) => !!(await prisma.receipt.findUnique({ where: { ref }, select: { id: true } })), "receipt");
+  return generatePrefixedRef("RCT", async (ref) => !!(await prisma.receipt.findUnique({ where: { ref }, select: { id: true } })), "receipt");
 }
 
 /** @deprecated Bookings now use BKG- (generateUniqueBookingRef). */

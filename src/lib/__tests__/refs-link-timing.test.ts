@@ -1,11 +1,23 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { prefixedRef } from "../ref";
+import { prefixedRef, generatePrefixedRef } from "../ref";
 import { scheduledInspectionStart, parseSlotMinutes } from "../inspection-time";
 import { createManualTransaction } from "../transactionService";
 
 const SRC = path.join(process.cwd(), "src");
+
+describe("generatePrefixedRef", () => {
+  it("returns the first non-colliding ref", async () => {
+    const seen = ["PAY-2026-00001"];
+    const ref = await generatePrefixedRef("PAY", async (r) => seen.includes(r), "payment");
+    expect(ref).toMatch(/^PAY-\d{4}-\d{5}$/);
+    expect(seen).not.toContain(ref);
+  });
+  it("retries past collisions and throws after 5 attempts", async () => {
+    await expect(generatePrefixedRef("PAY", async () => true, "payment")).rejects.toThrow(/unique payment reference/i);
+  });
+});
 
 describe("reference prefixes", () => {
   it("mints BKG/TXN/PAY/RCT refs, never BEL for new rows", () => {
