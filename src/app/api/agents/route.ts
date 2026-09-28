@@ -10,6 +10,7 @@ export async function GET() {
   if (!isInternalRole(session?.user?.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const agents = await prisma.agent.findMany({
     where: { isActive: true },
     select: { name: true, category: true },
     orderBy: [{ category: "asc" }, { name: "asc" }],
