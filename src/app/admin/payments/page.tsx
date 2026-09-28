@@ -6,6 +6,7 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
+import { getCollectedRevenue } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 
 type SearchParams = { q?: string; status?: string; method?: string; page?: string; showTest?: string };
@@ -43,7 +44,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
   // Remove undefined OR entries
   if (where.OR) where.OR = where.OR.filter((v: any) => v.amount === undefined || typeof v.amount === "number");
 
-  const [payments, total] = await Promise.all([
+  const [payments, total, collected, pendingCount] = await Promise.all([
     prisma.payment.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -58,6 +59,10 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
       },
     }),
     prisma.payment.count({ where }),
+    // Ledger totals from the finance service (rule 3): collected counts
+    // CONFIRMED payments on real transactions only.
+    getCollectedRevenue(),
+    prisma.payment.count({ where: { transaction: { isTest: false }, status: "PENDING_VERIFICATION" } }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -90,6 +95,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
             <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Payments Ledger</h1>
             <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All confirmed and pending payments — financial truth from the payment ledger.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} payments · Page {page} of {totalPages}</p>
+            <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">Collected <span className="text-[var(--ops-text)] font-medium price">{formatNaira(collected)}</span> · {pendingCount} awaiting verification</p>
           </div>
           <div className="flex items-center gap-2">
             <TestDataToggle href={`/admin/payments${toggleTestQuery(params as any, showTest)}`} showing={showTest} />

@@ -97,7 +97,8 @@ describe("metrics exclude isTest", () => {
     const dash = fs.readFileSync(path.join(SRC, "app/admin/page.tsx"), "utf8");
     expect(dash).toContain("excludeTest");
     const summary = fs.readFileSync(path.join(SRC, "app/api/admin/summary/route.ts"), "utf8");
-    expect(summary).toContain("excludeTest");
+    // Summary delegates to the finance service (which excludes test rows).
+    expect(summary).toMatch(/excludeTest|getMonthlyTargetProgress/);
     for (const f of [
       "app/admin/bookings/page.tsx",
       "app/admin/transactions/page.tsx",

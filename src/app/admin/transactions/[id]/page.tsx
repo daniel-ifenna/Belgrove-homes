@@ -6,6 +6,7 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
+import { getTransactionSummary } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 import RecordPaymentForm from "./RecordPaymentForm";
 import PaymentVerificationButtons from "./PaymentVerificationButtons";
@@ -23,15 +24,8 @@ function paymentStatusBadge(status: string) {
   }
 }
 
-// Spec language for the running schedule view: due / paid / late.
-function scheduleStatusLabel(status: string, overdue: boolean): string {
-  if (status === "PAID") return "Paid";
-  if (status === "PARTIALLY_PAID") return "Partial";
-  if (status === "WAIVED") return "Waived";
-  if (status === "OVERDUE" || overdue) return "Late";
-  if (status === "DUE") return "Due";
-  return "Pending";
-}
+// Finance display labels (Paid / Late / Partial / Pending) are rendered
+// directly from getTransactionSummary — no local status mapping.
 
 function formatDate(d: Date | string | null): string {
   if (!d) return "—";
@@ -60,9 +54,14 @@ export default async function TransactionDetailPage({ params }: { params: Promis
   });
   if (!transaction) notFound();
 
-  const now = new Date();
-  const overdueCount = transaction.installments.filter((i: any) => i.dueDate < now && i.status !== "PAID" && i.status !== "WAIVED").length;
-  const progress = transaction.totalPayable > 0 ? ((transaction.totalPaid / transaction.totalPayable) * 100).toFixed(2) : "0.00";
+  // Money figures come from the finance service (rule 3) — same numbers as
+  // the dashboard and sidebar. Stored columns are display cache only.
+  const summary = await getTransactionSummary(transaction.id);
+  if (!summary) notFound();
+  const overdueCount = summary.overdueCount;
+  const progress = summary.progressPct.toFixed(2);
+  const totalPaid = summary.confirmedPaid;
+  const outstanding = summary.outstanding;
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -115,14 +114,14 @@ export default async function TransactionDetailPage({ params }: { params: Promis
             <div className="bg-[#16281F] rounded-xl p-4 text-white">
               <div className="mono text-[10px] uppercase text-white">Total Payable</div><div className="price fraunces text-[16px] font-bold">{formatNaira(transaction.totalPayable)}</div>
             </div>
-            <div className={`rounded-xl p-4 border ${transaction.outstandingBalance === 0 ? "bg-[#ECFDF5] border-[#A7F3D0] text-[#065F46]" : "bg-white border-[var(--ops-border)] text-[var(--ops-text)]"}`}>
-              <div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Outstanding</div><div className="price fraunces text-[16px] font-bold">{formatNaira(transaction.outstandingBalance)}</div><div className="mono text-[10px] text-[var(--ops-muted)]">{transaction.totalPaid > 0 ? `${progress}% paid` : "No payments yet"}</div>
+            <div className={`rounded-xl p-4 border ${outstanding === 0 ? "bg-[#ECFDF5] border-[#A7F3D0] text-[#065F46]" : "bg-white border-[var(--ops-border)] text-[var(--ops-text)]"}`}>
+              <div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Outstanding</div><div className="price fraunces text-[16px] font-bold">{formatNaira(outstanding)}</div><div className="mono text-[10px] text-[var(--ops-muted)]">{totalPaid > 0 ? `${progress}% paid` : "No payments yet"}</div>
             </div>
           </div>
 
           <div className="mt-4 grid md:grid-cols-3 gap-4 mono text-[11px]">
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Total Paid</div><div className="font-bold price">{formatNaira(transaction.totalPaid)}</div></div>
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Outstanding</div><div className="font-bold price">{formatNaira(transaction.outstandingBalance)}</div></div>
+            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Total Paid</div><div className="font-bold price">{formatNaira(totalPaid)}</div></div>
+            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Outstanding</div><div className="font-bold price">{formatNaira(outstanding)}</div></div>
             <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-3"><div className="text-[var(--ops-muted)]">Progress</div><div className="font-bold">{progress}%</div></div>
           </div>
         </div>
@@ -139,10 +138,10 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--ops-border)]/60">
-                    {transaction.installments.map((inst: any) => {
-                      const paid = inst.paidAmount ?? 0;
-                      const isOverdue = new Date(inst.dueDate) < new Date() && inst.status !== "PAID" && inst.status !== "WAIVED";
-                      const statusColor = inst.status === "PAID" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : inst.status === "PARTIALLY_PAID" ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : isOverdue ? "bg-[#FEF2F2] text-[#9F1239] border-[#FECACA]" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]";
+                    {summary.installments.map((inst) => {
+                      const paid = inst.confirmedPaid;
+                      const isOverdue = inst.overdue;
+                      const statusColor = inst.status === "Paid" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : inst.status === "Partial" ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : isOverdue ? "bg-[#FEF2F2] text-[#9F1239] border-[#FECACA]" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]";
                       // Receipt column rule: link only when a receipt row exists for
                       // this installment (via a CONFIRMED payment). Pending
                       // payments count as nothing — never "Paid", never a link.
@@ -159,7 +158,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                           <td className="px-3 py-2 mono text-[11px]">{formatDate(inst.dueDate)}</td>
                           <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(inst.scheduledAmount)}</td>
                           <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(paid)}</td>
-                          <td className="px-3 py-2"><span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-medium border ${statusColor}`}>{scheduleStatusLabel(inst.status, isOverdue)}</span></td>
+                          <td className="px-3 py-2"><span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-medium border ${statusColor}`}>{inst.status}</span></td>
                           <td className="px-3 py-2 text-right">{receiptLink ? <Link href={`/admin/receipts/${receiptLink.id}`} className="text-xs text-[var(--ops-primary)] hover:underline">View</Link> : "—"}</td>
                         </tr>
                       );
@@ -167,7 +166,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                   </tbody>
                 </table>
               </div>
-              <RecordPaymentForm transactionId={transaction.id} installments={transaction.installments as any} outstanding={transaction.outstandingBalance} />
+              <RecordPaymentForm transactionId={transaction.id} installments={summary.installments.map((i) => ({ ...i, dueDate: i.dueDate.toISOString(), paidAmount: i.confirmedPaid, status: i.status })) as any} outstanding={outstanding} />
             </div>
 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">

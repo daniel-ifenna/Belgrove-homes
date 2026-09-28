@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { formatNaira, formatCompactNaira } from "@/lib/currency";
 import { statusColors, statusLabels } from "@/lib/booking-ui";
 import { excludeTestRows, excludeTestTransactions } from "@/lib/test-data";
+import { getCollectedRevenue, getMonthlyTargetProgress, getOverdueInstallments, getRevenueSparkline } from "@/lib/finance";
 
 export const dynamic = "force-dynamic";
 
@@ -81,12 +82,10 @@ export default async function AdminDashboardPage() {
   const now = new Date();
   const d30 = new Date(now.getTime() - 30 * DAY);
   const d60 = new Date(now.getTime() - 60 * DAY);
-  const d14 = new Date(now.getTime() - 14 * DAY);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const goal = Number(process.env.MONTHLY_SALES_TARGET) || 150_000_000;
 
   // Test fixtures (isTest) never appear in metrics or queues. Receipts
   // inherit test status from their transaction; installments from theirs.
+  // Money figures come from the finance service (rule 3) — never ad-hoc sums.
   const realTx = excludeTestRows(false);
   const realBooking = excludeTestRows(false);
   const realReceipt = excludeTestTransactions(false);
@@ -99,15 +98,15 @@ export default async function AdminDashboardPage() {
     newTxPrior,
     receipts30,
     receiptsPrior,
-    revenue30,
-    revenuePrior,
-    soldMonth,
+    revenue30Sum,
+    revenuePriorSum,
+    target,
     recentBookings,
     recentTx,
-    overdueCount,
+    overdue,
     unassignedCount,
     awaitingCount,
-    sparkReceipts,
+    sparkDays,
   ] = await Promise.all([
     prisma.inspectionBooking.count({ where: realBooking }),
     prisma.inspectionBooking.count({ where: { ...realBooking, createdAt: { gte: d30 } } }),
@@ -117,18 +116,9 @@ export default async function AdminDashboardPage() {
     prisma.transaction.count({ where: { ...realTx, createdAt: { gte: d60, lt: d30 } } }),
     prisma.receipt.count({ where: { ...realReceipt, issuedAt: { gte: d30 }, status: { in: ["sent", "generated"] } } }),
     prisma.receipt.count({ where: { ...realReceipt, issuedAt: { gte: d60, lt: d30 }, status: { in: ["sent", "generated"] } } }),
-    prisma.receipt.aggregate({
-      where: { ...realReceipt, issuedAt: { gte: d30 }, status: { in: ["sent", "generated"] } },
-      _sum: { finalAmount: true },
-    }),
-    prisma.receipt.aggregate({
-      where: { ...realReceipt, issuedAt: { gte: d60, lt: d30 }, status: { in: ["sent", "generated"] } },
-      _sum: { finalAmount: true },
-    }),
-    prisma.receipt.aggregate({
-      where: { ...realReceipt, issuedAt: { gte: monthStart }, status: { in: ["sent", "generated"] } },
-      _sum: { finalAmount: true },
-    }),
+    getCollectedRevenue({ from: d30 }),
+    getCollectedRevenue({ from: d60, to: d30 }),
+    getMonthlyTargetProgress(now),
     prisma.inspectionBooking.findMany({
       where: realBooking,
       orderBy: { updatedAt: "desc" },
@@ -141,28 +131,17 @@ export default async function AdminDashboardPage() {
       take: 5,
       select: { id: true, ref: true, customerName: true, estate: true, status: true, updatedAt: true },
     }),
-    prisma.installment.count({
-      where: { transaction: realTx, dueDate: { lt: now }, status: { notIn: ["PAID", "WAIVED"] } },
-    }),
+    getOverdueInstallments(),
     prisma.inspectionBooking.count({ where: { ...realBooking, agentId: null, status: { not: "closed" } } }),
     prisma.inspectionBooking.count({ where: { ...realBooking, status: "active" } }),
-    prisma.receipt.findMany({
-      where: { ...realReceipt, issuedAt: { gte: d14 }, status: { in: ["sent", "generated"] } },
-      select: { issuedAt: true, finalAmount: true },
-    }),
+    getRevenueSparkline(14),
   ]);
 
-  const revenue30Sum = revenue30._sum.finalAmount ?? 0;
-  const revenuePriorSum = revenuePrior._sum.finalAmount ?? 0;
-  const soldSum = soldMonth._sum.finalAmount ?? 0;
-  const pct = goal > 0 ? Math.min(100, Math.round((soldSum / goal) * 100)) : 0;
-
-  // 14-day daily revenue sparkline
-  const days: number[] = Array.from({ length: 14 }, () => 0);
-  for (const r of sparkReceipts) {
-    const idx = Math.floor((new Date(r.issuedAt).getTime() - d14.getTime()) / DAY);
-    if (idx >= 0 && idx < 14) days[idx] += r.finalAmount;
-  }
+  const soldSum = target.collected;
+  const goal = target.goal;
+  const pct = target.pct;
+  const overdueCount = overdue.length;
+  const days = sparkDays;
   const maxDay = Math.max(1, ...days);
   const sparkPoints = days
     .map((v, i) => `${(i / 13) * 100},${28 - (v / maxDay) * 24}`)
