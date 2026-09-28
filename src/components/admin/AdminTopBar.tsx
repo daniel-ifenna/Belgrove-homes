@@ -233,10 +233,13 @@ function SidebarInner() {
 
 function MonthlyTargetWidget() {
   const [data, setData] = useState<{ soldThisMonth: number; goal: number; pct: number } | null>(null);
+  const searchParams = useSearchParams();
+  const showTest = searchParams.get("showTest") === "1";
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/admin/summary")
+    setData(null);
+    fetch(`/api/admin/summary${showTest ? "?showTest=1" : ""}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!cancelled && j && typeof j.soldThisMonth === "number") setData(j);
@@ -245,7 +248,7 @@ function MonthlyTargetWidget() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showTest]);
 
   return (
     <div className="px-3 pb-5">

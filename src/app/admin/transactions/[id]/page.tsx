@@ -56,7 +56,8 @@ export default async function TransactionDetailPage({ params }: { params: Promis
 
   // Money figures come from the finance service (rule 3) — same numbers as
   // the dashboard and sidebar. Stored columns are display cache only.
-  const summary = await getTransactionSummary(transaction.id);
+  // Detail pages audit any row (includeTest); lists/metrics hide fixtures.
+  const summary = await getTransactionSummary(transaction.id, undefined, undefined, { includeTest: true });
   if (!summary) notFound();
   const overdueCount = summary.overdueCount;
   const progress = summary.progressPct.toFixed(2);
@@ -188,7 +189,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                             <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(p.paymentDate)}</span>
                           </div>
                           <div className="mono text-[11px] text-[var(--ops-muted)]">{inst ? `${inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`}` : "Payment"} · {p.paymentMethod ?? "—"}{p.notes ? ` · ${p.notes}` : ""}</div>
-                          <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{(p as any).paymentReference ?? ""}</div>
+                          <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{(p as any).paymentReference ?? ""}{(p as any).bankReference ? ` · bank: ${(p as any).bankReference}` : ""}</div>
                           <div className="mt-1.5">
                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border ${paymentStatusBadge(p.status)}`}>
                               {p.status === "PENDING_VERIFICATION" ? "Pending verification" : p.status.replace("_", " ")}

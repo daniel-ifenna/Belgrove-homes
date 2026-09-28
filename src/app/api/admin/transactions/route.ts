@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { createManualTransaction } from "@/lib/transactionService";
+import { getTransactionOverviews } from "@/lib/finance";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -33,17 +34,17 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { paymentPlan: true, installments: true },
+      include: { paymentPlan: true },
     }),
     prisma.transaction.count({ where }),
     prisma.paymentPlan.findMany({ where: { isActive: true } }),
   ]);
 
-  // Compute overdue counts
-  const now = new Date();
+  // Overdue counts from the finance service (rule 3) — never inline filters.
+  const overviews = await getTransactionOverviews(transactions.map((t) => t.id));
   const enriched = transactions.map((t) => {
-    const overdue = t.installments.filter((i: any) => i.dueDate < now && i.status !== "PAID" && i.status !== "WAIVED").length;
-    return { ...t, overdueCount: overdue };
+    const ov = overviews.get(t.id);
+    return { ...t, outstandingBalance: ov?.outstanding ?? t.totalPayable, overdueCount: ov?.overdueCount ?? 0 };
   });
 
   return NextResponse.json({ transactions: enriched, total, plans });

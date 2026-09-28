@@ -4,6 +4,7 @@ import {
   getMonthlyTargetProgress,
   getOverdueInstallments,
   getRevenueSparkline,
+  getTransactionOverviews,
   getTransactionSummary,
   toDisplayStatus,
   type FinanceDb,
@@ -32,7 +33,7 @@ const PAYMENTS = [
 
 type Where = {
   status?: string | { in?: string[]; notIn?: string[] };
-  transactionId?: string;
+  transactionId?: string | { in?: string[] };
   transaction?: { isTest?: boolean };
   installmentId?: { in?: (string | null)[] };
   paymentDate?: { gte?: Date; lte?: Date; lt?: Date };
@@ -44,7 +45,9 @@ function matchPayment(p: (typeof PAYMENTS)[number], where: Where): boolean {
   if (typeof st === "string" && p.status !== st) return false;
   if (typeof st === "object" && st.in && !st.in.includes(p.status)) return false;
   if (typeof st === "object" && st.notIn && st.notIn.includes(p.status)) return false;
-  if (where.transactionId && p.transactionId !== where.transactionId) return false;
+  const tid = where.transactionId;
+  if (typeof tid === "string" && p.transactionId !== tid) return false;
+  if (typeof tid === "object" && tid.in && !tid.in.includes(p.transactionId)) return false;
   if (where.transaction?.isTest === false && p.transactionId === "tX") return false;
   const iid = where.installmentId;
   if (iid?.in && !iid.in.includes(p.installmentId)) return false;
@@ -74,13 +77,17 @@ const fakeDb: FinanceDb = {
     findMany: async (args: { where: Where }) => INSTALLMENTS.filter((r) => matchInstallment(r, args.where ?? {})),
   },
   transaction: {
-    findUnique: async () => ({
-      id: "t1",
-      ref: "TXN-2026-00001",
-      totalPayable: 5_800_000,
-      isTest: false,
-      installments: INSTALLMENTS.filter((r) => r.transactionId === "t1"),
-    }),
+    findMany: async () => [{ id: "t1", totalPayable: 5_800_000 }],
+    findUnique: async (args: { where: { id: string } }) =>
+      args.where.id === "tX"
+        ? { id: "tX", ref: "TXN-TEST", totalPayable: 10_000_000, isTest: true, installments: [] }
+        : {
+            id: "t1",
+            ref: "TXN-2026-00001",
+            totalPayable: 5_800_000,
+            isTest: false,
+            installments: INSTALLMENTS.filter((r) => r.transactionId === "t1"),
+          },
   },
 };
 
@@ -89,6 +96,15 @@ describe("finance: collected revenue", () => {
     await expect(getCollectedRevenue({}, fakeDb)).resolves.toBe(2_900_000);
     await expect(getCollectedRevenue({ from: new Date("2026-09-01T00:00:00Z") }, fakeDb)).resolves.toBe(2_900_000);
     await expect(getCollectedRevenue({ from: new Date("2026-10-01T00:00:00Z") }, fakeDb)).resolves.toBe(0);
+  });
+
+  it("includeTest reveals fixtures (toggle behavior)", async () => {
+    await expect(getCollectedRevenue({ includeTest: true }, fakeDb)).resolves.toBe(12_900_000);
+    const target = await getMonthlyTargetProgress(new Date("2026-09-15T00:00:00Z"), fakeDb, { includeTest: true });
+    expect(target.collected).toBe(12_900_000);
+    await expect(getTransactionSummary("tX", fakeDb, NOW)).resolves.toBe(null);
+    const shown = await getTransactionSummary("tX", fakeDb, NOW, { includeTest: true });
+    expect(shown?.confirmedPaid).toBe(10_000_000);
   });
 });
 
@@ -131,5 +147,16 @@ describe("finance: installments", () => {
     const days = await getRevenueSparkline(14, fakeDb, new Date("2026-09-28T12:00:00Z"));
     expect(days).toHaveLength(14);
     expect(days.reduce((s, v) => s + v, 0)).toBe(2_900_000);
+  });
+
+  it("overviews agree with the summary for the same transaction", async () => {
+    const overviews = await getTransactionOverviews(["t1"], fakeDb, NOW);
+    const summary = await getTransactionSummary("t1", fakeDb, NOW);
+    const ov = overviews.get("t1")!;
+    expect(ov.confirmedPaid).toBe(summary?.confirmedPaid);
+    expect(ov.outstanding).toBe(summary?.outstanding);
+    expect(ov.overdueCount).toBe(summary?.overdueCount);
+    expect(overviews.get("missing")).toBe(undefined);
+    expect((await getTransactionOverviews([], fakeDb, NOW)).size).toBe(0);
   });
 });

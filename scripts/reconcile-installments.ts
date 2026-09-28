@@ -2,23 +2,28 @@
 // and the CONFIRMED-payment truth. The confirm/void transactions maintain the
 // stored columns; this script catches anything that slipped through.
 //
-// Usage: npx tsx scripts/reconcile-installments.ts [--apply]
+// Usage: npx tsx scripts/reconcile-installments.ts [--apply] [--include-test]
 // Default is --dry-run: prints every drifted installment. --apply writes the
-// recomputed paidAmount + derived status.
+// recomputed paidAmount + derived status. Test fixtures are skipped unless
+// --include-test is passed.
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma.js";
 import { deriveInstallmentStatus } from "../src/lib/paymentConfirmation.js";
 
 const APPLY = process.argv.includes("--apply");
+const INCLUDE_TEST = process.argv.includes("--include-test");
+// Prisma where-input compatible in both branches.
+const relFilter: { transaction?: { isTest: boolean } } = INCLUDE_TEST ? {} : { transaction: { isTest: false } };
+const directFilter: { isTest?: boolean } = INCLUDE_TEST ? {} : { isTest: false };
 
 async function main() {
   const installments = await prisma.installment.findMany({
-    where: { transaction: { isTest: false } },
+    where: { ...relFilter },
     select: { id: true, installmentNumber: true, scheduledAmount: true, paidAmount: true, status: true, dueDate: true, transactionId: true, transaction: { select: { ref: true } } },
     orderBy: { dueDate: "asc" },
   });
   const confirmed = await prisma.payment.findMany({
-    where: { status: "CONFIRMED", transaction: { isTest: false } },
+    where: { status: "CONFIRMED", ...relFilter },
     select: { amount: true, installmentId: true },
   });
   const paidByInst = new Map<string, number>();
@@ -45,12 +50,12 @@ async function main() {
   }
   // Transaction totals: recomputed from CONFIRMED payments.
   const txns = await prisma.transaction.findMany({
-    where: { isTest: false },
+    where: { ...directFilter },
     select: { id: true, ref: true, totalPayable: true, totalPaid: true, outstandingBalance: true, status: true },
   });
   const paidByTxn = new Map<string, number>();
   const allConfirmed = await prisma.payment.findMany({
-    where: { status: "CONFIRMED", transaction: { isTest: false } },
+    where: { status: "CONFIRMED", ...relFilter },
     select: { amount: true, transactionId: true },
   });
   for (const p of allConfirmed) paidByTxn.set(p.transactionId, (paidByTxn.get(p.transactionId) ?? 0) + p.amount);

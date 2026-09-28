@@ -159,7 +159,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
               <tbody className="divide-y divide-[var(--ops-border)]/60">
                 {payments.map((p: any) => (
                   <tr key={p.id} className="hover:bg-[var(--ops-bg)]/50">
-                    <td className="px-4 py-3 font-mono text-[11px] row-lead">{p.paymentReference}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] row-lead">{p.paymentReference}{p.bankReference && <div className="mono text-[10px] text-[var(--ops-muted)]">bank: {p.bankReference}</div>}</td>
                     <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "—"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><div className="mono text-[10px] text-[var(--ops-muted)]">{p.transaction.estate}</div></td>
                     <td className="px-4 py-3"><div className="text-[13px] leading-none break-all">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-all">{p.transaction.customerEmail}</div></td>

@@ -6,6 +6,7 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
+import { getTransactionOverviews } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 
 type SearchParams = { q?: string; status?: string; plan?: string; page?: string; showTest?: string };
@@ -57,11 +58,15 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { paymentPlan: true, installments: true },
+      include: { paymentPlan: true },
     }),
     prisma.transaction.count({ where }),
     prisma.paymentPlan.findMany({ where: { isActive: true } }),
   ]);
+
+  // Money figures from the finance service (rule 3) — never stored-column
+  // reads or inline filters here.
+  const overviews = await getTransactionOverviews(transactions.map((t) => t.id));
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -85,7 +90,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     return str ? `?${str}` : "";
   }
 
-  const now = new Date();
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
       <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
@@ -146,7 +150,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
               </thead>
               <tbody className="divide-y divide-[var(--ops-border)]/60">
                 {transactions.map((t) => {
-                  const overdue = t.installments.filter((i: any) => i.dueDate < now && i.status !== "PAID" && i.status !== "WAIVED").length;
+                  const ov = overviews.get(t.id);
+                  if (!ov) return null;
+                  const overdue = ov.overdueCount;
+                  const outstanding = ov.outstanding;
                   return (
                     <tr key={t.id} className="hover:bg-[var(--ops-bg)]/50">
                       <td className="px-4 py-3">
@@ -164,7 +171,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                       <td className="px-4 py-3 mono text-[11px]">{t.paymentPlan.name}</td>
                       <td className="px-4 py-3 mono text-[12px] font-medium price">{formatNaira(t.totalPayable)}</td>
                       <td className="px-4 py-3">
-                        <div className={`mono text-[12px] font-bold price ${t.outstandingBalance === 0 ? "text-[#065F46]" : overdue > 0 ? "text-[#9F1239]" : "text-[#92400E]"}`}>{formatNaira(t.outstandingBalance)}</div>
+                        <div className={`mono text-[12px] font-bold price ${outstanding === 0 ? "text-[#065F46]" : overdue > 0 ? "text-[#9F1239]" : "text-[#92400E]"}`}>{formatNaira(outstanding)}</div>
                         {overdue > 0 && <div className="mono text-[10px] text-[#9F1239]">{overdue} overdue</div>}
                       </td>
                       <td className="px-4 py-3">
@@ -190,7 +197,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         </div>
 
         <div className="lg:hidden space-y-3 mt-4">
-          {transactions.map((t) => (
+          {transactions.map((t) => {
+            const ov = overviews.get(t.id);
+            if (!ov) return null;
+            return (
             <Link key={t.id} href={`/admin/transactions/${t.id}`} className="block bg-white border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -201,12 +211,13 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Property</div><div className="text-[13px] break-words">{t.estate}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Outstanding</div><div className="mono text-[12px] font-bold price">{formatNaira(t.outstandingBalance)}</div></div>
+                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Outstanding</div><div className="mono text-[12px] font-bold price">{formatNaira(ov.outstanding)}</div></div>
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Total</div><div className="mono text-[11px] price">{formatNaira(t.totalPayable)}</div></div>
                 <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Plan</div><div className="mono text-[11px]">{t.paymentPlan.name}</div></div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         <AdminPagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} basePath="/admin/transactions" query={paginationQuery} />

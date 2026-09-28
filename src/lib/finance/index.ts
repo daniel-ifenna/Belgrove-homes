@@ -62,6 +62,7 @@ export type FinanceDb = {
     >;
   };
   transaction: {
+    findMany(args: unknown): Promise<{ id: string; totalPayable: number }[]>;
     findUnique(args: unknown): Promise<
       | {
           id: string;
@@ -77,36 +78,45 @@ export type FinanceDb = {
 
 const realDb = prisma as unknown as FinanceDb;
 
-function confirmedWhere(from?: Date, to?: Date) {
+function confirmedWhere(from?: Date, to?: Date, includeTest: boolean = false) {
   return {
     status: "CONFIRMED" as const,
-    transaction: { isTest: false },
+    ...(includeTest ? {} : { transaction: { isTest: false } }),
     ...(from || to ? { paymentDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
   };
 }
 
 export async function getCollectedRevenue(
-  { from, to }: { from?: Date; to?: Date } = {},
+  { from, to, includeTest = false }: { from?: Date; to?: Date; includeTest?: boolean } = {},
   db: FinanceDb = realDb
 ): Promise<number> {
-  const agg = await db.payment.aggregate({ where: confirmedWhere(from, to), _sum: { amount: true } });
+  const agg = await db.payment.aggregate({ where: confirmedWhere(from, to, includeTest), _sum: { amount: true } });
   return agg._sum.amount ?? 0;
 }
 
 export async function getMonthlyTargetProgress(
   month: Date = new Date(),
-  db: FinanceDb = realDb
+  db: FinanceDb = realDb,
+  opts: { includeTest?: boolean } = {}
 ): Promise<{ collected: number; goal: number; pct: number }> {
   const goal = Number(process.env.MONTHLY_SALES_TARGET) || 150_000_000;
   // Month boundary in Lagos time (rule: business timezone).
   const { start, end } = lagosMonthRange(month);
-  const collected = await getCollectedRevenue({ from: start, to: end }, db);
+  const collected = await getCollectedRevenue({ from: start, to: end, includeTest: opts.includeTest }, db);
   return { collected, goal, pct: goal > 0 ? Math.min(100, Math.round((collected / goal) * 100)) : 0 };
 }
 
-export async function getOverdueInstallments(db: FinanceDb = realDb, now: Date = startOfTodayLagos()) {
+export async function getOverdueInstallments(
+  db: FinanceDb = realDb,
+  now: Date = startOfTodayLagos(),
+  opts: { includeTest?: boolean } = {}
+) {
   const rows = await db.installment.findMany({
-    where: { transaction: { isTest: false }, dueDate: { lt: now }, status: { notIn: ["PAID", "WAIVED"] } },
+    where: {
+      ...(opts.includeTest ? {} : { transaction: { isTest: false } }),
+      dueDate: { lt: now },
+      status: { notIn: ["PAID", "WAIVED"] },
+    },
     orderBy: { dueDate: "asc" },
   });
   // Confirm against money, not just the stored label: an installment whose
@@ -125,12 +135,17 @@ export async function getOverdueInstallments(db: FinanceDb = realDb, now: Date =
     .filter((r) => r.confirmedPaid < r.scheduledAmount);
 }
 
-export async function getRevenueSparkline(days: number = 14, db: FinanceDb = realDb, now: Date = new Date()): Promise<number[]> {
+export async function getRevenueSparkline(
+  days: number = 14,
+  db: FinanceDb = realDb,
+  now: Date = new Date(),
+  opts: { includeTest?: boolean } = {}
+): Promise<number[]> {
   // Day buckets anchored at Lagos midnight so every server agrees.
   const end = new Date(startOfTodayLagos(now).getTime() + 86_400_000);
   const start = new Date(end.getTime() - days * 86_400_000);
   const payments = await db.payment.findMany({
-    where: { ...confirmedWhere(start, now) },
+    where: { ...confirmedWhere(start, end, opts.includeTest) },
     select: { amount: true, paymentDate: true },
   });
   const buckets = Array.from({ length: days }, () => 0);
@@ -141,12 +156,18 @@ export async function getRevenueSparkline(days: number = 14, db: FinanceDb = rea
   return buckets;
 }
 
-export async function getTransactionSummary(transactionId: string, db: FinanceDb = realDb, now: Date = startOfTodayLagos()): Promise<TransactionSummary | null> {
+export async function getTransactionSummary(
+  transactionId: string,
+  db: FinanceDb = realDb,
+  now: Date = startOfTodayLagos(),
+  opts: { includeTest?: boolean } = {}
+): Promise<TransactionSummary | null> {
   const txn = await db.transaction.findUnique({
     where: { id: transactionId },
     include: { installments: { orderBy: { installmentNumber: "asc" } } },
   });
   if (!txn) return null;
+  if (txn.isTest && !opts.includeTest) return null;
   const payments = await db.payment.findMany({
     where: { transactionId, status: { in: ["CONFIRMED", "PENDING_VERIFICATION"] } },
     select: { amount: true, status: true, installmentId: true },
@@ -192,3 +213,45 @@ export async function getTransactionSummary(transactionId: string, db: FinanceDb
 
 // Re-exported for call sites that still need the stored-label derivation.
 export { deriveInstallmentStatus };
+
+export type TransactionOverview = {
+  id: string;
+  confirmedPaid: number;
+  outstanding: number;
+  overdueCount: number;
+};
+
+// Batch per-transaction money for list views (one query set, no N+1, no
+// ad-hoc sums in pages). totalPayable is a contract term read from the row;
+// outstanding/overdue always derive from CONFIRMED payments here.
+export async function getTransactionOverviews(
+  transactionIds: string[],
+  db: FinanceDb = realDb,
+  now: Date = startOfTodayLagos()
+): Promise<Map<string, TransactionOverview>> {
+  const out = new Map<string, TransactionOverview>();
+  if (transactionIds.length === 0) return out;
+  const [txns, installments, payments] = await Promise.all([
+    db.transaction.findMany({ where: { id: { in: transactionIds } }, select: { id: true, totalPayable: true } }),
+    db.installment.findMany({ where: { transactionId: { in: transactionIds } } }),
+    db.payment.findMany({ where: { transactionId: { in: transactionIds }, status: "CONFIRMED" } }),
+  ]);
+  const paidByTxn = new Map<string, number>();
+  const paidByInst = new Map<string, number>();
+  for (const p of payments) {
+    paidByTxn.set(p.transactionId, (paidByTxn.get(p.transactionId) ?? 0) + p.amount);
+    if (p.installmentId) paidByInst.set(p.installmentId, (paidByInst.get(p.installmentId) ?? 0) + p.amount);
+  }
+  const overdueByTxn = new Map<string, number>();
+  for (const i of installments) {
+    const paid = paidByInst.get(i.id) ?? 0;
+    if (new Date(i.dueDate) < now && i.status !== "WAIVED" && paid < i.scheduledAmount) {
+      overdueByTxn.set(i.transactionId, (overdueByTxn.get(i.transactionId) ?? 0) + 1);
+    }
+  }
+  for (const t of txns) {
+    const paid = paidByTxn.get(t.id) ?? 0;
+    out.set(t.id, { id: t.id, confirmedPaid: paid, outstanding: t.totalPayable - paid, overdueCount: overdueByTxn.get(t.id) ?? 0 });
+  }
+  return out;
+}

@@ -7,6 +7,7 @@ import { formatNaira, formatCompactNaira } from "@/lib/currency";
 import { statusColors, statusLabels } from "@/lib/booking-ui";
 import { excludeTestRows, excludeTestTransactions } from "@/lib/test-data";
 import { getCollectedRevenue, getMonthlyTargetProgress, getOverdueInstallments, getRevenueSparkline } from "@/lib/finance";
+import TestDataToggle from "@/components/admin/TestDataToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -75,20 +76,21 @@ const iconProps = {
   strokeLinejoin: "round",
 } as const;
 
-export default async function AdminDashboardPage() {
+export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<{ showTest?: string }> }) {
   const session = await auth();
   if (!isInternalRole(session?.user?.role)) redirect("/admin/login");
+  const showTest = (await searchParams).showTest === "1";
 
   const now = new Date();
   const d30 = new Date(now.getTime() - 30 * DAY);
   const d60 = new Date(now.getTime() - 60 * DAY);
 
-  // Test fixtures (isTest) never appear in metrics or queues. Receipts
-  // inherit test status from their transaction; installments from theirs.
-  // Money figures come from the finance service (rule 3) — never ad-hoc sums.
-  const realTx = excludeTestRows(false);
-  const realBooking = excludeTestRows(false);
-  const realReceipt = excludeTestTransactions(false);
+  // Test fixtures hidden by default; ?showTest=1 reveals them in metrics too.
+  // Money figures always come from the finance service (rule 3).
+  const testOpts = { includeTest: showTest };
+  const realTx = excludeTestRows(showTest);
+  const realBooking = excludeTestRows(showTest);
+  const realReceipt = excludeTestTransactions(showTest);
   const [
     totalBookings,
     bookings30,
@@ -116,9 +118,9 @@ export default async function AdminDashboardPage() {
     prisma.transaction.count({ where: { ...realTx, createdAt: { gte: d60, lt: d30 } } }),
     prisma.receipt.count({ where: { ...realReceipt, issuedAt: { gte: d30 }, status: { in: ["sent", "generated"] } } }),
     prisma.receipt.count({ where: { ...realReceipt, issuedAt: { gte: d60, lt: d30 }, status: { in: ["sent", "generated"] } } }),
-    getCollectedRevenue({ from: d30 }),
-    getCollectedRevenue({ from: d60, to: d30 }),
-    getMonthlyTargetProgress(now),
+    getCollectedRevenue({ from: d30, ...testOpts }),
+    getCollectedRevenue({ from: d60, to: d30, ...testOpts }),
+    getMonthlyTargetProgress(now, undefined, testOpts),
     prisma.inspectionBooking.findMany({
       where: realBooking,
       orderBy: { updatedAt: "desc" },
@@ -131,10 +133,10 @@ export default async function AdminDashboardPage() {
       take: 5,
       select: { id: true, ref: true, customerName: true, estate: true, status: true, updatedAt: true },
     }),
-    getOverdueInstallments(),
+    getOverdueInstallments(undefined, undefined, testOpts),
     prisma.inspectionBooking.count({ where: { ...realBooking, agentId: null, status: { not: "closed" } } }),
     prisma.inspectionBooking.count({ where: { ...realBooking, status: "active" } }),
-    getRevenueSparkline(14),
+    getRevenueSparkline(14, undefined, undefined, testOpts),
   ]);
 
   const soldSum = target.collected;
@@ -221,7 +223,8 @@ export default async function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
       <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        <div className="mb-6">
+        <div className="mb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div>
           <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">
             Dashboard
           </h1>
@@ -231,6 +234,8 @@ export default async function AdminDashboardPage() {
           <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">
             {totalBookings} bookings all time
           </p>
+          </div>
+          <TestDataToggle href={showTest ? "/admin" : "/admin?showTest=1"} showing={showTest} />
         </div>
 
         {/* Stat cards */}
