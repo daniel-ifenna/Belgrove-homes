@@ -33,12 +33,9 @@ export async function POST(request: NextRequest) {
   if (Number.isNaN(preferredDateObj.getTime())) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
-  // Preferred date should not be in the past (allow today)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const prefDay = new Date(preferredDateObj);
-  prefDay.setHours(0, 0, 0, 0);
-  if (prefDay.getTime() < today.getTime()) {
+  // Preferred date should not be in the past (allow today) — Lagos calendar days.
+  const { lagosDayKey, lagosTodayInput } = await import("@/lib/time");
+  if (lagosDayKey(preferredDateObj) < lagosTodayInput()) {
     return NextResponse.json({ error: "Preferred date cannot be in the past" }, { status: 400 });
   }
 

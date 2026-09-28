@@ -24,15 +24,15 @@ describe("reference prefixes", () => {
 });
 
 describe("scheduledInspectionStart", () => {
-  it("combines date + 12h time", () => {
+  it("combines date + 12h time as a Lagos instant (TZ-independent)", () => {
     const start = scheduledInspectionStart({
       preferredDate: new Date("2026-09-30T00:00:00Z"),
       preferredTime: "12:00 PM",
       rescheduledDate: null,
       rescheduledTime: null,
     });
-    expect(start?.getHours()).toBe(12);
-    expect(start?.getMinutes()).toBe(0);
+    // 12:00 PM Sep 30 in Lagos (UTC+1) = 11:00 UTC, on every server.
+    expect(start?.toISOString()).toBe("2026-09-30T11:00:00.000Z");
   });
   it("prefers the rescheduled slot", () => {
     // Midday dates avoid TZ day-boundary flakiness on any server.
@@ -42,10 +42,8 @@ describe("scheduledInspectionStart", () => {
       rescheduledDate: new Date(2026, 9, 2, 12, 0, 0),
       rescheduledTime: "9:30 AM",
     });
-    expect(start?.getDate()).toBe(2);
-    expect(start?.getMonth()).toBe(9);
-    expect(start?.getHours()).toBe(9);
-    expect(start?.getMinutes()).toBe(30);
+    // Rescheduled day in Lagos + 9:30 AM Lagos wall time.
+    expect(start?.toISOString()).toBe("2026-10-02T08:30:00.000Z");
   });
   it("parses 12 AM/PM edges", () => {
     expect(parseSlotMinutes("12:00 AM")).toBe(0);

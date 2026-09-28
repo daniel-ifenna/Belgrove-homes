@@ -1,14 +1,11 @@
-// Scheduled inspection start = (rescheduledDate ?? preferredDate) at
-// (rescheduledTime ?? preferredTime). Times look like "10:00 AM".
-export function parseSlotMinutes(slot: string | null | undefined): number | null {
-  if (!slot) return null;
-  const m = slot.trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
-  if (!m) return null;
-  let h = Number(m[1]) % 12;
-  if (/PM/i.test(m[3])) h += 12;
-  return h * 60 + Number(m[2]);
-}
+import { lagosDayKey, lagosToUtc } from "./time";
 
+/** @deprecated import from ./time instead. */
+export { parseSlotMinutes } from "./time";
+
+// Scheduled inspection start as a UTC instant: the Lagos calendar day of
+// (rescheduledDate ?? preferredDate) at (rescheduledTime ?? preferredTime).
+// Lagos-explicit — never server-local setHours (the old Sep-29-vs-Sep-30 bug).
 export function scheduledInspectionStart(booking: {
   preferredDate: Date | string;
   preferredTime: string | null;
@@ -19,11 +16,5 @@ export function scheduledInspectionStart(booking: {
   if (!day) return null;
   const d = new Date(day);
   if (Number.isNaN(d.getTime())) return null;
-  const mins = parseSlotMinutes(booking.rescheduledTime ?? booking.preferredTime);
-  if (mins === null) {
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  d.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
-  return d;
+  return lagosToUtc(lagosDayKey(d), booking.rescheduledTime ?? booking.preferredTime ?? null);
 }

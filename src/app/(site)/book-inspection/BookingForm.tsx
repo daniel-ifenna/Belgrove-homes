@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { timeSlots } from "@/lib/content";
+import { lagosTodayInput } from "@/lib/time";
 import { BELGROVE_PLOTS } from "@/lib/belgroveData";
 import { formatNaira } from "@/lib/currency";
 
@@ -292,7 +293,7 @@ export default function BookingForm() {
             id="date"
             type="date"
             required
-            min={new Date().toISOString().split("T")[0]}
+            min={lagosTodayInput()}
             value={form.preferredDate}
             onChange={(e) => update("preferredDate", e.target.value)}
             className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"

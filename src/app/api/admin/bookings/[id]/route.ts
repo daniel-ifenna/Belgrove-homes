@@ -150,11 +150,8 @@ export async function PATCH(
       if (Number.isNaN(rescheduledDate.getTime())) {
         return NextResponse.json({ error: "Invalid rescheduled date" }, { status: 400 });
       }
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const resDay = new Date(rescheduledDate);
-      resDay.setHours(0, 0, 0, 0);
-      if (resDay.getTime() < today.getTime()) {
+      const { lagosDayKey, lagosTodayInput } = await import("@/lib/time");
+      if (lagosDayKey(rescheduledDate) < lagosTodayInput()) {
         return NextResponse.json({ error: "Rescheduled date cannot be in the past" }, { status: 400 });
       }
       // Safety check: agent conflict ±2h

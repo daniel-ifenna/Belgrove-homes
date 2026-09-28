@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { deriveInstallmentStatus } from "@/lib/paymentConfirmation";
+import { lagosMonthRange, startOfTodayLagos } from "@/lib/time";
 
 // Single source of truth for every financial figure in the app
 // (AGENTS.md rule 3). Pages and API routes must call these functions —
@@ -97,13 +98,13 @@ export async function getMonthlyTargetProgress(
   db: FinanceDb = realDb
 ): Promise<{ collected: number; goal: number; pct: number }> {
   const goal = Number(process.env.MONTHLY_SALES_TARGET) || 150_000_000;
-  const start = new Date(month.getFullYear(), month.getMonth(), 1);
-  const end = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+  // Month boundary in Lagos time (rule: business timezone).
+  const { start, end } = lagosMonthRange(month);
   const collected = await getCollectedRevenue({ from: start, to: end }, db);
   return { collected, goal, pct: goal > 0 ? Math.min(100, Math.round((collected / goal) * 100)) : 0 };
 }
 
-export async function getOverdueInstallments(db: FinanceDb = realDb, now: Date = new Date()) {
+export async function getOverdueInstallments(db: FinanceDb = realDb, now: Date = startOfTodayLagos()) {
   const rows = await db.installment.findMany({
     where: { transaction: { isTest: false }, dueDate: { lt: now }, status: { notIn: ["PAID", "WAIVED"] } },
     orderBy: { dueDate: "asc" },
@@ -125,7 +126,9 @@ export async function getOverdueInstallments(db: FinanceDb = realDb, now: Date =
 }
 
 export async function getRevenueSparkline(days: number = 14, db: FinanceDb = realDb, now: Date = new Date()): Promise<number[]> {
-  const start = new Date(now.getTime() - days * 86_400_000);
+  // Day buckets anchored at Lagos midnight so every server agrees.
+  const end = new Date(startOfTodayLagos(now).getTime() + 86_400_000);
+  const start = new Date(end.getTime() - days * 86_400_000);
   const payments = await db.payment.findMany({
     where: { ...confirmedWhere(start, now) },
     select: { amount: true, paymentDate: true },
@@ -138,7 +141,7 @@ export async function getRevenueSparkline(days: number = 14, db: FinanceDb = rea
   return buckets;
 }
 
-export async function getTransactionSummary(transactionId: string, db: FinanceDb = realDb, now: Date = new Date()): Promise<TransactionSummary | null> {
+export async function getTransactionSummary(transactionId: string, db: FinanceDb = realDb, now: Date = startOfTodayLagos()): Promise<TransactionSummary | null> {
   const txn = await db.transaction.findUnique({
     where: { id: transactionId },
     include: { installments: { orderBy: { installmentNumber: "asc" } } },
