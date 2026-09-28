@@ -20,19 +20,19 @@ export default function Footer() {
           <nav aria-label="Estates">
             <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C]">Estates</h4>
             <ul className="mt-4 space-y-2.5">
-              <li><Link href="/estates/aurum-residence" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Aurum Residence</Link></li>
-              <li><Link href="/estates/belgrove-peninsula" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Belgrove Peninsula</Link></li>
-              <li><Link href="/estates/sunrise-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Sunrise Estate</Link></li>
-              <li><Link href="/estates/starlight-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Starlight Estate</Link></li>
+              <li><Link href="/estates/aurum-residence" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Aurum Residence</Link></li>
+              <li><Link href="/estates/belgrove-peninsula" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Belgrove Peninsula</Link></li>
+              <li><Link href="/estates/sunrise-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Sunrise Estate</Link></li>
+              <li><Link href="/estates/starlight-estate" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Starlight Estate</Link></li>
             </ul>
           </nav>
           <nav aria-label="Company">
             <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C]">Company</h4>
             <ul className="mt-4 space-y-2.5">
-              <li><Link href="/about" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">About</Link></li>
-              <li><Link href="/about#leadership" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Leadership</Link></li>
-              <li><Link href="/blog" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Guides</Link></li>
-              <li><Link href="/faq" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">FAQ</Link></li>
+              <li><Link href="/about" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">About</Link></li>
+              <li><Link href="/about#leadership" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Leadership</Link></li>
+              <li><Link href="/blog" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Guides</Link></li>
+              <li><Link href="/faq" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">FAQ</Link></li>
             </ul>
           </nav>
           <div>
@@ -50,8 +50,8 @@ export default function Footer() {
             </div>
             <h4 className="mono text-[12px] tracking-[0.14em] uppercase text-[#D9B25C] mt-6">Follow</h4>
             <div className="mt-3 flex gap-5">
-              <a href="https://www.instagram.com/belgrove_homes?stkn=MTdjZWgyeW9jMWY3Nw==" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">Instagram</a>
-              <a href="https://www.tiktok.com/@belgrove.homes?_r=1&_t=ZS-99fISorFEkD" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors">TikTok</a>
+              <a href="https://www.instagram.com/belgrove_homes?stkn=MTdjZWgyeW9jMWY3Nw==" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">Instagram</a>
+              <a href="https://www.tiktok.com/@belgrove.homes?_r=1&_t=ZS-99fISorFEkD" target="_blank" rel="noopener noreferrer" className="public text-[13px] text-[#B9C4B8] hover:text-[#F5EFE2] transition-colors inline-block py-1.5">TikTok</a>
             </div>
           </div>
         </div>

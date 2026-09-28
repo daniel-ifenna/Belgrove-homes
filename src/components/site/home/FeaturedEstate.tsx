@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { MapPin, Ruler, Banknote, CalendarDays, ShieldCheck, Map as MapIcon, Play } from "lucide-react";
 import { SITE_ESTATES, FEATURED_GALLERY, FEATURED_VIDEO, SITE_CONTACT, formatNaira } from "@/lib/site";
@@ -24,10 +25,12 @@ export default function FeaturedEstate() {
     <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-start">
       <div>
         <div className="relative rounded-[14px] overflow-hidden aspect-[16/10] sm:aspect-[21/9] lg:aspect-[16/10]">
-          <img
+          <Image
             src={FEATURED_GALLERY[main].src}
             alt={FEATURED_GALLERY[main].alt}
-            className="absolute inset-0 w-full h-full object-cover"
+            fill
+            sizes="(max-width: 1024px) 100vw, 50vw"
+            className="object-cover"
           />
           <span className="absolute bottom-3 right-3 mono text-[10px] tracking-[0.06em] uppercase bg-black/55 text-white px-2.5 py-1 rounded-full">
             Artist&apos;s impression
@@ -40,9 +43,9 @@ export default function FeaturedEstate() {
               onClick={() => setMain(i)}
               aria-label={`View ${i + 1}: ${g.alt}`}
               aria-pressed={i === main}
-              className={`shrink-0 w-28 h-[72px] rounded-[10px] overflow-hidden border-2 transition-all ${i === main ? "border-[#C49A3A]" : "border-transparent opacity-70 hover:opacity-100"}`}
+              className={`shrink-0 w-28 h-[72px] rounded-[10px] overflow-hidden border-2 transition-all relative ${i === main ? "border-[#C49A3A]" : "border-transparent opacity-70 hover:opacity-100"}`}
             >
-              <img src={g.src} alt="" className="w-full h-full object-cover" />
+              <Image src={g.src} alt="" fill sizes="112px" loading="lazy" className="object-cover" />
             </button>
           ))}
           <div

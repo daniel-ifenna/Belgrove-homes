@@ -128,6 +128,7 @@ export default function CinematicIntroLoader() {
         className={`mt-6 transition-opacity duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${metaVisible ? "opacity-100" : "opacity-0"}`}
         style={{ width: "220px", height: "3px", background: "rgba(10,23,15,0.08)", borderRadius: "999px", overflow: "hidden" }}
         role="progressbar"
+        aria-label="Loading Belgrove Homes"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={fill ? 100 : 0}
@@ -145,7 +146,7 @@ export default function CinematicIntroLoader() {
 
       <button
         onClick={skip}
-        className="mono absolute bottom-8 text-[12px] tracking-[0.12em] uppercase text-[#5B5346] underline decoration-[#E4D8C1] underline-offset-4 hover:text-[#0A170F]"
+        className="mono absolute bottom-8 text-[12px] tracking-[0.12em] uppercase text-[#1C2B20] underline decoration-[#C49A3A] underline-offset-4 hover:text-[#8a6d2b]"
         style={{ fontFamily: "var(--font-plex-mono), monospace" }}
       >
         Skip

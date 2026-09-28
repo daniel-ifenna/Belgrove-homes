@@ -28,8 +28,8 @@ export default function Nav() {
 
   const logo = (
     <Link href="/" className="flex items-center gap-0 shrink-0">
-      <span className="font-serif text-[16px] tracking-[-0.02em] text-[#16281D] font-semibold">Belgrove</span>
-      <span className="font-serif text-[16px] tracking-[-0.02em] text-[#C89B3C] font-semibold ml-1">Homes</span>
+        <span className="font-serif text-[16px] tracking-[-0.02em] text-[#16281D] font-semibold">Belgrove</span>
+        <span className="font-serif text-[16px] tracking-[-0.02em] text-[#8a6d2b] font-semibold ml-1">Homes</span>
     </Link>
   );
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { Play } from "lucide-react";
 import { PLOT_SIZES, BUDGETS, SITE_ESTATES, HERO_SLIDES } from "@/lib/site";
@@ -26,17 +27,23 @@ export default function Hero() {
       aria-label="Featured estates"
     >
       <div className="absolute inset-0 overflow-hidden">
-        {HERO_SLIDES.map((h, i) => (
-          <div key={h.src} className={`hero-slide ${i === slide ? "on" : ""}`} aria-hidden={i !== slide}>
-            <img
-              src={h.src}
-              alt={h.alt}
-              fetchPriority={i === 0 ? "high" : undefined}
-              loading={i === 0 ? "eager" : "lazy"}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          </div>
-        ))}
+        {HERO_SLIDES.map((h, i) => {
+          // Only the visible slide and the next one stay mounted: fewer
+          // upfront requests, same crossfade.
+          if (i !== slide && i !== (slide + 1) % HERO_SLIDES.length) return null;
+          return (
+            <div key={h.src} className={`hero-slide ${i === slide ? "on" : ""}`} aria-hidden={i !== slide}>
+              <Image
+                src={h.src}
+                alt={h.alt}
+                fill
+                sizes="100vw"
+                priority={i === slide}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            </div>
+          );
+        })}
       </div>
       <div
         className="absolute inset-0"
@@ -77,14 +84,16 @@ export default function Hero() {
       </div>
 
       <div className="absolute z-10 right-6 lg:right-12 bottom-40 sm:bottom-36 flex gap-2">
-        {HERO_SLIDES.map((h, i) => (
-          <button
-            key={h.src}
-            onClick={() => setSlide(i)}
-            aria-label={`Slide ${i + 1}: ${h.caption}`}
-            className={`h-1.5 rounded-full transition-all ${i === slide ? "w-8 bg-[#C49A3A]" : "w-1.5 bg-white/50 hover:bg-white"}`}
-          />
-        ))}
+                {HERO_SLIDES.map((h, i) => (
+                  <button
+                    key={h.src}
+                    onClick={() => setSlide(i)}
+                    aria-label={`Slide ${i + 1}: ${h.caption}`}
+                    className="h-6 min-w-[24px] flex items-center justify-center"
+                  >
+                    <span className={`h-1.5 rounded-full transition-all ${i === slide ? "w-8 bg-[#C49A3A]" : "w-1.5 bg-white/50 hover:bg-white"}`} />
+                  </button>
+                ))}
       </div>
 
       <style>{`

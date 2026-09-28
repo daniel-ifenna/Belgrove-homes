@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Check, FileCheck, Ruler, Route } from "lucide-react";
 import CinematicIntroLoader from "@/components/site/CinematicIntroLoader";
 import Hero from "@/components/site/home/Hero";
@@ -52,7 +53,7 @@ export default function HomePage() {
         <div className="max-w-[1200px] mx-auto px-6 lg:px-12 py-[64px] lg:py-[112px]">
           <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
             <Reveal className="relative rounded-[14px] overflow-hidden aspect-[4/3]">
-              <img src={VERIFICATION_PHOTO.src} alt={VERIFICATION_PHOTO.alt} className="absolute inset-0 w-full h-full object-cover" />
+              <Image src={VERIFICATION_PHOTO.src} alt={VERIFICATION_PHOTO.alt} fill sizes="(max-width: 1024px) 100vw, 50vw" loading="lazy" className="object-cover" />
               <div
                 className="absolute inset-x-0 bottom-0 h-[40%]"
                 style={{ background: "linear-gradient(180deg, rgba(18,41,31,0), rgba(18,41,31,0.7))" }}
@@ -156,14 +157,19 @@ export default function HomePage() {
       </section>
 
       {/* 8 — BOOK AN INSPECTION */}
-      <section id="book" className="scroll-mt-20" style={{ background: "#F6EEE3" }}>
-        <div className="max-w-[1200px] mx-auto px-6 lg:px-12 py-[64px] lg:py-[112px] grid lg:grid-cols-2 gap-10 items-start">
+      <section id="book" className="relative overflow-hidden scroll-mt-20">
+        <Image src="/admin-login-house.jpg" alt="" aria-hidden fill sizes="100vw" loading="lazy" className="object-cover" />
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(180deg, rgba(18,41,31,0.82), rgba(18,41,31,0.92))" }}
+        />
+        <div className="relative max-w-[1200px] mx-auto px-6 lg:px-12 py-[64px] lg:py-[112px] grid lg:grid-cols-2 gap-10 items-start">
           <Reveal>
-            <Label>Book an inspection</Label>
-            <h2 className="fraunces text-[28px] lg:text-[44px] leading-[1.08] tracking-[-0.02em] mt-2">
+            <Label light>Book an inspection</Label>
+            <h2 className="fraunces text-white text-[28px] lg:text-[44px] leading-[1.08] tracking-[-0.02em] mt-2">
               See the land for yourself.
             </h2>
-            <p className="public text-[17px] leading-[1.6] text-[#5B5346] mt-3 max-w-[60ch]">
+            <p className="public text-[17px] leading-[1.6] text-white/80 mt-3 max-w-[60ch]">
               Pick a date. We&apos;ll walk the plot with you.
             </p>
             <div className="mt-8 bg-white rounded-[14px] border border-[#E4D8C1] p-6">

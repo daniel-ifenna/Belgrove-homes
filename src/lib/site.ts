@@ -66,9 +66,9 @@ export const SITE_ESTATES: SiteEstate[] = [
     from: 7500000,
     status: "Available",
     images: [
-      { src: "/sunrise-p1-350-fully-detached-bq.png", alt: "Sunrise Phase 1 detached duplex", render: true },
-      { src: "/sunrise-p1-150-terrace.png", alt: "Sunrise Phase 1 terrace duplex", render: true },
-      { src: "/sunrise-p1-500-fully-detached-bq.png", alt: "Sunrise Phase 1 duplex with BQ", render: true },
+      { src: "/sunrise-p1-350-fully-detached-bq.jpg", alt: "Sunrise Phase 1 detached duplex", render: true },
+      { src: "/sunrise-p1-150-terrace.jpg", alt: "Sunrise Phase 1 terrace duplex", render: true },
+      { src: "/sunrise-p1-500-fully-detached-bq.jpg", alt: "Sunrise Phase 1 duplex with BQ", render: true },
     ],
   },
   {
@@ -82,9 +82,9 @@ export const SITE_ESTATES: SiteEstate[] = [
     from: 4950000,
     status: "Pre-sale",
     images: [
-      { src: "/sunrise-p2-800-apartments.png", alt: "Sunrise Phase 2 apartment block", render: true },
-      { src: "/sunrise-p2-400-fully-detached-bq.png", alt: "Sunrise Phase 2 detached duplex", render: true },
-      { src: "/sunrise-p2-250-semi.png", alt: "Sunrise Phase 2 semi-detached duplex", render: true },
+      { src: "/sunrise-p2-800-apartments.jpg", alt: "Sunrise Phase 2 apartment block", render: true },
+      { src: "/sunrise-p2-400-fully-detached-bq.jpg", alt: "Sunrise Phase 2 detached duplex", render: true },
+      { src: "/sunrise-p2-250-semi.jpg", alt: "Sunrise Phase 2 semi-detached duplex", render: true },
     ],
   },
   {
@@ -107,7 +107,7 @@ export const SITE_ESTATES: SiteEstate[] = [
 
 export const HERO_SLIDES: (SiteEstateImage & { caption: string })[] = [
   { src: "/peninsula-900-apartments.jpeg", alt: "Belgrove Peninsula apartments", render: true, caption: "Belgrove Peninsula · Kabusa-Ketti North" },
-  { src: "/sunrise-p1-800-apartments.png", alt: "Sunrise Estate apartment block", render: true, caption: "Sunrise Estate · Kabusa-Ketti North" },
+  { src: "/sunrise-p1-800-apartments.jpg", alt: "Sunrise Estate apartment block", render: true, caption: "Sunrise Estate · Kabusa-Ketti North" },
   { src: "/starlight-750-flats.jpeg", alt: "Starlight Estate flats", render: true, caption: "Starlight Estate · Kyami" },
 ];
 

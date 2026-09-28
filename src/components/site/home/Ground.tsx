@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Play } from "lucide-react";
+import Image from "next/image";
 import { GROUND_VIDEO, GROUND_PHOTOS } from "@/lib/site";
 
 function Caption({ children }: { children: React.ReactNode }) {
@@ -27,7 +28,7 @@ export default function Ground() {
           <video
             ref={videoRef}
             src={GROUND_VIDEO.src}
-            preload="metadata"
+            preload="none"
             playsInline
             controls={playing}
             className="absolute inset-0 w-full h-full object-cover"
@@ -52,7 +53,7 @@ export default function Ground() {
       {GROUND_PHOTOS.map((g) => (
         <figure key={g.src}>
           <div className="relative rounded-[14px] overflow-hidden aspect-[3/2]">
-            <img src={g.src} alt={g.alt} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+            <Image src={g.src} alt={g.alt} fill sizes="(max-width: 768px) 100vw, 33vw" loading="lazy" className="object-cover" />
           </div>
           <Caption>{g.caption}</Caption>
         </figure>

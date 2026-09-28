@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { SITE_CONTACT, SITE_ESTATES, estateMatchesBudget, formatNaira } from "@/lib/site";
 
@@ -20,13 +21,12 @@ function Card({ name }: { name: string }) {
     <Link
       href={`/estates/${e.slug}`}
       className="block h-full bg-white rounded-[14px] overflow-hidden border border-[#E4D8C1] shadow-[0_12px_32px_rgba(22,40,29,0.08)] hover:shadow-[0_18px_44px_rgba(22,40,29,0.14)] hover:-translate-y-0.5 transition-all"
-      aria-label={`${e.name}, ${e.area}, from ${formatNaira(e.from)}`}
     >
       <div className="relative">
         <div className="strip flex overflow-x-auto">
           {e.images.map((img) => (
             <div key={img.src} className="relative shrink-0 w-full aspect-[4/3] overflow-hidden">
-              <img src={img.src} alt={img.alt} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+              <Image src={img.src} alt={img.alt} fill sizes="(max-width: 768px) 100vw, 33vw" loading="lazy" className="object-cover" />
             </div>
           ))}
         </div>
