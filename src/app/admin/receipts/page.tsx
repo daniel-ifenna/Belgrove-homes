@@ -6,7 +6,6 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
-import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
 export const dynamic = "force-dynamic";
 
 type SearchParams = { q?: string; status?: string; source?: string; page?: string; from?: string; to?: string; showTest?: string };
@@ -112,7 +111,6 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} receipts · Page {page} of {totalPages}</p>
           </div>
           <div className="flex items-center gap-2">
-            <TestDataToggle href={`/admin/receipts${toggleTestQuery(params as any, showTest)}`} showing={showTest} />
             <Link href="/admin/inspections" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Completed Inspections</Link>
           </div>
         </div>

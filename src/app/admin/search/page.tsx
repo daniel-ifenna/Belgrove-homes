@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { formatNaira } from "@/lib/currency";
-import TestDataToggle from "@/components/admin/TestDataToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -142,7 +141,6 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               {total} result{total === 1 ? "" : "s"} for <span className="font-mono font-medium text-[var(--ops-text)]">{q}</span>
             </p>
           </div>
-          <TestDataToggle href={showTest ? `/admin/search?q=${encodeURIComponent(q)}` : `/admin/search?q=${encodeURIComponent(q)}&showTest=1`} showing={showTest} />
         </div>
 
         {total === 0 ? (

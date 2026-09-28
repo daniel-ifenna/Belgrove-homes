@@ -5,7 +5,6 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
-import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
 import StatusBadge from "@/components/admin/StatusBadge";
 import ClickableRow from "@/components/admin/ClickableRow";
 import { formatDate } from "@/lib/booking-ui";
@@ -101,9 +100,6 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
             <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All confirmed and pending payments — financial truth from the payment ledger.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} payments · Page {page} of {totalPages}</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">Collected <span className="text-[var(--ops-text)] font-medium price">{formatNaira(collected)}</span> · {pendingCount} awaiting verification</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <TestDataToggle href={`/admin/payments${toggleTestQuery(params as any, showTest)}`} showing={showTest} />
           </div>
         </div>
 

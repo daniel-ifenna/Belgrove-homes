@@ -6,7 +6,6 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
-import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
 import { getTransactionOverviews } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 
@@ -86,7 +85,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} transactions · Page {page} of {totalPages}</p>
           </div>
           <div className="flex items-center gap-2">
-            <TestDataToggle href={`/admin/transactions${toggleTestQuery(params as any, showTest)}`} showing={showTest} />
             <Link href="/admin/transactions/new" className="mono text-[11px] tracking-wide uppercase bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 hover:bg-[var(--ops-deep)]">+ New Transaction</Link>
             <Link href="/admin/receipts" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Receipts</Link>
           </div>

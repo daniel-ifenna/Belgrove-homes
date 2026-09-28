@@ -5,7 +5,6 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 import InspectionsClient from "./InspectionsClient";
-import TestDataToggle from "@/components/admin/TestDataToggle";
 
 export default async function CompletedInspectionsPage({ searchParams }: { searchParams: Promise<{ showTest?: string }> }) {
   const session = await auth();
@@ -58,7 +57,6 @@ export default async function CompletedInspectionsPage({ searchParams }: { searc
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <TestDataToggle href={showTest ? "/admin/inspections" : "/admin/inspections?showTest=1"} showing={showTest} />
             <Link href="/admin/bookings?status=closed" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">
               View Not Converted ({notConvertedCount})
             </Link>

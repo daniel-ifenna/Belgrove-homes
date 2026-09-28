@@ -4,7 +4,6 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { getActionCounts, getActionItems, INBOX_CATEGORIES, type InboxCategory } from "@/lib/inbox";
 import { showTestFromParams } from "@/lib/test-data";
-import TestDataToggle from "@/components/admin/TestDataToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,6 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
     getActionCounts({ includeTest: showTest }),
   ]);
   const visible = active ? items.filter((i) => i.category === active) : items;
-  const toggleHref = showTest ? "/admin/inbox" + (active ? `?category=${active}` : "") : "/admin/inbox?showTest=1" + (active ? `&category=${active}` : "");
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -36,7 +34,6 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
               Live work queue — items clear themselves once handled. No dismiss buttons.
             </p>
           </div>
-          <TestDataToggle href={toggleHref} showing={showTest} />
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-4">

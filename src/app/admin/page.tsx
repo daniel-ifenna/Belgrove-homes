@@ -8,7 +8,6 @@ import { excludeTestRows } from "@/lib/test-data";
 import { getCollectedRevenue, getOverdueInstallments, getPendingVerification } from "@/lib/finance";
 import { getActionCounts, getActionItems, INBOX_CATEGORIES } from "@/lib/inbox";
 import { lagosMonthRange } from "@/lib/time";
-import TestDataToggle from "@/components/admin/TestDataToggle";
 import TrendChip from "@/components/admin/TrendChip";
 
 export const dynamic = "force-dynamic";
@@ -123,7 +122,6 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
             {totalBookings} bookings all time
           </p>
           </div>
-          <TestDataToggle href={showTest ? "/admin" : "/admin?showTest=1"} showing={showTest} />
         </div>
 
         {/* Stat cards */}

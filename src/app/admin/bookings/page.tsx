@@ -6,7 +6,6 @@ import { redirect } from "next/navigation";
 import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 import { allStatuses, allTemperatures, formatDate } from "@/lib/booking-ui";
 import AdminPagination from "@/components/admin/AdminPagination";
-import TestDataToggle, { toggleTestQuery } from "@/components/admin/TestDataToggle";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { lagosDayKey, lagosTodayInput } from "@/lib/time";
 import { phonesMatch } from "@/lib/phone";
@@ -196,7 +195,6 @@ export default async function AdminBookingsPage({
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} bookings · Page {page} of {totalPages}</p>
           </div>
           <div className="flex items-center gap-2.5">
-            <TestDataToggle href={`/admin/bookings${toggleTestQuery(params as any, showTest)}`} showing={showTest} />
             <Link href="/admin/inspections" className="hidden lg:inline-flex items-center gap-1.5 mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] text-[var(--ops-text)] rounded-full px-4 py-2.5 hover:bg-[var(--ops-bg)]">
               Completed Inspections →
             </Link>
