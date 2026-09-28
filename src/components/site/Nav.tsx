@@ -5,8 +5,11 @@ import { useState, useEffect } from "react";
 import ContactModal from "./ContactModal";
 
 const links = [
+  { href: "/#estates", label: "ESTATES" },
   { href: "/gallery", label: "GALLERY" },
   { href: "/about", label: "ABOUT" },
+  { href: "/blog", label: "GUIDES" },
+  { href: "/#contact", label: "CONTACT" },
 ];
 
 export default function Nav() {
@@ -32,7 +35,7 @@ export default function Nav() {
 
   if (isHome) {
     return (
-      <header className={`fixed top-0 inset-x-0 z-30 flex justify-center px-4 transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${scrolled ? "bg-[rgba(247,239,226,0.92)] backdrop-blur-md border-b border-[#E4D8C1] shadow-[0_4px_16px_rgba(22,40,29,0.08)] pt-2 pb-2" : "bg-transparent border-transparent pt-4"}` }>
+      <header className={`fixed top-0 inset-x-0 z-30 flex justify-center px-4 transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${scrolled ? "bg-[rgba(246,238,227,0.92)] backdrop-blur-md border-b border-[#E4D8C1] shadow-[0_4px_16px_rgba(22,40,29,0.08)] pt-2 pb-2" : "bg-transparent border-transparent pt-4"}` }>
         <nav className={`w-full max-w-[1160px] bg-white rounded-[8px] flex items-center justify-between px-5 lg:px-7 transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${scrolled ? "shadow-[0_4px_16px_rgba(22,40,29,0.08)] py-2.5" : "shadow-[0_8px_28px_rgba(22,40,29,0.16)] py-3"}`}>
           {logo}
           <div className="hidden md:flex items-center gap-6">
@@ -45,24 +48,25 @@ export default function Nav() {
                 {l.label}
               </Link>
             ))}
-            <button onClick={() => setContactOpen(true)} className="mono text-[12px] tracking-[0.08em] uppercase text-[#5B5346] hover:text-[#16281D] transition-colors">
-              GET IN TOUCH
-            </button>
           </div>
-          <Link href="/book-inspection" className="hidden md:inline-flex mono text-[12px] tracking-[0.08em] uppercase bg-[#C89B3C] text-[#16281D] px-7 py-2.5 rounded-[6px] hover:bg-[#E8C77A] transition-colors font-medium">
+          <Link href="/book-inspection" className="hidden md:inline-flex mono text-[12px] tracking-[0.08em] uppercase bg-[#C49A3A] text-[#12291F] px-7 py-2.5 rounded-[6px] hover:bg-[#E8C77A] transition-colors font-medium">
             BOOK INSPECTION
           </Link>
-          <button className="md:hidden h-8 w-8 grid place-items-center" onClick={() => setOpen(!open)} aria-label="Menu">
-            <span className="block w-5 h-0.5 bg-[#16281D] mb-1" /><span className="block w-5 h-0.5 bg-[#16281D] mb-1" /><span className="block w-5 h-0.5 bg-[#16281D]" />
-          </button>
+          <div className="md:hidden flex items-center gap-2">
+            <Link href="/book-inspection" className="mono text-[11px] tracking-[0.08em] uppercase bg-[#C49A3A] text-[#12291F] px-4 py-2 rounded-[6px] font-medium">
+              BOOK
+            </Link>
+            <button className="h-11 w-11 grid place-items-center" onClick={() => setOpen(!open)} aria-label="Open menu" aria-expanded={open}>
+              <span className="block w-5 h-0.5 bg-[#16281D] mb-1" /><span className="block w-5 h-0.5 bg-[#16281D] mb-1" /><span className="block w-5 h-0.5 bg-[#16281D]" />
+            </button>
+          </div>
         </nav>
         {open && (
           <div className="absolute top-[62px] inset-x-4 bg-white rounded-[8px] shadow-lg p-4 flex flex-col gap-3 md:hidden border border-[#E4D8C1]">
             {links.map((l) => (
               <Link key={l.href} href={l.href} className="public text-[13px] text-[#1C2B20]" onClick={() => setOpen(false)}>{l.label}</Link>
             ))}
-            <button className="mono text-[12px] uppercase text-[#1C2B20] px-0 py-2 text-left tracking-[0.08em]" onClick={() => { setOpen(false); setContactOpen(true); }}>GET IN TOUCH</button>
-            <Link href="/book-inspection" className="mono text-[12px] uppercase tracking-[0.08em] bg-[#C89B3C] text-[#16281D] px-4 py-3 rounded-[6px] text-center font-medium" onClick={() => setOpen(false)}>BOOK INSPECTION</Link>
+            <Link href="/book-inspection" className="mono text-[12px] uppercase tracking-[0.08em] bg-[#C49A3A] text-[#12291F] px-4 py-3 rounded-[6px] text-center font-medium" onClick={() => setOpen(false)}>BOOK INSPECTION</Link>
           </div>
         )}
         <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
