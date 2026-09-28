@@ -13,8 +13,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
   const { installmentId, amount, paymentDate, paymentMethod, bankReference, notes } = body;
+  // Money is integer naira (schema Int) — reject floats, not just non-numbers.
   const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) return NextResponse.json({ error: "Valid amount required" }, { status: 400 });
+  if (!Number.isInteger(amt) || amt <= 0) return NextResponse.json({ error: "Enter a whole-naira amount" }, { status: 400 });
 
   const date = paymentDate ? new Date(paymentDate) : new Date();
   if (Number.isNaN(date.getTime())) return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });

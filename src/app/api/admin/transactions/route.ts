@@ -178,6 +178,9 @@ export async function POST(request: NextRequest) {
       const payDate = body.initialPayment.paymentDate ? new Date(body.initialPayment.paymentDate) : new Date();
       const payMethod = body.initialPayment.paymentMethod || "Bank Transfer";
       const payAmount = Number(body.initialPayment.amount);
+      if (!Number.isInteger(payAmount) || payAmount <= 0) {
+        return NextResponse.json({ error: "Enter a whole-naira initial payment amount" }, { status: 400 });
+      }
       // Find initial installment
       const installments = await prisma.installment.findMany({ where: { transactionId: transaction.id }, orderBy: { installmentNumber: "asc" } });
       const initialInst = installments.find((i) => i.type === "INITIAL") ?? installments[0];

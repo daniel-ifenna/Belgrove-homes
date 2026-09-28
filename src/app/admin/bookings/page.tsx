@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { isInternalRole } from "@/lib/authz";
+import { redirect } from "next/navigation";
 import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 import { allStatuses, allTemperatures, formatDate } from "@/lib/booking-ui";
 import AdminPagination from "@/components/admin/AdminPagination";
@@ -74,6 +77,8 @@ export default async function AdminBookingsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const session = await auth();
+  if (!isInternalRole(session?.user?.role)) redirect("/admin/login");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const q = params.q?.trim() ?? "";

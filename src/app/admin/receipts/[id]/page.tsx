@@ -1,4 +1,7 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
+import { isInternalRole } from "@/lib/authz";
+import { redirect } from "next/navigation";
 import StatusBadge from "@/components/admin/StatusBadge";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +15,8 @@ import ReceiptActions from "./ReceiptActions";
 
 // Dates go through the shared Lagos formatter (src/lib/booking-ui.ts).
 export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!isInternalRole(session?.user?.role)) redirect("/admin/login");
   const { id } = await params;
   const receipt = await prisma.receipt.findUnique({
     where: { id },

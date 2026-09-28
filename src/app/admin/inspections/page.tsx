@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { isInternalRole } from "@/lib/authz";
+import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 import InspectionsClient from "./InspectionsClient";
 import TestDataToggle from "@/components/admin/TestDataToggle";
 
 export default async function CompletedInspectionsPage({ searchParams }: { searchParams: Promise<{ showTest?: string }> }) {
+  const session = await auth();
+  if (!isInternalRole(session?.user?.role)) redirect("/admin/login");
   const showTest = (await searchParams).showTest === "1";
   // Completed inspections = status active (inspection held), awaiting sold/not-sold outcome
   // Includes both plain active and active+interested (hot lead awaiting final decision)

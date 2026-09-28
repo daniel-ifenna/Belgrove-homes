@@ -33,7 +33,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
   recordedById?: string | null;
   recordedByName?: string | null;
 }) {
-  if (!Number.isFinite(params.amount) || params.amount <= 0) throw new Error("Invalid payment amount");
+  if (!Number.isInteger(params.amount) || params.amount <= 0) throw new Error("Enter a whole-naira amount");
 
   // Pre-transaction validation reads (authoritative re-checks run inside).
   const transaction = await prisma.transaction.findUnique({

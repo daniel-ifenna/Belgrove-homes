@@ -14,6 +14,11 @@ function isUniqueRefConflict(err: unknown): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  // Public form: fixed-window limit per IP (spam friction, not a hard gate).
+  const { checkRateLimit, clientIp, rateLimitResponse } = await import("@/lib/rate-limit");
+  const rl = checkRateLimit(`booking:${clientIp(request.headers)}`, 20, 15 * 60_000);
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+
   const body = await request.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
