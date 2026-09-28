@@ -9,7 +9,7 @@ export const proxy = auth((req) => {
 
   if (isLoginPage) {
     if (isInternalUser) {
-      return NextResponse.redirect(new URL("/admin/bookings", req.url));
+      return NextResponse.redirect(new URL("/admin", req.url));
     }
     return NextResponse.next();
   }

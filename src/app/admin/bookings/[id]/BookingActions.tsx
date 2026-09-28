@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { isTransitionAllowed, temperatureRank } from "@/lib/booking-transitions";
 import { timeSlots } from "@/lib/content";
+import PanelHeader from "@/components/admin/PanelHeader";
 import type { BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 
 type Booking = {
@@ -63,6 +64,7 @@ export default function BookingActions({
   const [selectedAgentId, setSelectedAgentId] = useState(booking.agentId ?? "");
   const [assignNote, setAssignNote] = useState("");
   const [assignSilent, setAssignSilent] = useState(false);
+  const [assignOverride, setAssignOverride] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
   // Lead
@@ -253,12 +255,13 @@ export default function BookingActions({
 
       {showReview && (
         <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2">
-            <span className="h-6 w-6 rounded-md bg-[var(--forest-800)] text-white grid place-items-center text-xs">◎</span>
-            Review
-            <span className="text-xs font-normal text-[var(--ink-muted)]">· status transitions (separate from Company Agent binding)</span>
-          </h2>
-          <p className="text-xs text-[var(--ink-muted)]">Use this tile to change booking status. Company Agent binding is in the tile below. One shared note is applied to whichever review action you click.</p>
+          <PanelHeader
+            title="Review"
+            description="Status transitions — separate from Company Agent binding. One shared note is applied to whichever action you click."
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.5" /></svg>
+            }
+          />
 
           <div>
             <label className="block text-xs text-[var(--ink-muted)] mb-1">Note for next action (shared)</label>
@@ -270,15 +273,15 @@ export default function BookingActions({
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             {isTransitionAllowed("approve", status) && (
               <button
                 onClick={() => run("approve", { note: reviewNote || undefined })}
                 disabled={busy !== null || !canApprove}
-                title={!canApprove ? "Approver required" : undefined}
+                title={!canApprove ? "Approver required" : "Approving will auto-move lead Cold → Warm"}
                 className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
               >
-                {busy === "approve" ? "Approving…" : "Approve"}
+                {busy === "approve" ? "Approving…" : "Approve → Warm"}
               </button>
             )}
             {isTransitionAllowed("hold", status) && (
@@ -300,9 +303,13 @@ export default function BookingActions({
               </button>
             )}
           </div>
+          <div className="auto-note">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16" /><circle cx="12" cy="8" r="0.5" fill="currentColor" /></svg>
+            <span>Auto: <span className="font-medium text-[var(--ops-text)]">Approve → Warm</span> if currently Cold · <span className="font-medium text-[var(--ops-text)]">Interested → Hot</span> and stays open for Sold / Not Sold — both close with an automated email before locking.</span>
+          </div>
 
           {isTransitionAllowed("reschedule", status) && (
-            <div className="border-t border-[var(--line)] pt-4">
+            <div id="reschedule-section" className="border-t border-[var(--line)] pt-4">
               <p className="text-xs font-medium text-[var(--ink)] mb-2">Reschedule</p>
               <div className="flex flex-wrap items-end gap-3">
                 <div>
@@ -335,7 +342,7 @@ export default function BookingActions({
                 <button
                   onClick={() => run("reschedule", { rescheduledDate, rescheduledTime, note: reviewNote || undefined, notifyClient })}
                   disabled={busy !== null || !rescheduledDate || !rescheduledTime}
-                  className="text-sm bg-[var(--plum-600)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
+                  className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50"
                 >
                   {busy === "reschedule" ? "Rescheduling…" : "Reschedule"}
                 </button>
@@ -348,10 +355,14 @@ export default function BookingActions({
 
       {showMarkActive && (
         <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-          <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-4">
-            <span className="h-6 w-6 rounded-md bg-teal-600 text-white grid place-items-center text-xs">✓</span>
-            Mark inspection as held
-          </h2>
+          <PanelHeader
+            title="Mark inspection as held"
+            description="Record what happened — the booking moves to Completed Inspections."
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9" /></svg>
+            }
+          />
+          <div className="mt-4">
           <textarea
             value={activeNote}
             onChange={(e) => setActiveNote(e.target.value)}
@@ -362,49 +373,84 @@ export default function BookingActions({
           <button
             onClick={() => run("mark_active", { internalNote: activeNote })}
             disabled={busy !== null || !activeNote.trim()}
-            className="mt-3 text-sm bg-teal-700 text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
+            className="mt-3 text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50"
           >
             {busy === "mark_active" ? "Saving…" : "Mark as active"}
           </button>
+          </div>
         </div>
       )}
 
       {showOutcome && (
-        <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-          <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-3">
-            <span className="h-6 w-6 rounded-md bg-[var(--forest-600)] text-white grid place-items-center text-xs">★</span>
-            Record sale outcome
-          </h2>
-          <p className="text-xs text-[var(--ink-muted)] mb-3">Active → Close. Includes subscription-form message for Interested.</p>
-          <div className="flex gap-3 flex-wrap items-center">
-            <button
-              onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
-              disabled={busy !== null}
-              className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
-            >
-              Sold
-            </button>
-            <button
-              onClick={() => {
-                if (!showInterestedPreview) {
-                  setShowInterestedPreview(true);
-                  return;
-                }
-                run("record_outcome", { outcome: "interested", note: reviewNote || undefined });
-              }}
-              disabled={busy !== null}
-              className="text-sm bg-[var(--gold-600)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
-            >
-              {busy === "record_outcome" ? "Saving…" : "Interested"}
-            </button>
-            <button
-              onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
-              disabled={busy !== null}
-              className="text-sm bg-white border border-[var(--line)] rounded-full px-5 py-2 font-medium disabled:opacity-50"
-            >
-              Not sold
-            </button>
-          </div>
+        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+          <PanelHeader
+            title="Record sale outcome"
+            description="Interested heats to Hot and stays open — Sold and Not Sold close with an automated response."
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l7 4v6c0 5-4 9-7 11-3-2-7-6-7-11V6l7-4z" /><path d="M9 12l2 2 4-4" /></svg>
+            }
+          />
+          <div className="mt-4">
+          {(booking as any).outcome === "interested" ? (
+            <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
+              <div className="flex items-center gap-2">
+                <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
+                <span className="text-[13px] font-medium text-[#92400E]">Interested — Hot lead • Awaiting final decision</span>
+                <span className="ml-auto px-2 py-1 rounded-full text-[11px] font-medium bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span>
+              </div>
+              <p className="public text-[12px] leading-[1.5] text-[#92400E]/80 mt-2">Client signaled as <strong>Interested</strong> and automatically moved to <strong>HOT</strong>. Next, confirm if they <strong>bought (Sold)</strong> or <strong>did not buy (Not Sold)</strong> — the system will send the appropriate automated response and then close.</p>
+              <div className="flex gap-3 flex-wrap items-center mt-4">
+                <button
+                  onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-[#0D3328] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[#08261E] disabled:opacity-50 shadow-sm"
+                >
+                  Bought — Sold
+                </button>
+                <button
+                  onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-white border border-[var(--ops-border)] rounded-full px-5 py-2.5 font-medium hover:bg-[var(--ops-bg)] disabled:opacity-50"
+                >
+                  Not Sold
+                </button>
+              </div>
+              <p className="mono text-[10px] text-[#92400E]/60 mt-2">Both actions send an automated email/message before locking the booking as closed.</p>
+            </div>
+          ) : (
+            <>
+              <p className="public text-[12px] leading-[1.5] text-[var(--ops-muted)] mb-4">Choose the outcome. <span className="font-medium text-[var(--ops-text)]">Interested</span> will auto-heat to <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span> and stay open for the final Sold / Not Sold step. <span className="font-medium">Sold</span> and <span className="font-medium">Not Sold</span> both close with an automated response.</p>
+              <div className="flex gap-3 flex-wrap items-center">
+                <button
+                  onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50 shadow-sm"
+                >
+                  Sold
+                </button>
+                <button
+                  onClick={() => {
+                    if (!showInterestedPreview) {
+                      setShowInterestedPreview(true);
+                      return;
+                    }
+                    run("record_outcome", { outcome: "interested", note: reviewNote || undefined });
+                  }}
+                  disabled={busy !== null}
+                  className="text-sm bg-[#C8A04A] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[#9A7A2F] disabled:opacity-50 shadow-sm"
+                >
+                  {busy === "record_outcome" ? "Saving…" : "Interested → Hot"}
+                </button>
+                <button
+                  onClick={() => run("record_outcome", { outcome: "not_sold", note: reviewNote || undefined })}
+                  disabled={busy !== null}
+                  className="text-sm bg-white border border-[var(--ops-border)] rounded-full px-5 py-2.5 font-medium hover:bg-[var(--ops-bg)] disabled:opacity-50"
+                >
+                  Not sold
+                </button>
+              </div>
+            </>
+          )}
           {showInterestedPreview && (
             <div className="mt-4 p-4 rounded-xl bg-[var(--cream)] border border-[var(--line)] text-sm">
               <div className="font-medium text-[var(--ink)] mb-2">Preview Interested message to client</div>
@@ -427,17 +473,19 @@ export default function BookingActions({
               <p className="text-xs text-[var(--ink-muted)] mt-2">Logged as a System Timeline entry exact text stays auditable.</p>
             </div>
           )}
+          </div>
         </div>
       )}
 
       {/* Company Agent canonical typeahead */}
       <div id="assign-agent" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-        <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2">
-          <span className="h-6 w-6 rounded-md bg-[var(--forest-800)] text-white grid place-items-center text-xs">◈</span>
-          Company Agent
-          <span className="text-xs font-normal text-[var(--ink-muted)]">· typeahead against Agents DB</span>
-        </h2>
-        <p className="text-xs text-[var(--ink-muted)] mt-1">Binding source of truth is the Agents table. Visitor’s raw text is shown read-only below; confirm match explicitly.</p>
+        <PanelHeader
+          title="Company Agent"
+          description="Typeahead against the Agents table — the visitor's raw text is read-only; confirm the match explicitly."
+          icon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>
+          }
+        />
 
         {agents.length === 0 ? (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-4">No company agents yet <a href="/admin/agents" className="underline">add agents</a> first.</p>
@@ -490,17 +538,28 @@ export default function BookingActions({
               )}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3">
+              <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Note to agent — will appear in email & internal notes</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={assignNote}
+                  onChange={(e) => setAssignNote(e.target.value)}
+                  placeholder="e.g. Please prioritize — client is hot, call within 2 hours"
+                  className="border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
+                />
+                <label className="flex items-center gap-1.5 text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 cursor-pointer">
+                  <input type="checkbox" checked={assignSilent} onChange={(e) => setAssignSilent(e.target.checked)} className="rounded" />
+                  Silent (no email)
+                </label>
+              </div>
+              <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">Leave a note to give context — it will be saved to the timeline and included in the agent’s email.</p>
+              <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-2 mb-1">Phone-match override reason (only if the agent shares the customer’s phone)</label>
               <input
-                value={assignNote}
-                onChange={(e) => setAssignNote(e.target.value)}
-                placeholder="Note to agent (optional)"
-                className="border border-[var(--line)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] bg-white"
+                value={assignOverride}
+                onChange={(e) => setAssignOverride(e.target.value)}
+                placeholder="e.g. Agent is the customer’s spouse — verified by phone call"
+                className="border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] w-full bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
               />
-              <label className="flex items-center gap-1.5 text-xs">
-                <input type="checkbox" checked={assignSilent} onChange={(e) => setAssignSilent(e.target.checked)} />
-                Silent (no email)
-              </label>
             </div>
 
             {selectedAgentId && !assignSilent && (
@@ -521,7 +580,7 @@ export default function BookingActions({
 
             <div className="mt-3 flex flex-wrap gap-2">
               <button
-                onClick={() => run("assign_agent", { agentId: selectedAgentId || null, note: assignNote || undefined, silent: assignSilent })}
+                onClick={() => run("assign_agent", { agentId: selectedAgentId || null, note: assignNote || undefined, silent: assignSilent, overrideReason: assignOverride || undefined })}
                 disabled={busy !== null}
                 className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
               >
@@ -559,19 +618,22 @@ export default function BookingActions({
 
       {/* Messaging follow-up with assigned agent */}
       <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2">
-            <span className="h-7 w-7 rounded-full bg-[var(--forest-800)] text-white grid place-items-center text-xs">💬</span>
-            Messaging
-          </h2>
-          <span className="text-xs px-2.5 py-1 rounded-full bg-[var(--cream)] border border-[var(--line)] text-[var(--ink-muted)]">{messages.length} messages</span>
+        <div className="flex items-start justify-between gap-3">
+          <PanelHeader
+            title="Messaging"
+            description="Follow-ups are emailed to the assigned agent and logged to the timeline."
+            icon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+            }
+          />
+          <span className="mono text-[11px] px-2.5 py-1 rounded-full bg-[var(--ops-bg)] border border-[var(--ops-border)] text-[var(--ops-muted)] shrink-0">{messages.length} messages</span>
         </div>
         {messages.length === 0 ? (
-          <div className="py-6 text-center border border-dashed border-[var(--line)] rounded-xl bg-[var(--cream)]/50">
+          <div className="mt-4 py-6 text-center border border-dashed border-[var(--line)] rounded-xl bg-[var(--cream)]/50">
             <p className="text-sm text-[var(--ink-muted)]">No messages yet</p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+          <div className="mt-4 space-y-3 max-h-72 overflow-y-auto pr-1">
             {messages.map((m) => (
               <div key={m.id} className="flex gap-3 p-3 rounded-xl border border-[var(--line)] bg-[var(--cream)]/60">
                 <div className="h-8 w-8 rounded-full bg-[var(--forest-800)] text-white grid place-items-center text-xs shrink-0 font-medium">
@@ -589,32 +651,36 @@ export default function BookingActions({
           </div>
         )}
         <div className="mt-4">
+          <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Follow-up message — emailed to assigned agent & logged to timeline</label>
           <textarea
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder="Post a follow-up note…"
+            placeholder="Post a follow-up note… e.g. Client called, wants to reschedule to next week, hot lead"
             rows={3}
-            className="w-full border border-[var(--line)] rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--forest-600)] resize-none"
+            className="w-full border border-[var(--ops-border)] rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10 resize-none"
           />
+          <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">This will be saved as a message, added to the activity timeline, and emailed to the assigned agent (if any).</p>
           <div className="flex items-center justify-between mt-3">
-            <span className="text-xs text-[var(--ink-muted)]">{messageText.length}/5000</span>
-            <button onClick={sendMessage} disabled={!messageText.trim() || messageSending} className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2.5 font-medium disabled:opacity-50">
-              {messageSending ? "Sending…" : "Send message"}
+            <span className="mono text-[11px] text-[var(--ops-muted)]">{messageText.length}/5000</span>
+            <button onClick={sendMessage} disabled={!messageText.trim() || messageSending} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 font-medium disabled:opacity-50 hover:bg-[var(--ops-deep)] transition-colors">
+              {messageSending ? "Sending…" : "Send message →"}
             </button>
           </div>
-          {messageError && <p className="text-xs text-[var(--red-600)] mt-2">{messageError}</p>}
+          {messageError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">{messageError}</p>}
         </div>
       </div>
 
       {/* Internal notes append-only */}
-      <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-        <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-3">
-          <span className="h-6 w-6 rounded-md bg-[var(--gold-600)] text-white grid place-items-center text-xs">✎</span>
-          Internal notes
-          <span className="text-xs font-normal text-[var(--ink-muted)]">· append-only, attributed</span>
-        </h2>
+      <div id="internal-notes" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
+        <PanelHeader
+          title="Internal notes"
+          description="Append-only, attributed — visible to staff only."
+          icon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
+          }
+        />
         {internalNotes.length > 0 ? (
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1 mb-3">
+          <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-1 mb-3">
             {internalNotes.map((n) => (
               <div key={n.id} className="p-2.5 rounded-xl bg-[var(--cream)] border border-[var(--line)] text-sm">
                 <div className="text-xs text-[var(--ink-muted)]">{n.authorName} · {new Date(n.createdAt).toLocaleString()}</div>
@@ -623,7 +689,7 @@ export default function BookingActions({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-[var(--ink-muted)] mb-3">No internal notes yet.</p>
+          <p className="mt-4 text-sm text-[var(--ink-muted)] mb-3">No internal notes yet.</p>
         )}
         <div className="flex gap-2">
           <input
@@ -643,13 +709,16 @@ export default function BookingActions({
       </div>
 
       {/* Lead temperature */}
-      <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-        <h2 className="text-sm font-semibold text-[var(--ink)] flex items-center gap-2 mb-3">
-          <span className="h-6 w-6 rounded-md bg-[var(--red-600)] text-white grid place-items-center text-xs">◐</span>
-          Lead temperature
-        </h2>
-        <p className="text-sm text-[var(--ink-muted)] mb-3">
-          Currently <span className="font-medium capitalize text-[var(--ink)]">{booking.leadTemperature}</span>. Escalate manually, cool down with reason. Hot → warm automatically after <strong>30 days</strong> with no logged contact (no message, note, or status change) checked daily; manual cool-down also available below.
+      <div id="lead-temp" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6 scroll-mt-24">
+        <PanelHeader
+          title="Lead temperature"
+          description="Escalate manually, or cool down with a reason. Hot cools to Warm automatically after 30 days with no logged contact."
+          icon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v10" /><circle cx="12" cy="17" r="4" /></svg>
+          }
+        />
+        <p className="mt-4 text-sm text-[var(--ink-muted)] mb-3">
+          Currently <span className="font-medium capitalize text-[var(--ink)]">{booking.leadTemperature}</span>. Escalate manually, or cool down with a reason below.
         </p>
         {escalationTargets.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mb-3">

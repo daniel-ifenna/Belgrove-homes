@@ -1,0 +1,194 @@
+import { prisma } from "@/lib/prisma";
+import { generateUniqueReceiptRef } from "@/lib/ref";
+import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/lib/app-url";
+import { receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
+import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
+import { generateQrDataUrl } from "@/lib/receipts/qr";
+import { sendReceiptEmail } from "@/lib/receipts/emailReceipt";
+import {
+  applyConfirmationDbUnit,
+  wouldExceedSchedule,
+  OverScheduleError,
+  logServerError,
+} from "@/lib/paymentConfirmation";
+import { generateAndStoreReceiptPdf, deliverReceiptEmail } from "@/lib/receiptDelivery";
+import fs from "node:fs";
+import path from "node:path";
+
+function formatDateDMY(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+// Single-step record-and-confirm used by transaction creation with an
+// initial payment. Same guarantees as the two-step flow: the database
+// transaction contains DB work only; PDF/email happen post-commit and can
+// never roll back the payment. Receipts are strictly 1:1 with payments.
+export async function recordPaymentAndGenerateReceipt(params: {
+  transactionId: string;
+  installmentId?: string | null;
+  amount: number;
+  paymentDate: Date;
+  paymentMethod?: string | null;
+  notes?: string | null;
+  recordedById?: string | null;
+  recordedByName?: string | null;
+}) {
+  if (!Number.isFinite(params.amount) || params.amount <= 0) throw new Error("Invalid payment amount");
+
+  // Pre-transaction validation reads (authoritative re-checks run inside).
+  const transaction = await prisma.transaction.findUnique({
+    where: { id: params.transactionId },
+    include: { installments: { orderBy: { installmentNumber: "asc" } }, paymentPlan: true },
+  });
+  if (!transaction) throw new Error("Transaction not found");
+  if (transaction.status === "CANCELLED") throw new Error("Transaction is cancelled");
+  if (transaction.outstandingBalance <= 0) throw new Error("Transaction already paid in full");
+  if (params.amount > transaction.outstandingBalance) {
+    throw new Error(`Amount exceeds outstanding balance of ${transaction.outstandingBalance}`);
+  }
+
+  const installment =
+    params.installmentId != null
+      ? transaction.installments.find((i) => i.id === params.installmentId) ?? null
+      : (transaction.installments.find((i) => i.status !== "PAID" && i.status !== "WAIVED") ?? null);
+  if (!installment) throw new Error("No unpaid installment available for this transaction");
+  if (wouldExceedSchedule(installment.paidAmount ?? 0, 0, params.amount, installment.scheduledAmount)) {
+    throw new OverScheduleError(installment.paidAmount ?? 0, params.amount, installment.scheduledAmount);
+  }
+
+  const receiptRef = await generateUniqueReceiptRef();
+  getAppUrl(); // throws in production when APP_URL is missing — fail before any write
+  const accessToken = generateReceiptAccessToken();
+  const receiptUrl = getReceiptAccessUrl(accessToken);
+  const pdfPath = receiptPdfPath(receiptRef);
+
+  // DB-ONLY transaction: payment row → confirm claim → installment → totals → receipt row.
+  const confirmed = await prisma.$transaction(
+    async (tx) => {
+      const payment = await tx.payment.create({
+        data: {
+          transactionId: transaction.id,
+          installmentId: installment!.id,
+          amount: params.amount,
+          paymentDate: params.paymentDate,
+          paymentMethod: params.paymentMethod,
+          notes: params.notes,
+          recordedById: params.recordedById,
+          status: "PENDING_VERIFICATION",
+        },
+      });
+      return applyConfirmationDbUnit(tx, {
+        paymentId: payment.id,
+        transactionId: transaction.id,
+        confirmedById: params.recordedById,
+        receiptRef,
+        receiptUrl,
+        qrTargetUrl: receiptUrl,
+        pdfPath,
+        accessToken,
+      });
+    },
+    { maxWait: 5000, timeout: 10000 }
+  );
+
+  // ---- Post-commit side effects (recoverable) ----
+  const issuedDateStr = formatDateDMY(confirmed.payment.paymentDate);
+
+  const qrDataUrl = await generateQrDataUrl(receiptUrl).catch((e) => {
+    logServerError(`receipt ${receiptRef}: QR generation failed`, e);
+    return undefined;
+  });
+
+  const pdfOutcome = await generateAndStoreReceiptPdf({
+    db: prisma,
+    receiptId: confirmed.receiptId,
+    ref: receiptRef,
+    pdfPath,
+    render: () =>
+      generateReceiptPdf({
+        ref: receiptRef,
+        issuedDate: issuedDateStr,
+        clientName: transaction.customerName,
+        clientAddress: `${transaction.estate} · ${transaction.unitType ?? "Plot"} · ${transaction.plotCode ?? transaction.ref}`,
+        clientPhone: transaction.customerPhone ?? "",
+        clientEmail: transaction.customerEmail,
+        estateName: transaction.estate,
+        unitType: transaction.unitType ?? "Plot",
+        plotCode: transaction.plotCode ?? transaction.ref,
+        amountPaid: params.amount,
+        soldPrice: transaction.baseAmount,
+        discount: 0,
+        payments: [{ date: issuedDateStr, method: params.paymentMethod ?? "Bank Transfer", amount: params.amount }],
+        receiptUrl,
+        qrDataUrl,
+      }),
+    writeFile: (filePath, buf) => writeReceiptPdf(filePath, buf),
+  });
+
+  let emailResult: { sent: boolean; error: string | null } = { sent: false, error: null };
+  if (pdfOutcome.ok) {
+    let pdfBuffer: Buffer | null = null;
+    try {
+      pdfBuffer = await fs.promises.readFile(path.join(process.cwd(), pdfPath));
+    } catch (e) {
+      logServerError(`receipt ${receiptRef}: PDF written but unreadable`, e);
+    }
+    if (pdfBuffer) {
+      emailResult = await deliverReceiptEmail({
+        db: prisma,
+        receiptId: confirmed.receiptId,
+        ref: receiptRef,
+        send: () =>
+          sendReceiptEmail({
+            to: transaction.customerEmail,
+            clientName: transaction.customerName,
+            ref: receiptRef,
+            receiptUrl,
+            pdfBuffer: pdfBuffer as Buffer,
+          }),
+      });
+    } else {
+      emailResult = { sent: false, error: "Receipt PDF is unavailable." };
+      try {
+        await prisma.receipt.update({
+          where: { id: confirmed.receiptId },
+          data: { emailStatus: "FAILED", lastError: emailResult.error },
+        });
+      } catch (e) {
+        logServerError(`receipt ${receiptRef}: failed to mark email failed`, e);
+      }
+    }
+  } else {
+    emailResult = { sent: false, error: pdfOutcome.error };
+    try {
+      await prisma.receipt.update({
+        where: { id: confirmed.receiptId },
+        data: { emailStatus: "FAILED", lastError: "Skipped: PDF generation failed" },
+      });
+    } catch (e) {
+      logServerError(`receipt ${receiptRef}: failed to mark email skipped`, e);
+    }
+  }
+
+  try {
+    await prisma.receiptSendAttempt.create({
+      data: {
+        receiptId: confirmed.receiptId,
+        recipientEmail: transaction.customerEmail,
+        status: emailResult.sent ? "sent" : "failed",
+        error: emailResult.error,
+        actorId: params.recordedById,
+        actorName: params.recordedByName ?? undefined,
+      },
+    });
+  } catch (e) {
+    logServerError(`receipt ${receiptRef}: failed to log send attempt`, e);
+  }
+
+  const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId } });
+  const payment = await prisma.payment.findUnique({ where: { id: confirmed.payment.id } });
+  return { payment, receipt, emailResult };
+}

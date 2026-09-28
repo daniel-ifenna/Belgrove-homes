@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { name, email, phone, preferredDate, preferredTime, location, agentName } = parsed.data;
+  const { name, email, phone, preferredDate, preferredTime, location, agentName, estate, plotCode, unitType, sqm, sqmNeeded, selectionType } = parsed.data;
 
   const preferredDateObj = new Date(preferredDate);
   if (Number.isNaN(preferredDateObj.getTime())) {
@@ -68,7 +68,10 @@ export async function POST(request: NextRequest) {
         possibleDuplicateOfId = dupWindow.id;
       }
     }
-  } catch {}
+  } catch (e) {
+    // Best-effort duplicate hint only — a lookup failure must not block booking.
+    console.error("Booking duplicate-window lookup failed", e);
+  }
 
   let ref = await generateUniqueRef();
   let booking;
@@ -87,6 +90,12 @@ export async function POST(request: NextRequest) {
           visitorAgentRaw: agentName || null,
           possibleDuplicateOfId,
           status: "new",
+          estate: estate || null,
+          plotCode: plotCode || null,
+          unitType: unitType || null,
+          sqm: typeof sqm === "number" ? sqm : null,
+          sqmNeeded: typeof sqmNeeded === "number" ? sqmNeeded : null,
+          selectionType: selectionType || (sqmNeeded ? "sqm_needed" : plotCode ? "unit" : null),
         },
       });
       break;

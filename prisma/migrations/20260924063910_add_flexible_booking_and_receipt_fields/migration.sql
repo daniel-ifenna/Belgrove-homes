@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "InspectionBooking" ADD COLUMN     "discount" INTEGER,
+ADD COLUMN     "estate" TEXT,
+ADD COLUMN     "paymentHistory" JSONB,
+ADD COLUMN     "paymentMethod" TEXT,
+ADD COLUMN     "plotCode" TEXT,
+ADD COLUMN     "receiptSentAt" TIMESTAMP(3),
+ADD COLUMN     "receiptUrl" TEXT,
+ADD COLUMN     "selectionType" TEXT,
+ADD COLUMN     "soldAt" TIMESTAMP(3),
+ADD COLUMN     "soldPrice" INTEGER,
+ADD COLUMN     "sqm" INTEGER,
+ADD COLUMN     "sqmNeeded" INTEGER,
+ADD COLUMN     "totalPaid" INTEGER,
+ADD COLUMN     "unitType" TEXT;

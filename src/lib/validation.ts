@@ -8,6 +8,13 @@ export const bookingSubmissionSchema = z.object({
   preferredTime: z.string().min(1, "Time is required"),
   location: z.string().trim().min(1, "Location of interest is required").max(300),
   agentName: z.string().trim().max(200).optional().or(z.literal("")),
+  // Flexible estate / sqm fields (staff flow)
+  estate: z.string().trim().max(100).optional().or(z.literal("")),
+  plotCode: z.string().trim().max(50).optional().or(z.literal("")),
+  unitType: z.string().trim().max(200).optional().or(z.literal("")),
+  sqm: z.coerce.number().int().min(10).max(10000).optional(),
+  sqmNeeded: z.coerce.number().int().min(10).max(10000).optional(),
+  selectionType: z.enum(["unit", "sqm_needed"]).optional(),
 });
 
 export type BookingSubmissionInput = z.infer<typeof bookingSubmissionSchema>;
@@ -90,6 +97,9 @@ export const bookingActionSchema = z.discriminatedUnion("action", [
     action: z.literal("assign_agent"),
     agentId: z.string().min(1).nullable(),
     silent: z.boolean().optional().default(false),
+    // Required to override a phone-number match with the customer (see
+    // normalizePhoneForCompare). Email matches can never be overridden.
+    overrideReason: z.string().trim().max(500).optional(),
     ...note,
     ...concurrency,
   }),
@@ -105,6 +115,28 @@ export const bookingActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("reopen"),
     reason: z.string().trim().min(3, "Reason is required").max(1000),
+    ...concurrency,
+  }),
+  z.object({
+    action: z.literal("edit_booking"),
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().email().optional(),
+    phone: z.string().trim().max(20).optional(),
+    location: z.string().trim().min(1).max(300).optional(),
+    preferredDate: z.string().optional(),
+    preferredTime: z.string().optional(),
+    ...concurrency,
+  }),
+  z.object({
+    action: z.literal("update_property"),
+    estate: z.string().trim().min(1).max(100).optional(),
+    plotCode: z.string().trim().max(50).optional(),
+    unitType: z.string().trim().max(200).optional(),
+    sqm: z.coerce.number().int().min(10).max(10000).nullable().optional(),
+    sqmNeeded: z.coerce.number().int().min(10).max(10000).nullable().optional(),
+    selectionType: z.enum(["unit", "sqm_needed"]).nullable().optional(),
+    plotQuantity: z.coerce.number().int().min(1).max(100).nullable().optional(),
+    unitPrice: z.coerce.number().int().min(0).nullable().optional(),
     ...concurrency,
   }),
 ]);

@@ -10,6 +10,8 @@ import {
   interestedOutcomeTemplate,
   agentRescheduledNoticeTemplate,
   agentFollowUpTemplate,
+  transactionConfirmationTemplate,
+  type TxnConfirmationScheduleLine,
 } from "./templates";
 
 type BookingLike = {
@@ -99,6 +101,7 @@ export async function sendAgentAssignment(
     rescheduledTime?: string | null;
     location: string;
     agentCategory?: string | null;
+    assignmentNote?: string | null;
   }
 ): Promise<EmailResult> {
   return sendEmail({
@@ -131,6 +134,31 @@ export async function sendAgentFollowUp(
     to,
     subject: `Follow-up ${params.ref}: ${params.clientName}`,
     html: agentFollowUpTemplate(params),
+  });
+}
+
+export async function sendTransactionConfirmation(
+  to: string,
+  params: {
+    name: string;
+    txnRef: string;
+    bookingRef?: string | null;
+    propertyLine: string;
+    planName: string;
+    planCode: string;
+    depositAmount: number | null;
+    depositDueDate: string;
+    schedule: TxnConfirmationScheduleLine[];
+    interestAmount: number;
+    interestRate: number;
+    totalPayable: number;
+  }
+): Promise<EmailResult> {
+  const isOutright = params.planCode === "OUTRIGHT";
+  return sendEmail({
+    to,
+    subject: `Purchase confirmed ${params.txnRef} — ${params.planName} plan`,
+    html: transactionConfirmationTemplate({ ...params, isOutright }),
   });
 }
 

@@ -23,6 +23,11 @@ model User {
   activities       BookingActivity[]
   messages         BookingMessage[]
   internalNotes    InternalNote[]
+  createdReceipts  Receipt[]           @relation("ReceiptCreatedBy")
+  receiptSendAttempts ReceiptSendAttempt[] @relation("ReceiptSendActor")
+  transactionsCreated Transaction[] @relation("TransactionCreatedBy")
+  paymentsRecorded Payment[] @relation("PaymentRecordedBy")
+  paymentsConfirmed Payment[] @relation("PaymentConfirmedBy")
 }
 
 enum Role {
@@ -63,8 +68,32 @@ model InspectionBooking {
   outcome         SaleOutcome?
   leadTemperature LeadTemperature @default(cold)
 
+  // Flexible property selection (staff-recorded)
+  estate        String?
+  plotCode      String?
+  unitType      String?
+  sqm           Int?
+  sqmNeeded     Int?
+  selectionType String? // "unit" | "sqm_needed"
+  plotQuantity  Int?    // number of plots purchased
+  unitPrice     Int?    // price per plot
+
+  // Sale / receipt
+  soldPrice       Int?
+  discount        Int?
+  totalPaid       Int?
+  paymentMethod   String?
+  paymentHistory  Json? // [{ date, method, amount }]
+  soldAt          DateTime?
+  receiptSentAt   DateTime?
+  receiptUrl      String?
+
   // Locking — once closed, only reopen can mutate
   lockedAt DateTime?
+
+  // Test-data flag (Phase 1): records marked here never appear in metrics,
+  // queues, or default list results. See scripts/mark-test-data.ts.
+  isTest Boolean @default(false)
 
   // Visitor raw text preserved separately from canonical agent assignment
   visitorAgentRaw String?
@@ -90,6 +119,8 @@ model InspectionBooking {
   activities    BookingActivity[]
   messages      BookingMessage[]
   internalNotes InternalNote[]
+  receipts      Receipt[]
+  transaction   Transaction?
 
   @@index([status])
   @@index([leadTemperature])
@@ -146,6 +177,7 @@ model Agent {
   updatedAt DateTime      @updatedAt
 
   bookings InspectionBooking[] @relation("BookingAgent")
+  receipts Receipt[]
 
   @@index([category])
   @@index([isActive])
@@ -208,4 +240,240 @@ model InternalNote {
   createdAt  DateTime @default(now())
 
   @@index([bookingId, createdAt])
+}
+
+enum ReceiptStatus {
+  draft
+  pending
+  generated
+  sent
+  failed
+}
+
+enum ReceiptSource {
+  BOOKING_FLOW
+  ADMIN_MANUAL
+  PAYMENT_CONFIRMATION
+}
+
+model Receipt {
+  id String @id @default(cuid())
+  ref String @unique // BEL-YYYY-XXXXX unique per payment receipt
+  bookingId String?
+  booking InspectionBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  transactionId String?
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  paymentId String @unique
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  source ReceiptSource @default(PAYMENT_CONFIRMATION)
+
+  // Snapshot for auditability — denormalized at issue time
+  property String // human-readable property line
+  estate String?
+  plotCode String?
+  unitType String?
+  sqm Int?
+  customerName String
+  customerEmail String
+  customerPhone String?
+
+  amountBeforeDiscount Int // soldPrice (subtotal = unitPrice * quantity)
+  discount Int @default(0)
+  finalAmount Int // totalPaid
+  amountInWords String
+  currency String @default("NGN")
+  paymentDescription String // Estate · Unit · Plot
+  paymentMethod String?
+  paymentHistory Json? // array of {date, method, amount}
+  unitPrice Int? // price per plot
+  plotQuantity Int? // number of plots
+  paymentPlanCode String?
+  paymentPlanName String?
+
+  agentId String?
+  agent Agent? @relation(fields: [agentId], references: [id])
+  agentName String?
+
+  issuedAt DateTime
+  sentAt DateTime?
+  recipientEmail String
+  status ReceiptStatus @default(pending)
+  receiptUrl String
+  qrTargetUrl String
+  pdfPath String? // public/receipts/{ref}.pdf
+
+  // Post-commit delivery tracking (payment stays CONFIRMED even if these fail)
+  pdfStatus String @default("PENDING") // PENDING | GENERATED | FAILED
+  emailStatus String @default("PENDING") // PENDING | SENT | FAILED
+  lastError String?
+
+  // Tokenized client access: the QR code and client URL carry this token,
+  // never the receipt ref. Revoking hides the receipt without deleting it.
+  accessToken String? @unique
+  accessTokenRevokedAt DateTime?
+
+  createdById String?
+  createdBy User? @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  error String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sendAttempts ReceiptSendAttempt[]
+
+  @@index([status])
+  @@index([customerEmail])
+  @@index([estate])
+  @@index([issuedAt])
+  @@index([bookingId])
+}
+
+model ReceiptSendAttempt {
+  id String @id @default(cuid())
+  receiptId String
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  attemptedAt DateTime @default(now())
+  recipientEmail String
+  status String // sent, failed, pending
+  error String?
+  actorId String?
+  actor User? @relation("ReceiptSendActor", fields: [actorId], references: [id])
+  actorName String?
+
+  @@index([receiptId, attemptedAt])
+}
+
+enum TransactionStatus {
+  DRAFT
+  ACTIVE
+  PAID_IN_FULL
+  CANCELLED
+}
+
+enum InstallmentStatus {
+  PENDING
+  DUE
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  WAIVED
+}
+
+enum InstallmentType {
+  INITIAL
+  MONTHLY
+}
+
+model PaymentPlan {
+  id String @id @default(cuid())
+  code String @unique // OUTRIGHT, 3M, 6M
+  name String
+  durationMonths Int // 0, 3, 6
+  interestRate Decimal @db.Decimal(5,2) // 0, 5.00
+  interestMethod String // NONE, ONE_TIME_PERCENTAGE
+  initialPaymentPercentage Int // 100, 50
+  remainingInstallments Int // 0, 3, 6
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  transactions Transaction[]
+}
+
+model Transaction {
+  id String @id @default(cuid())
+  ref String @unique // TXN-YYYY-XXXXX
+  bookingId String? @unique
+  booking InspectionBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  customerName String
+  customerEmail String
+  customerPhone String?
+  estate String
+  plotCode String?
+  unitType String?
+  sqm Int?
+  plotQuantity Int @default(1)
+  unitPrice Int
+  baseAmount Int // unitPrice * plotQuantity
+  paymentPlanId String
+  paymentPlan PaymentPlan @relation(fields: [paymentPlanId], references: [id])
+  interestRate Decimal @db.Decimal(5,2)
+  interestMethod String
+  interestAmount Int @default(0)
+  totalPayable Int
+  totalPaid Int @default(0)
+  outstandingBalance Int
+  status TransactionStatus @default(ACTIVE)
+  // Test-data flag (Phase 1): excluded from every metric, list default,
+  // search result and queue. See scripts/mark-test-data.ts.
+  isTest Boolean @default(false)
+  createdById String?
+  createdBy User? @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  installments Installment[]
+  payments Payment[]
+  receipts Receipt[]
+  @@index([status])
+  @@index([customerEmail])
+  @@index([estate])
+  @@index([paymentPlanId])
+}
+
+model Installment {
+  id String @id @default(cuid())
+  transactionId String
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  installmentNumber Int // 0 for initial, 1..n for monthly
+  type InstallmentType
+  dueDate DateTime
+  scheduledAmount Int
+  paidAmount Int @default(0)
+  status InstallmentStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payments Payment[]
+  @@index([transactionId, installmentNumber])
+  @@index([status])
+  @@index([dueDate])
+}
+
+enum PaymentStatus {
+  PENDING
+  PENDING_VERIFICATION
+  CONFIRMED
+  FAILED
+  CANCELLED
+  WAIVED
+}
+
+model Payment {
+  id String @id @default(cuid())
+  transactionId String
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  installmentId String?
+  installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  paymentReference String @unique @default(cuid()) // internal payment ref, or could be PAY-YYYY-XXXXX
+  amount Int
+  paymentDate DateTime
+  paymentMethod String?
+  bankReference String?
+  notes String?
+  status PaymentStatus @default(PENDING_VERIFICATION)
+  recordedById String?
+  recordedBy User? @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  confirmedAt DateTime?
+  confirmedById String?
+  confirmedBy User? @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id])
+  verificationNotes String?
+  source String? // MANUAL, BOOKING_FLOW, etc.
+  // Client-generated idempotency key (one UUID per form open). A repeat
+  // submission with the same key returns the existing row instead of
+  // minting a duplicate. Replaces the old 60-second time-window dedupe.
+  idempotencyKey String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  receipt Receipt?
+  @@index([transactionId])
+  @@index([installmentId])
+  @@index([status])
 }

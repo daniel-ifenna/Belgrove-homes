@@ -19,3 +19,13 @@ export async function generateUniqueRef(): Promise<string> {
   }
   throw new Error("Failed to generate a unique booking reference after 5 attempts");
 }
+
+export async function generateUniqueReceiptRef(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const ref = generateRef();
+    const existingBooking = await prisma.inspectionBooking.findUnique({ where: { ref }, select: { id: true } });
+    const existingReceipt = await prisma.receipt.findUnique({ where: { ref }, select: { id: true } });
+    if (!existingBooking && !existingReceipt) return ref;
+  }
+  throw new Error("Failed to generate a unique receipt reference after 5 attempts");
+}

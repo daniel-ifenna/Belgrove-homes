@@ -8,20 +8,22 @@ export const statusLabels: Record<string, string> = {
   closed: "Closed",
 };
 
+// Ledger-room pill palette — status is color signal, never plain text.
+// Outline pills = provisional states; solid pills = decided states.
 export const statusColors: Record<string, string> = {
-  new: "bg-[var(--blue-600)] text-white",
-  under_review: "bg-[var(--amber-600)] text-white",
-  on_hold: "bg-[#C07A2A] text-white",
-  approved: "bg-[var(--forest-600)] text-white",
-  rescheduled: "bg-[var(--plum-600)] text-white",
-  active: "bg-[var(--forest-800)] text-white",
-  closed: "bg-[var(--ink)] text-white",
+  new: "bg-transparent text-[#6B6252] border border-[#D8CFC0]",
+  under_review: "bg-transparent text-[#8B6B1F] border border-[#C89B3C]",
+  on_hold: "bg-transparent text-[#6B6252] border border-[#D8CFC0]",
+  approved: "bg-[#1F6B3E] text-white border border-[#1F6B3E]",
+  rescheduled: "bg-transparent text-[#1E3A5F] border border-[#C7D2E0]",
+  active: "bg-[#16281D] text-white border border-[#16281D]",
+  closed: "bg-[#E4D8C1] text-[#6B6252] border border-[#E4D8C1]",
 };
 
 export const temperatureColors: Record<string, string> = {
-  cold: "bg-[var(--blue-600)] text-white",
-  warm: "bg-[var(--amber-600)] text-white",
-  hot: "bg-[var(--red-600)] text-white",
+  cold: "bg-transparent text-[#1E3A5F] border border-[#C7D2E0]",
+  warm: "bg-[#C89B3C] text-white border border-[#C89B3C]",
+  hot: "bg-[#A6402F] text-white border border-[#A6402F]",
 };
 
 export const allStatuses = [

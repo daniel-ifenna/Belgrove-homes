@@ -4,10 +4,8 @@ import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BELGROVE_PLOTS, BELGROVE_ESTATE_INFO } from "@/lib/belgroveData";
-
-function formatNaira(n: number) {
-  return "₦" + n.toLocaleString("en-NG");
-}
+import { slugFromEstateName } from "@/lib/estateSlug";
+import { formatNaira, formatNairaRange } from "@/lib/currency";
 
 export default function GalleryGrid() {
   const searchParams = useSearchParams();
@@ -99,17 +97,14 @@ export default function GalleryGrid() {
           const sizeLabel = sizes.length === 1 ? `${sizes[0]}sqm` : sizes.length === 2 ? `${sizes[0]}, ${sizes[1]}sqm` : `${Math.min(...sizes)}–${Math.max(...sizes)}sqm`;
           const prices = group.map((p) => p.price).filter((v): v is number => typeof v === "number");
           const isPreSaleGroup = key.includes("Phase 2");
-          const basePriceLabel = prices.length ? `${formatNaira(Math.min(...prices))} – ${formatNaira(Math.max(...prices))}` : "Price on request";
+          const basePriceLabel = prices.length ? formatNairaRange(Math.min(...prices), Math.max(...prices)) : "Price on request";
           const priceLabel = basePriceLabel + (isPreSaleGroup ? " • Pre-Sale" : "");
           return (
             <div className="mb-8 bg-white border border-[#E4DCC7] rounded-xl p-6 shadow-[0_8px_24px_rgba(22,40,31,0.08)]">
               <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C79A46]">{location.toUpperCase()}</div>
               <h3 className="fraunces text-[22px] text-[#16281F] mt-1">{key}{isPreSaleGroup && <span className="ml-2 mono text-[10px] bg-[#C79A46] text-[#16281F] px-2 py-1 rounded">PRE-SALE</span>}</h3>
               <div className="public text-[13px] text-[#6B6656] mt-2">
-                {group.length} unit{group.length > 1 ? "s" : ""} • {sizeLabel} • {priceLabel}
-              </div>
-              <div className="mt-4 pt-4 border-t border-[#E4DCC7] public text-[12.5px] leading-[1.6] text-[#6B6656]">
-                <span className="font-semibold text-[#16281F]">FCTA Approved:</span> Prototype you see {group.length > 1 ? "are" : "is"} the FCTA-approved building prototype for {key} — located at {location}, available in {sizeLabel} from {basePriceLabel}{isPreSaleGroup ? " (Pre-Sale offers)" : ""}. Verified land, what you see is what is approved to build.
+                {group.length} unit{group.length > 1 ? "s" : ""} • {sizeLabel} • <span className="price">{priceLabel}</span>
               </div>
             </div>
           );
@@ -156,28 +151,33 @@ export default function GalleryGrid() {
         const sizes = [...new Set(plots.map((p) => p.size))].sort((a, b) => a - b);
         const prices = plots.map((p) => p.price).filter((v): v is number => typeof v === "number");
         const isPreSaleGroup = key.includes("Phase 2");
-        const basePriceLabel = prices.length ? `${formatNaira(Math.min(...prices))} – ${formatNaira(Math.max(...prices))}` : "Price on request";
+        const basePriceLabel = prices.length ? formatNairaRange(Math.min(...prices), Math.max(...prices)) : "Price on request";
         const priceLabel = basePriceLabel + (isPreSaleGroup ? " • Pre-Sale" : "");
         const sizeLabel = sizes.length === 1 ? `${sizes[0]}sqm` : sizes.length === 2 ? `${sizes[0]}, ${sizes[1]}sqm` : `${Math.min(...sizes)}–${Math.max(...sizes)}sqm`;
+        // Filter amenities — exclude CTA/marketing copy per P1-6
+        const filteredFeatures = (info?.features ?? []).filter((f) => !["FCTA Approved", "Secure Your Unit Today"].includes(f));
         return (
           <div key={key} className="estate-section">
             <div className="estate-section-head">
               <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#C79A46]">{key.toUpperCase()} — {plots[0].location}{isPreSaleGroup && " • PRE-SALE"}</div>
-              <h3>{key}{isPreSaleGroup && <span className="ml-2 mono text-[10px] bg-[#C79A46] text-[#16281F] px-2 py-1 rounded align-middle">PRE-SALE</span>}</h3>
+              <h3>
+                <Link href={(() => { const slug = slugFromEstateName(baseEstate); const qp = plots[0].phase ? `?phase=${encodeURIComponent(plots[0].phase)}` : ""; return slug ? `/estates/${slug}${qp}` : "/gallery"; })()} className="hover:text-[#C79A46] hover:underline underline-offset-4 decoration-[#C79A46]/30">
+                  {key}
+                </Link>
+                {isPreSaleGroup && <span className="ml-2 mono text-[10px] bg-[#C79A46] text-[#16281F] px-2 py-1 rounded align-middle">PRE-SALE</span>}
+              </h3>
+              <Link href={(() => { const slug = slugFromEstateName(baseEstate); const qp = plots[0].phase ? `?phase=${encodeURIComponent(plots[0].phase)}` : ""; return slug ? `/estates/${slug}${qp}` : "/gallery"; })()} className="mono text-[11px] text-[#16281F] underline underline-offset-4 mt-1 inline-block">View estate details →</Link>
               {info?.tagline && <div className="public text-[13px] text-[#6B6656] mt-1">{info.tagline}</div>}
-              {info && (
+              {filteredFeatures.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {info.features.slice(0, 8).map((f) => (
+                  {filteredFeatures.slice(0, 8).map((f) => (
                     <span key={f} className="text-[11px] text-[#D4B368] border border-[rgba(212,179,104,0.35)] px-2.5 py-1 rounded-full bg-[#16281F]">
                       {f}
                     </span>
                   ))}
                 </div>
               )}
-              <div className="mono text-[11px] text-[#8B6B4E] mt-2">{plots.length} unit{plots.length > 1 ? "s" : ""} • {sizeLabel} • {priceLabel}</div>
-              <div className="public text-[12px] leading-[1.5] text-[#6B6656] mt-2 border-l-2 border-[#C79A46] pl-3">
-                <span className="font-semibold text-[#16281F]">FCTA Approved:</span> Prototype you see {plots.length > 1 ? "are" : "is"} the FCTA-approved building prototype for {key} — located at {plots[0].location}, {sizeLabel} from {basePriceLabel}{isPreSaleGroup ? " (Pre-Sale offers)" : ""}. Verified land, what you see is what is approved to build.
-              </div>
+              <div className="mono text-[11px] text-[#8B6B4E] mt-2">{plots.length} unit{plots.length > 1 ? "s" : ""} • {sizeLabel} • <span className="price">{priceLabel}</span></div>
             </div>
             <div className="gallery-grid">
               {plots.map((p) => {
@@ -189,7 +189,8 @@ export default function GalleryGrid() {
                 const title = p.unitType || p.estate + phaseSuffix;
                 const sub = p.unitType ? `${p.estate}${phaseSuffix} — ${p.location}` : p.location + (phaseSuffix ? ` (${p.phase})` : "");
                 const priceLine = p.price ? formatNaira(p.price) + (isPreSale ? " • Pre-Sale" : "") : "";
-                const href = `/book-inspection?estate=${encodeURIComponent(p.estate)}&size=${encodeURIComponent(String(p.size))}&code=${encodeURIComponent(p.code)}${p.phase ? `&phase=${encodeURIComponent(p.phase)}` : ""}${p.unitType ? `&unit=${encodeURIComponent(p.unitType)}` : ""}${p.price ? `&price=${encodeURIComponent(String(p.price))}` : ""}`;
+                const estateSlug = slugFromEstateName(p.estate) ?? p.estate.toLowerCase().replace(/\s+/g, "-");
+                const href = `/estates/${estateSlug}/${p.id}`;
                 const inner = (
                   <>
                     {p.image ? (
@@ -199,8 +200,8 @@ export default function GalleryGrid() {
                         +
                       </span>
                     )}
-                    <span className="badge">{p.code} · {p.status.toUpperCase()}</span>
-                    <span className="meta">{p.size}sqm</span>
+                    <span className="badge">{p.status.toUpperCase()}</span>
+                    <span className="meta">{p.size} SQM</span>
                     {isPreSale && <span className="pre-badge">PRE-SALE</span>}
                     {isSold && <span className="sold-ribbon">SOLD OUT</span>}
                     {isReserved && <span className="sold-ribbon" style={{ background: "var(--amber-600,#B98A2E)" }}>RESERVED</span>}
@@ -208,7 +209,7 @@ export default function GalleryGrid() {
                       <span className="cap-title">{title}</span>
                       <span className="cap-sub">
                         {sub}
-                        {priceLine ? ` · ${priceLine}` : ""}
+                        {priceLine ? <span className="price"> · {priceLine}</span> : null}
                       </span>
                     </span>
                     <div className="tile-pop">
@@ -216,25 +217,21 @@ export default function GalleryGrid() {
                       <div className="pop-loc">{p.estate} • {p.location}{p.phase ? ` • ${p.phase}` : ""}</div>
                       <div className="pop-meta">
                         <span>{p.size}sqm</span>
-                        {p.price && <span>{formatNaira(p.price)}{isPreSale ? " • Pre-Sale" : ""}</span>}
+                        {p.price && <span className="price">{formatNaira(p.price)}{isPreSale ? " • Pre-Sale" : ""}</span>}
                         <span>{p.status}</span>
-                        <span>{p.code}</span>
                       </div>
                       <div className="pop-note">
-                        <span style={{ fontWeight: 600, color: "#16281F" }}>FCTA Approved:</span> Prototype you see is the FCTA-approved building prototype for {p.estate}
-                        {p.phase ? ` ${p.phase}` : ""} — {p.location}. Verified land at {p.size}sqm.
+                        <span style={{ fontWeight: 600, color: "#16281F" }}>Verified land:</span> The prototypes you see are the FCTA-approved building prototypes for {p.estate}
+                        {p.phase ? ` ${p.phase}` : ""} — {p.location}. What you see is what is approved to build at {p.size}sqm.
                       </div>
-                      <div className="pop-cta">Want to know more? Book an inspection →</div>
+                      <div className="pop-cta">View property details →</div>
                     </div>
                   </>
                 );
 
-                return isNotAvailable ? (
-                  <div key={p.id} className={`photo-slot ${isSold ? "is-sold" : "is-reserved"}`}>
-                    {inner}
-                  </div>
-                ) : (
-                  <Link key={p.id} href={href} className="photo-slot">
+                // Every card routes to detail page — no gate. Sold still shows but as detail with status.
+                return (
+                  <Link key={p.id} href={href} className={`photo-slot ${isSold ? "is-sold" : isReserved ? "is-reserved" : ""}`}>
                     {inner}
                   </Link>
                 );
