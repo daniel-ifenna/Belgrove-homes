@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // Hot → warm after 30 days with no logged contact (no message, note, or status change).
-// Behind the admin middleware (see src/proxy.ts) like every /api/admin route.
+// POST requires CRON_SECRET (same pattern as /api/cron/outbox); GET is a
+// read-only dry run behind the admin proxy like every /api/admin route.
 async function findDecayed(cutoff: Date): Promise<string[]> {
   const hots = await prisma.inspectionBooking.findMany({
     where: { leadTemperature: "hot", status: { not: "closed" } },
@@ -25,7 +26,18 @@ async function findDecayed(cutoff: Date): Promise<string[]> {
   return decayed;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  // Same pattern as POST /api/cron/outbox: shared secret, not just proxy auth,
+  // so any internal role (or a proxy misconfiguration) can't trigger mass writes.
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 500 });
+  }
+  const url = new URL(request.url);
+  const provided = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || url.searchParams.get("secret");
+  if (provided !== secret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const ids = await findDecayed(cutoff);
   let decayed = 0;

@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { isTransitionAllowed, temperatureRank } from "@/lib/booking-transitions";
 import { timeSlots } from "@/lib/content";
+import { formatLagos } from "@/lib/time";
 import PanelHeader from "@/components/admin/PanelHeader";
 import type { BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 
@@ -19,6 +20,9 @@ type Booking = {
   updatedAt: Date;
   lockedAt?: Date | string | null;
   agentConfirmedAt?: Date | string | null;
+  outcome?: string | null;
+  formConfirmedAt?: Date | string | null;
+  inspectedAt?: Date | string | null;
 };
 
 type StaffUser = { id: string; name: string; email: string; role?: string };
@@ -66,7 +70,6 @@ export default function BookingActions({
   const [selectedAgentId, setSelectedAgentId] = useState(booking.agentId ?? "");
   const [assignNote, setAssignNote] = useState("");
   const [assignSilent, setAssignSilent] = useState(false);
-  const [assignOverride, setAssignOverride] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
   // Lead
@@ -129,7 +132,9 @@ export default function BookingActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, expectedUpdatedAt, ...payload }),
       });
-      const data = await res.json();
+      // Safe-parse: a non-JSON response (proxy/5xx HTML, empty body) must
+      // surface as a friendly action error, never a SyntaxError.
+      const data = await res.json().catch(() => ({}));
       if (res.status === 409) {
         setConflict(true);
         setError(data.error ?? "This booking changed elsewhere. Refresh to see the latest.");
@@ -144,6 +149,7 @@ export default function BookingActions({
         return;
       }
       if (!res.ok) throw new Error(data.error ?? "Action failed");
+      if (!data.booking) throw new Error("Action failed");
       setLastEmail(data.emailResult ?? null);
       setExpectedUpdatedAt(data.booking.updatedAt);
       // reset transient
@@ -154,6 +160,7 @@ export default function BookingActions({
       setNewNoteBody("");
       setAssignNote("");
       setActiveNote("");
+      setShowInterestedPreview(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -172,8 +179,9 @@ export default function BookingActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: messageText }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to send message");
+      if (!data.message) throw new Error("Failed to send message");
       setMessages((m) => [...m, data.message]);
       setMessageText("");
       router.refresh();
@@ -305,10 +313,6 @@ export default function BookingActions({
               </button>
             )}
           </div>
-          <div className="auto-note">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><line x1="12" y1="11" x2="12" y2="16" /><circle cx="12" cy="8" r="0.5" fill="currentColor" /></svg>
-            <span>Auto: <span className="font-medium text-[var(--ops-text)]">Approve → Warm</span> if currently Cold · <span className="font-medium text-[var(--ops-text)]">Interested → Hot</span> and stays open for Sold / Not Sold, both close with an automated email before locking.</span>
-          </div>
 
           {isTransitionAllowed("reschedule", status) && (
             <div id="reschedule-section" className="border-t border-[var(--line)] pt-4">
@@ -359,7 +363,7 @@ export default function BookingActions({
         <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
           <PanelHeader
             title="Mark inspection as held"
-            description="Record what happened: the booking moves to Completed Inspections."
+            description="Record what happened: the inspection joins the conducted list."
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9" /></svg>
             }
@@ -393,13 +397,35 @@ export default function BookingActions({
         <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
           <PanelHeader
             title="Record sale outcome"
-            description="Interested heats to Hot and stays open; Sold and Not Sold close with an automated response."
+            description="Interested heats to Hot and stays open; Sold closes silently (confirmation email fires at transaction creation), Not Sold closes with an automated follow-up."
             icon={
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l7 4v6c0 5-4 9-7 11-3-2-7-6-7-11V6l7-4z" /><path d="M9 12l2 2 4-4" /></svg>
             }
           />
           <div className="mt-4">
+          {(() => {
+            const ov = (booking as any).outcome as string | null;
+            const formDone = !!booking.formConfirmedAt || ov === "sold" || ov === "not_sold";
+            const steps = [
+              { label: "Interested", done: !!ov },
+              { label: "Form confirmed", done: formDone },
+              { label: "Sold / Not sold", done: ov === "sold" || ov === "not_sold" },
+            ];
+            return (
+              <ol className="flex items-center gap-1.5 mb-4" aria-label="Outcome progress">
+                {steps.map((s, i) => (
+                  <li key={s.label} className="flex items-center gap-1.5">
+                    {i > 0 && <span className="w-4 h-px bg-[var(--ops-border)]" aria-hidden="true" />}
+                    <span className={`inline-flex items-center gap-1.5 mono text-[10px] tracking-wide uppercase px-2.5 py-1 rounded-full border ${s.done ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : "bg-white text-[var(--ops-muted)] border-[var(--ops-border)]"}`}>
+                      {s.done ? "✓ " : `${i + 1} · `}{s.label}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            );
+          })()}
           {(booking as any).outcome === "interested" ? (
+            booking.formConfirmedAt ? (
             <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
               <div className="flex items-center gap-2">
                 <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
@@ -423,11 +449,30 @@ export default function BookingActions({
                   Not Sold
                 </button>
               </div>
-              <p className="mono text-[10px] text-[#92400E]/60 mt-2">Both actions send an automated email/message before locking the booking as closed.</p>
+              <p className="mono text-[10px] text-[#92400E]/60 mt-2">Not Sold sends an automated follow-up email before locking; Sold closes without email — confirmation follows at transaction creation.</p>
             </div>
+            ) : (
+              <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
+                <div className="flex items-center gap-2">
+                  <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
+                  <span className="text-[13px] font-medium text-[#92400E]">Interested: Hot lead • Subscription form sent</span>
+                  <span className="ml-auto px-2 py-1 rounded-full text-[11px] font-medium bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span>
+                </div>
+                <p className="public text-[12px] leading-[1.5] text-[#92400E]/80 mt-2">The client received the subscription form. Confirm they have filled it — Sold / Not Sold unlock after confirmation.</p>
+                <div className="flex gap-3 flex-wrap items-center mt-4">
+                  <button
+                    onClick={() => run("confirm_form", { note: reviewNote || undefined })}
+                    disabled={busy !== null}
+                    className="text-sm bg-[#0D3328] text-white rounded-full px-5 py-2.5 font-medium hover:bg-[#08261E] disabled:opacity-50 shadow-sm"
+                  >
+                    {busy === "confirm_form" ? "Confirming…" : "Confirm form filled"}
+                  </button>
+                </div>
+              </div>
+            )
           ) : (
             <>
-              <p className="public text-[12px] leading-[1.5] text-[var(--ops-muted)] mb-4">Choose the outcome. <span className="font-medium text-[var(--ops-text)]">Interested</span> will auto-heat to <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span> and stay open for the final Sold / Not Sold step. <span className="font-medium">Sold</span> and <span className="font-medium">Not Sold</span> both close with an automated response.</p>
+              <p className="public text-[12px] leading-[1.5] text-[var(--ops-muted)] mb-4">Choose the outcome. <span className="font-medium text-[var(--ops-text)]">Interested</span> will auto-heat to <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span> and stay open for the final Sold / Not Sold step. <span className="font-medium">Sold</span> closes silently (confirmation email fires at transaction creation); <span className="font-medium">Not Sold</span> closes with an automated follow-up email.</p>
               <div className="flex gap-3 flex-wrap items-center">
                 <button
                   onClick={() => run("record_outcome", { outcome: "sold", note: reviewNote || undefined })}
@@ -485,7 +530,7 @@ export default function BookingActions({
         </div>
       )}
 
-      {/* Company Agent canonical typeahead */}
+      {/* Company Agent canonical typeahead — binding closes once held */}
       <div id="assign-agent" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6 scroll-mt-20">
         <PanelHeader
           title="Company Agent"
@@ -495,7 +540,18 @@ export default function BookingActions({
           }
         />
 
-        {agents.length === 0 ? (
+        {booking.inspectedAt ? (
+          <div className="mt-4">
+            <p className="text-sm text-[var(--ink-muted)]">
+              Current: <span className="font-medium text-[var(--ink)]">{booking.agentName || "None"}</span>
+              {booking.agentId ? <span className="text-emerald-700"> · Company agent assigned</span> : null}
+              {booking.agentConfirmedAt ? <span className="text-emerald-700"> · confirmed</span> : null}
+            </p>
+            <p className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-2">Closed — inspection held. Assignment can no longer be changed.</p>
+          </div>
+        ) : (
+          <>
+            {agents.length === 0 ? (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-4">No company agents yet <a href="/admin/agents" className="underline">add agents</a> first.</p>
         ) : (
           <>
@@ -561,13 +617,6 @@ export default function BookingActions({
                 </label>
               </div>
               <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">Leave a note to give context. It will be saved to the timeline and included in the agent’s email.</p>
-              <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-2 mb-1">Phone-match override reason (only if the agent shares the customer’s phone)</label>
-              <input
-                value={assignOverride}
-                onChange={(e) => setAssignOverride(e.target.value)}
-                placeholder="e.g. Agent is the customer’s spouse, verified by phone call"
-                className="border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm flex-1 min-w-[160px] w-full bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
-              />
             </div>
 
             {selectedAgentId && !assignSilent && (
@@ -588,7 +637,7 @@ export default function BookingActions({
 
             <div className="mt-3 flex flex-wrap gap-2">
               <button
-                onClick={() => run("assign_agent", { agentId: selectedAgentId || null, note: assignNote || undefined, silent: assignSilent, overrideReason: assignOverride || undefined })}
+                onClick={() => run("assign_agent", { agentId: selectedAgentId || null, note: assignNote || undefined, silent: assignSilent })}
                 disabled={busy !== null}
                 className="text-sm bg-[var(--forest-800)] text-white rounded-full px-5 py-2 font-medium disabled:opacity-50"
               >
@@ -622,6 +671,8 @@ export default function BookingActions({
             </p>
           </>
         )}
+          </>
+        )}
       </div>
 
       {/* Messaging follow-up with assigned agent */}
@@ -650,7 +701,7 @@ export default function BookingActions({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-sm font-medium text-[var(--ink)]">{m.authorName}</span>
-                    <span className="text-xs text-[var(--ink-muted)]">{new Date(m.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-[var(--ink-muted)]">{formatLagos(m.createdAt, "datetime")}</span>
                   </div>
                   <p className="text-sm text-[var(--ink)] mt-1 whitespace-pre-wrap break-words">{m.message}</p>
                 </div>
@@ -691,7 +742,7 @@ export default function BookingActions({
           <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-1 mb-3">
             {internalNotes.map((n) => (
               <div key={n.id} className="p-2.5 rounded-xl bg-[var(--cream)] border border-[var(--line)] text-sm">
-                <div className="text-xs text-[var(--ink-muted)]">{n.authorName} · {new Date(n.createdAt).toLocaleString()}</div>
+                    <div className="text-xs text-[var(--ink-muted)]">{n.authorName} · {formatLagos(n.createdAt, "datetime")}</div>
                 <div className="text-[var(--ink)] whitespace-pre-wrap">{n.body}</div>
               </div>
             ))}

@@ -4,13 +4,13 @@ import { auth } from "@/auth";
 import { bookingActionSchema } from "@/lib/validation";
 import { isTransitionAllowed, actionLabels, isEscalation } from "@/lib/booking-transitions";
 import { isInternalRole } from "@/lib/authz";
-import { phonesMatch } from "@/lib/phone";
 import { scheduledInspectionStart } from "@/lib/inspection-time";
 import type { EmailResult } from "@/lib/email/sendEmail";
 import type { InspectionBooking, BookingStatus } from "@/generated/prisma/client";
 import {
   getInterestedMessageText,
 } from "@/lib/email/emailService";
+import { logServerError, toUserFacingError } from "@/lib/paymentConfirmation";
 
 function parseSlotMinutes(slot: string): number | null {
   // "10:00 AM" -> minutes since midnight
@@ -25,6 +25,20 @@ function parseSlotMinutes(slot: string): number | null {
 }
 
 export async function PATCH(
+  request: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    return await patchInner(request, ctx);
+  } catch (e) {
+    // Safety net: no booking action may fail with an empty/non-JSON 500.
+    // Map to a friendly message; the full error stays server-side.
+    logServerError("booking action", e);
+    return NextResponse.json({ error: toUserFacingError(e, "booking") }, { status: 500 });
+  }
+}
+
+async function patchInner(
   request: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
@@ -368,6 +382,11 @@ export async function PATCH(
       }
 
       // Sold / Not Sold — both close with automated response before locking
+      // Order enforced: an Interested booking must confirm the subscription
+      // form first (confirm_form), otherwise the panel could skip the step.
+      if ((input.outcome === "sold" || input.outcome === "not_sold") && booking.outcome === "interested" && !booking.formConfirmedAt) {
+        return NextResponse.json({ error: "Confirm the subscription form first, then record Sold / Not Sold." }, { status: 400 });
+      }
       const isSold = input.outcome === "sold";
       updated = await prisma.inspectionBooking.update({
         where: { id },
@@ -424,6 +443,23 @@ export async function PATCH(
       break;
     }
 
+    case "confirm_form": {
+      // Subscription-form step: only after an Interested outcome, before Sold/Not Sold.
+      if (booking.outcome !== "interested") {
+        return NextResponse.json({ error: "Record Interested first, then confirm the form." }, { status: 400 });
+      }
+      if (booking.formConfirmedAt) {
+        return NextResponse.json({ error: "Form already confirmed." }, { status: 400 });
+      }
+      updated = await prisma.inspectionBooking.update({
+        where: { id },
+        data: { formConfirmedAt: new Date(), reviewedById: actorId, reviewedAt: new Date() },
+      });
+      note = "Subscription form confirmed as filled — ready for Sold / Not Sold";
+      if (input.note) note += ` ${input.note}`;
+      break;
+    }
+
     case "save": {
       // No longer allows agentName overwrite; only assignedTo
       const changes: string[] = [];
@@ -450,6 +486,9 @@ export async function PATCH(
     }
 
     case "confirm_agent": {
+      if (booking.inspectedAt) {
+        return NextResponse.json({ error: "Inspection already held — agent assignment is closed." }, { status: 400 });
+      }
       if (!booking.agentId) {
         return NextResponse.json({ error: "No agent assigned to confirm" }, { status: 400 });
       }
@@ -504,13 +543,18 @@ export async function PATCH(
     case "reopen": {
       updated = await prisma.inspectionBooking.update({
         where: { id },
-        data: { status: "active", lockedAt: null, outcome: null },
+        // Fresh outcome cycle: the form step must be redone after reopen.
+        data: { status: "active", lockedAt: null, outcome: null, formConfirmedAt: null },
       });
       note = `Reopened: ${input.reason}`;
       break;
     }
 
     case "assign_agent": {
+      // Agent binding closes once the inspection has been held.
+      if (booking.inspectedAt) {
+        return NextResponse.json({ error: "Inspection already held — agent assignment is closed." }, { status: 400 });
+      }
       if (input.agentId === null) {
         const prevAgent = booking.agentId ? await prisma.agent.findUnique({ where: { id: booking.agentId } }) : null;
         // preserve visitor raw if not yet preserved
@@ -538,33 +582,13 @@ export async function PATCH(
       }
 
       // Agent self-assignment guard: the agent must not be the customer.
-      // Email match always blocks; phone match blocks unless an override
-      // reason is given (logged to the audit trail).
+      // Email match always blocks. Phone match no longer blocks — an agent
+      // may share the customer's phone (shared handset) with no override.
       if (agent.email.trim().toLowerCase() === booking.email.trim().toLowerCase()) {
         return NextResponse.json(
           { error: "This agent's email matches the booking customer's email. Assign a different agent." },
           { status: 400 }
         );
-      }
-      if (phonesMatch(agent.phone, booking.phone)) {
-        const reason = (input as any).overrideReason?.trim();
-        if (!reason) {
-          return NextResponse.json(
-            { error: "This agent's phone matches the booking customer's phone. Provide an override reason to proceed." },
-            { status: 400 }
-          );
-        }
-        await prisma.bookingActivity.create({
-          data: {
-            bookingId: id,
-            actorId,
-            actorName,
-            action: "assign_agent_override",
-            fromStatus: fromStatus,
-            toStatus: fromStatus,
-            note: `Phone-match override: ${reason}`,
-          },
-        });
       }
 
       const raw = booking.visitorAgentRaw ?? booking.agentName;

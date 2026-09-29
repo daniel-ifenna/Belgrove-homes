@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatLagos } from "@/lib/time";
 
 type Booking = {
   id: string;
@@ -207,7 +208,7 @@ export default function QuickActionsBar({ booking }: { booking: Booking }) {
               <h3 className="font-serif text-[18px] font-medium text-[var(--ops-text)]">Reschedule Inspection</h3>
               <button type="button" onClick={() => setShowReschedule(false)} className="h-7 w-7 rounded-full bg-[var(--ops-bg)] grid place-items-center text-[var(--ops-muted)] hover:text-[var(--ops-text)]">✕</button>
             </div>
-            <p className="text-xs text-[var(--ops-muted)] mb-4">Original: {new Date(booking.preferredDate).toLocaleDateString()} at {booking.preferredTime}. This will preserve history and notify the client.</p>
+            <p className="text-xs text-[var(--ops-muted)] mb-4">Original: {formatLagos(booking.preferredDate, "date")} at {booking.preferredTime}. This will preserve history and notify the client.</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">New Date</label>

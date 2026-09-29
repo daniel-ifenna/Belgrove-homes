@@ -86,6 +86,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           </div>
           <div className="flex items-center gap-2">
             <Link href="/admin/transactions/new" className="mono text-[11px] tracking-wide uppercase bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 hover:bg-[var(--ops-deep)]">+ New Transaction</Link>
+            <a href={`/api/admin/transactions/ledger${buildQuery({ page: undefined })}`} className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Ledger PDF</a>
             <Link href="/admin/receipts" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Receipts</Link>
           </div>
         </div>

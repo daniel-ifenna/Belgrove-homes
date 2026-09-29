@@ -62,9 +62,12 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
     <div className="min-h-screen bg-[#F7F2E7] py-8 px-6">
       <div className="max-w-[800px] mx-auto bg-white border border-[#E4DCC7] rounded-xl overflow-hidden shadow-[0_8px_24px_rgba(22,40,31,0.08)]">
         <div className="px-8 pt-8 pb-6 border-b border-[#E4DCC7] flex justify-between gap-6">
-          <div>
-            <div className="fraunces text-[13px] font-bold tracking-wide text-[#16281F]">BELGROVE HOMES AND PROPERTIES LIMITED</div>
-            <div className="mono text-[11px] text-[#6B6656] mt-1">Ste 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory</div>
+          <div className="flex items-center gap-3">
+            <img src="/belgrove-icon.png" alt="Belgrove Homes" width={40} height={32} />
+            <div>
+              <div className="fraunces text-[13px] font-bold tracking-wide text-[#16281F]">BELGROVE HOMES AND PROPERTIES LIMITED</div>
+              <div className="mono text-[11px] text-[#6B6656] mt-1">Suite 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory</div>
+            </div>
           </div>
           <div className="mono text-[11px] text-[#16281F] text-right leading-[1.6]">
             <div>www.belgrovehomes.com</div>
@@ -147,7 +150,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
         </div>
       </div>
       <div className="max-w-[800px] mx-auto mt-6 text-center mono text-[11px] text-[#8B6B4E]">
-        This page is the stable private URL for receipt <span className="font-medium text-[#16281F]">#{receipt.ref}</span>. The QR code on the PDF points here.
+        Keep this private link safe — it always shows your receipt, and the QR code on the PDF opens it.
       </div>
     </div>
   );

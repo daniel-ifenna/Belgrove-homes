@@ -53,7 +53,7 @@ export async function sendEmail({
   to: string | string[];
   subject: string;
   html: string;
-  attachments?: { filename: string; content: Buffer; contentType: string }[];
+  attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[];
 }): Promise<EmailResult> {
   const from = process.env.SMTP_FROM;
   if (!from) {

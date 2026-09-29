@@ -6,6 +6,7 @@ import { allStatuses, allTemperatures } from "@/lib/booking-ui";
 import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { drawReportBanner } from "@/lib/documents/brand";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -33,22 +34,29 @@ export async function GET(request: NextRequest) {
   }
   if (missingAgent === "1") where.agentId = null;
   else if (agentId) where.agentId = agentId;
-  else if (agent) {
-    where.OR = [
-      { agentName: { contains: agent, mode: "insensitive" } },
-      { agent: { name: { contains: agent, mode: "insensitive" } } },
-      { agent: { email: { contains: agent, mode: "insensitive" } } },
-    ];
+  // agent + q must combine (AND), never overwrite each other.
+  const and: Prisma.InspectionBookingWhereInput[] = [];
+  if (!agentId && missingAgent !== "1" && agent) {
+    and.push({
+      OR: [
+        { agentName: { contains: agent, mode: "insensitive" } },
+        { agent: { name: { contains: agent, mode: "insensitive" } } },
+        { agent: { email: { contains: agent, mode: "insensitive" } } },
+      ],
+    });
   }
   if (q) {
-    where.OR = [
-      { ref: { contains: q, mode: "insensitive" } },
-      { name: { contains: q, mode: "insensitive" } },
-      { email: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q, mode: "insensitive" } },
-      { location: { contains: q, mode: "insensitive" } },
-    ];
+    and.push({
+      OR: [
+        { ref: { contains: q, mode: "insensitive" } },
+        { name: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { phone: { contains: q, mode: "insensitive" } },
+        { location: { contains: q, mode: "insensitive" } },
+      ],
+    });
   }
+  if (and.length) where.AND = and;
 
   const from = dateFrom ? new Date(dateFrom) : null;
   const to = dateTo ? new Date(dateTo) : null;
@@ -90,23 +98,13 @@ export async function GET(request: NextRequest) {
 
   // Helpers
   function header() {
-    doc.setFillColor(13, 51, 40); // #0D3328 primary green
-    doc.rect(0, 0, pageW, 28, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(200, 160, 74); // #C8A04A muted gold
-    doc.text("Belgrove Homes", margin, 11);
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "normal");
-    doc.text("Inspection Booking & Activity Report", margin, 17);
-    doc.setFontSize(6.5);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Generated ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}  •  ${total} record(s)`, margin, 23);
-    // thin gold accent line
-    doc.setFillColor(200, 160, 74);
-    doc.rect(0, 28, pageW, 0.6, "F");
+    // Shared brand banner: logo seated top-right, title block left.
+    drawReportBanner(doc, {
+      title: "Belgrove Homes",
+      subtitle: "Inspection Booking & Activity Report",
+      meta: `Generated ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}  •  ${total} record(s)`,
+      margin,
+    });
   }
 
   function footer() {
@@ -119,7 +117,7 @@ export async function GET(request: NextRequest) {
       doc.setFontSize(6);
       doc.setTextColor(120, 130, 125);
       doc.setFont("helvetica", "normal");
-      const footerText = `Belgrove Homes  •  Suite 25, Lebrex Plaza, 47 Ajose Adeogun Street, Utako, Abuja  •  info@belgrovehomes.com  •  +234 810 376 0063  •  Page ${i} of ${pageCount}`;
+      const footerText = `Belgrove Homes  •  Suite 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja  •  info@belgrovehomes.com  •  +234 810 376 0063  •  Page ${i} of ${pageCount}`;
       // Center footer text
       const textW = doc.getTextWidth(footerText);
       const x = (w - textW) / 2;

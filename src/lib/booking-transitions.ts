@@ -13,18 +13,23 @@ export type BookingAction =
   | "reopen"
   | "cool_down"
   | "confirm_agent"
+  | "confirm_form"
   | "add_note"
   | "edit_booking";
 
 type StatusGatedAction = Exclude<BookingAction, "save" | "escalate_lead" | "assign_agent" | "add_note" | "confirm_agent" | "edit_booking">;
 
 export const ALLOWED_FROM: Record<StatusGatedAction, BookingStatus[]> = {
-  approve: ["new", "under_review", "on_hold", "approved", "rescheduled"],
+  // Note: "approved" is deliberately absent from approve — an approved
+  // booking can't be re-approved, so the button disappears after approval
+  // (hold / review / reschedule / mark-active remain as the valid next steps).
+  approve: ["new", "under_review", "on_hold", "rescheduled"],
   reschedule: ["new", "under_review", "on_hold", "approved", "rescheduled"],
   hold: ["new", "under_review", "approved", "rescheduled"],
   under_review: ["new", "on_hold", "approved", "rescheduled"],
   mark_active: ["approved", "rescheduled"],
   record_outcome: ["active"],
+  confirm_form: ["active"],
   reopen: ["closed"],
   cool_down: ["new", "under_review", "on_hold", "approved", "rescheduled", "active"],
 };
@@ -48,6 +53,7 @@ export const actionLabels: Record<BookingAction, string> = {
   reopen: "Reopen booking",
   cool_down: "Cool down",
   confirm_agent: "Confirm match",
+  confirm_form: "Confirm form filled",
   add_note: "Add note",
   edit_booking: "Edit booking",
 };

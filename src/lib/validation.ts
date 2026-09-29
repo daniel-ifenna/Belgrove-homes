@@ -78,6 +78,11 @@ export const bookingActionSchema = z.discriminatedUnion("action", [
     ...concurrency,
   }),
   z.object({
+    action: z.literal("confirm_form"),
+    ...note,
+    ...concurrency,
+  }),
+  z.object({
     action: z.literal("save"),
     // agentName is now read-only visitor raw text save no longer binds agent; use assign_agent
     assignedToId: z.string().min(1).nullable().optional(),
@@ -99,8 +104,8 @@ export const bookingActionSchema = z.discriminatedUnion("action", [
     action: z.literal("assign_agent"),
     agentId: z.string().min(1).nullable(),
     silent: z.boolean().optional().default(false),
-    // Required to override a phone-number match with the customer (see
-    // normalizePhoneForCompare). Email matches can never be overridden.
+    // Phone match with the customer no longer blocks assignment (shared
+    // handsets allowed). Email match is still blocked in the route.
     overrideReason: z.string().trim().max(500).optional(),
     ...note,
     ...concurrency,

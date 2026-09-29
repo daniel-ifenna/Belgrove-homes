@@ -81,7 +81,6 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <div className="flex flex-wrap items-baseline gap-3 mt-1">
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{receipt.ref}</h1>
                 <StatusBadge status={receipt.status} className="px-3 py-1.5 text-xs" />
-                {receipt.booking && <Link href={`/admin/bookings/${receipt.booking.id}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">View sale ↗</Link>}
               </div>
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Issued {formatDateTime(receipt.issuedAt)} · {attemptsCount} send attempt{attemptsCount !== 1 ? "s" : ""} {lastSent ? `· Last sent ${formatDateTime(lastSent.attemptedAt)}` : ""}</div>
             </div>

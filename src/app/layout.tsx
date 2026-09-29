@@ -34,6 +34,10 @@ const notoSans = Noto_Sans({
 export const metadata: Metadata = {
   title: "Belgrove Homes",
   description: "Find your next home. Book a property inspection with Belgrove Homes.",
+  icons: {
+    icon: "/belgrove-icon.png",
+    apple: "/belgrove-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

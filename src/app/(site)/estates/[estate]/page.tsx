@@ -10,6 +10,7 @@ export function generateStaticParams() {
     { estate: "belgrove-peninsula" },
     { estate: "starlight-estate" },
     { estate: "sunrise-estate" },
+    { estate: "downtown-golf-resort" },
   ];
 }
 
@@ -67,7 +68,7 @@ export default async function EstateDetailPage({
           </h1>
           {info?.tagline && <p className="public text-[14px] text-[#6B6656] mt-2">{info.tagline}</p>}
           <div className="mono text-[12px] text-[#8B6B4E] mt-3">
-            {plots.length} unit{plots.length > 1 ? "s" : ""} • {sizeRange} • <span className="price">{priceRange}</span> • {available} available
+            {plots.length} unit{plots.length > 1 ? "s" : ""} • {sizeRange} • <span className="price">{priceRange}</span> • {available > 0 ? `${available} available` : "Fully sold out"}
           </div>
         </div>
 
@@ -90,12 +91,6 @@ export default async function EstateDetailPage({
                   <img src={`/${img.replace(/^\//, "")}`} alt={`${estateName} ${i + 2}`} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
                 </div>
               ))}
-              {galleryImages.length < 5 &&
-                Array.from({ length: 4 - (galleryImages.length - 1) }).map((_, i) => (
-                  <div key={`ph-${i}`} className="aspect-[4/3] rounded-xl border border-dashed border-[#E4DCC7] bg-[#FBF8F0] grid place-items-center mono text-[11px] text-[#8B6B4E]">
-                    More views on inspection
-                  </div>
-                ))}
             </div>
           </div>
           <p className="mono text-[11px] text-[#8B6B4E] mt-3">Photos show the FCTA-approved building prototype for {estateName}. Final finish may vary. Walk the land to see boundaries pegged on site.</p>
@@ -201,44 +196,58 @@ export default async function EstateDetailPage({
 
           {/* Right rail */}
           <div className="space-y-4 lg:sticky lg:top-[112px]">
-            <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
-              <h3 className="fraunces text-[16px] text-[#16281F]">Book an inspection</h3>
-              <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">See the land pegged and surveyed before you commit. Walk the plot with a named adviser. No booking fee, no pressure.</p>
-              <Link
-                href={`/book-inspection?estate=${encodeURIComponent(estateName)}${phase ? `&phase=${encodeURIComponent(phase)}` : ""}`}
-                className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors"
-              >
-                Book Inspection for {estateName} →
-              </Link>
-              <p className="mono text-[11px] text-[#8B6B4E] mt-3 text-center">Confirmation sent from <span className="text-[#16281F] font-medium">info@belgrovehomes.com</span></p>
-              <div className="mt-4 pt-4 border-t border-[#E4DCC7] mono text-[11px] leading-[1.5] text-[#6B6656]">
-                <div>WhatsApp: {info?.whatsapp ?? "+234 810 376 0063"}</div>
-                <div>Instagram: {info?.instagram ?? "@belgrove_homes"}</div>
+            {available === 0 ? (
+              <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
+                <h3 className="fraunces text-[16px] text-[#16281F]">Sold out</h3>
+                <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">This estate is fully sold and can&apos;t be booked for inspection.</p>
+                <Link
+                  href="/gallery"
+                  className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors"
+                >
+                  Explore available estates →
+                </Link>
+                <div className="mt-4 pt-4 border-t border-[#E4DCC7] mono text-[11px] leading-[1.5] text-[#6B6656]">
+                  <div>WhatsApp: {info?.whatsapp ?? "+234 810 376 0063"}</div>
+                  <div>Instagram: {info?.instagram ?? "@belgrove_homes"}</div>
+                </div>
               </div>
-            </div>
-
-            <div className="bg-white border border-[#E4DCC7] rounded-xl p-6">
-              <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B6B4E]">Floor plan & specification</h4>
-              <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">
-                Floor plans are not currently published online. Detailed specifications and surveyed dimensions are shared directly by your adviser at inspection. No hidden documents are withheld; what you see here is the full information available.
-              </p>
-              <ul className="public text-[13px] leading-[1.6] text-[#6B6656] mt-3 list-disc pl-5 space-y-1">
-                <li>Survey pegs and photographs on record</li>
-                <li>Documented chain of ownership</li>
-                <li>Use / planning status and access confirmed</li>
-              </ul>
-            </div>
+            ) : (
+              <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
+                <h3 className="fraunces text-[16px] text-[#16281F]">Book an inspection</h3>
+                <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">See the land pegged and surveyed before you commit. Walk the plot with a named adviser. No booking fee, no pressure.</p>
+                <Link
+                  href={`/book-inspection?estate=${encodeURIComponent(estateName)}${phase ? `&phase=${encodeURIComponent(phase)}` : ""}`}
+                  className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors"
+                >
+                  Book Inspection for {estateName} →
+                </Link>
+                <p className="mono text-[11px] text-[#8B6B4E] mt-3 text-center">Confirmation sent from <span className="text-[#16281F] font-medium">info@belgrovehomes.com</span></p>
+                <div className="mt-4 pt-4 border-t border-[#E4DCC7] mono text-[11px] leading-[1.5] text-[#6B6656]">
+                  <div>WhatsApp: {info?.whatsapp ?? "+234 810 376 0063"}</div>
+                  <div>Instagram: {info?.instagram ?? "@belgrove_homes"}</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Bottom CTA repeated */}
         <div className="mt-10 flex justify-center">
-          <Link
-            href={`/book-inspection?estate=${encodeURIComponent(estateName)}${phase ? `&phase=${encodeURIComponent(phase)}` : ""}`}
-            className="mono text-[14px] font-semibold bg-[#C79A46] text-[#16281F] px-8 py-3 rounded-full hover:bg-[#D4B368] transition-colors"
-          >
-            Book Inspection: {estateName} →
-          </Link>
+          {available === 0 ? (
+            <Link
+              href="/gallery"
+              className="mono text-[14px] font-semibold bg-[#16281F] text-[#F5EFE2] px-8 py-3 rounded-full hover:bg-[#1B2E23] transition-colors"
+            >
+              Explore available estates →
+            </Link>
+          ) : (
+            <Link
+              href={`/book-inspection?estate=${encodeURIComponent(estateName)}${phase ? `&phase=${encodeURIComponent(phase)}` : ""}`}
+              className="mono text-[14px] font-semibold bg-[#C79A46] text-[#16281F] px-8 py-3 rounded-full hover:bg-[#D4B368] transition-colors"
+            >
+              Book Inspection: {estateName} →
+            </Link>
+          )}
         </div>
       </div>
     </div>

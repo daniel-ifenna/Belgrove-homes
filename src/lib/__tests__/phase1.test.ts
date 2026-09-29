@@ -187,10 +187,9 @@ describe("agent assignment guard", () => {
     expect(phonesMatch(null, "08154804158")).toBe(false);
     expect(normalizePhoneForCompare("123")).toBe(null);
   });
-  it("assign route enforces the guard with an override path", () => {
+  it("assign route blocks email match but allows phone match without override", () => {
     const text = fs.readFileSync(path.join(SRC, "app/api/admin/bookings/[id]/route.ts"), "utf8");
-    expect(text).toContain("overrideReason");
-    expect(text).toContain("assign_agent_override");
-    expect(text).toContain("matches the booking customer");
+    expect(text).toContain("Assign a different agent");
+    expect(text).not.toContain("assign_agent_override");
   });
 });

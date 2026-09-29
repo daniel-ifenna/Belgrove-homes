@@ -52,7 +52,7 @@ export default function ContactModal({ open, onClose }: { open: boolean; onClose
           </a>
         </div>
 
-        <div className="mono text-[10px] leading-[1.6] text-[#8B5E3C] mt-4 text-center">Suite 25, Lebrex Plaza, 47 Ajose Adeogun Street, Utako, Abuja</div>
+        <div className="mono text-[10px] leading-[1.6] text-[#8B5E3C] mt-4 text-center">Suite 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja</div>
       </div>
     </div>
   );

@@ -35,8 +35,9 @@ export default function BookingMessages({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to send");
+      if (!data.message) throw new Error("Failed to send");
       setMessages((m) => [...m, data.message]);
       setText("");
       router.refresh();

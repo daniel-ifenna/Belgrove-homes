@@ -5,6 +5,7 @@ export const ESTATE_SLUGS: Record<string, string> = {
   "belgrove-peninsula": "Belgrove Peninsula",
   "starlight-estate": "Starlight Estate",
   "sunrise-estate": "Sunrise Estate",
+  "downtown-golf-resort": "Downtown Golf Resort",
 };
 
 export function estateNameFromSlug(slug: string): string | null {

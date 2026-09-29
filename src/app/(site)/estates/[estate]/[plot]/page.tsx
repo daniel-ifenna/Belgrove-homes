@@ -20,6 +20,11 @@ export function generateStaticParams() {
     { estate: "starlight-estate", plot: "starlight-350" },
     { estate: "starlight-estate", plot: "starlight-450" },
     { estate: "starlight-estate", plot: "starlight-750" },
+    { estate: "downtown-golf-resort", plot: "downtown-250" },
+    { estate: "downtown-golf-resort", plot: "downtown-350" },
+    { estate: "downtown-golf-resort", plot: "downtown-450" },
+    { estate: "downtown-golf-resort", plot: "downtown-550" },
+    { estate: "downtown-golf-resort", plot: "downtown-1000" },
   ];
   // sunrise phases
   for (const p of ["150","250","300","350","400","450","500","800"]) {
@@ -111,40 +116,54 @@ export default async function PlotDetailPage({
                 </div>
               );
             })()}
-            <div className="mt-6 bg-white border border-[#E4DCC7] rounded-xl p-6">
-              <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B6B4E]">Floor plan & specification</h4>
-              <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">Floor plans are not currently published online. Detailed specifications and surveyed dimensions are shared directly by your adviser at inspection. No hidden documents are withheld.</p>
-            </div>
           </div>
 
           <div className="lg:sticky lg:top-[112px] space-y-4">
-            <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
-              <h3 className="fraunces text-[16px] text-[#16281F]">Inspect this plot</h3>
-              <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">Walk the pegged boundaries with a named adviser. No gate before you see the property; this page is the full detail.</p>
-              <Link href={prefill} className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors">
-                Book Inspection →
-              </Link>
-              <p className="mono text-[11px] text-[#8B6B4E] mt-3 text-center">Prefills this exact plot in the booking form</p>
-            </div>
+            {plotData.status !== "available" ? (
+              <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
+                <h3 className="fraunces text-[16px] text-[#16281F]">Sold out</h3>
+                <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">This property is fully sold and can&apos;t be booked for inspection.</p>
+                <Link href="/gallery" className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors">
+                  Explore available estates →
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="bg-[#FBF8F0] border border-[#E4DCC7] rounded-xl p-6">
+                  <h3 className="fraunces text-[16px] text-[#16281F]">Inspect this plot</h3>
+                  <p className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2">Walk the pegged boundaries with a named adviser. No gate before you see the property; this page is the full detail.</p>
+                  <Link href={prefill} className="mt-4 flex items-center justify-center mono text-[13px] font-semibold bg-[#16281F] text-[#F5EFE2] px-6 py-3 rounded-[6px] hover:bg-[#1B2E23] transition-colors">
+                    Book Inspection →
+                  </Link>
+                  <p className="mono text-[11px] text-[#8B6B4E] mt-3 text-center">Opens the booking form with this plot selected</p>
+                </div>
 
-            <div className="bg-white border border-[#E4DCC7] rounded-xl p-6">
-              <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B6B4E]">What happens at inspection</h4>
-              <ul className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2 list-disc pl-5 space-y-1">
-                <li>Meet your adviser at the estate gate</li>
-                <li>Walk the pegged plot and see survey photos</li>
-                <li>Review title and documentation in plain language</li>
-                <li>Ask anything: we answer honestly, even “not this one”</li>
-              </ul>
-            </div>
+                <div className="bg-white border border-[#E4DCC7] rounded-xl p-6">
+                  <h4 className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B6B4E]">What happens at inspection</h4>
+                  <ul className="public text-[13px] leading-[1.6] text-[#6B6656] mt-2 list-disc pl-5 space-y-1">
+                    <li>Meet your adviser at the estate gate</li>
+                    <li>Walk the pegged plot and see survey photos</li>
+                    <li>Review title and documentation in plain language</li>
+                    <li>Ask anything: we answer honestly, even “not this one”</li>
+                  </ul>
+                </div>
+              </>
+            )}
 
             <Link href={`/estates/${estate}`} className="block mono text-[12px] text-[#6B6656] text-center underline underline-offset-4">← Back to {estateName} overview</Link>
           </div>
         </div>
 
         <div className="mt-10 flex justify-center">
-          <Link href={prefill} className="mono text-[14px] font-semibold bg-[#C79A46] text-[#16281F] px-8 py-3 rounded-full hover:bg-[#D4B368] transition-colors">
-            Book Inspection: {plotData.code} →
-          </Link>
+          {plotData.status === "available" ? (
+            <Link href={prefill} className="mono text-[14px] font-semibold bg-[#C79A46] text-[#16281F] px-8 py-3 rounded-full hover:bg-[#D4B368] transition-colors">
+              Book Inspection: {plotData.code} →
+            </Link>
+          ) : (
+            <Link href="/gallery" className="mono text-[14px] font-semibold bg-[#16281F] text-[#F5EFE2] px-8 py-3 rounded-full hover:bg-[#1B2E23] transition-colors">
+              Explore available estates →
+            </Link>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getEntityHistory } from "@/lib/activity";
 import { formatLagos } from "@/lib/time";
 
@@ -10,9 +9,6 @@ export default async function ActivitySection({ entityType, entityId }: { entity
     <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
       <div className="flex items-center justify-between">
         <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Activity</h3>
-        <Link href="/admin/activity" className="mono text-[11px] text-[var(--ops-primary)] hover:underline underline-offset-4">
-          Full log →
-        </Link>
       </div>
       {rows.length === 0 ? (
         <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No recorded changes yet.</p>

@@ -28,8 +28,8 @@ export default function AgentManager({ initialAgents }: { initialAgents: Agent[]
   async function refresh() {
     const res = await fetch("/api/admin/agents");
     if (res.ok) {
-      const data = await res.json();
-      setAgents(data.agents);
+      const data = await res.json().catch(() => null);
+      if (data?.agents) setAgents(data.agents);
     }
     router.refresh();
   }
@@ -45,8 +45,9 @@ export default function AgentManager({ initialAgents }: { initialAgents: Agent[]
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to create agent");
+      if (!data.agent) throw new Error("Failed to create agent");
       setForm({ name: "", phone: "", email: "", category: "staff", isActive: true });
       setSuccess(`Agent ${data.agent.name} created`);
       await refresh();
@@ -75,8 +76,9 @@ export default function AgentManager({ initialAgents }: { initialAgents: Agent[]
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editForm),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to update");
+      if (!data.agent) throw new Error("Failed to update");
       setEditing(null);
       setSuccess(`Agent ${data.agent.name} updated`);
       await refresh();
@@ -109,7 +111,7 @@ export default function AgentManager({ initialAgents }: { initialAgents: Agent[]
     setBusy(agent.id);
     try {
       const res = await fetch(`/api/admin/agents/${agent.id}`, { method: "DELETE" });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed");
       setSuccess(data.deactivated ? `${agent.name} deactivated (had bookings)` : `${agent.name} deleted`);
       await refresh();

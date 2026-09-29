@@ -85,6 +85,26 @@ export async function createTransactionFromBooking(
       },
     });
 
+    // Creating the transaction IS the subscription-form confirmation: the
+    // booking stops asking for "Confirm form filled" and unlocks Sold/Not Sold.
+    if (!booking.formConfirmedAt) {
+      await tx.inspectionBooking.update({
+        where: { id: booking.id },
+        data: { formConfirmedAt: now },
+      });
+      await tx.bookingActivity.create({
+        data: {
+          bookingId: booking.id,
+          actorId: createdById ?? null,
+          actorName: actorName ?? "System",
+          action: "confirm_form",
+          fromStatus: booking.status,
+          toStatus: booking.status,
+          note: "Auto: subscription form confirmed on transaction creation",
+        },
+      });
+    }
+
     return transaction;
   });
 }

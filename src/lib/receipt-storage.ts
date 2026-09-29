@@ -10,7 +10,11 @@ export function receiptPdfPath(ref: string): string {
 }
 
 export function receiptPdfAbsolute(pdfPath: string): string {
-  return path.join(process.cwd(), pdfPath);
+  // Resolved against the runtime working directory WITHOUT calling
+  // process.cwd(): Turbopack statically traces that call and bundles the
+  // whole project (including public/) into server functions, risking
+  // deployment size-limit failures.
+  return path.resolve(pdfPath);
 }
 
 // Writes a receipt PDF, creating the storage directory as needed.

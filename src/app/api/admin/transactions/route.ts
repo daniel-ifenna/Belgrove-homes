@@ -12,11 +12,18 @@ export async function GET(request: NextRequest) {
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status") ?? "";
   const plan = searchParams.get("plan") ?? "";
-  const page = Math.max(1, Number(searchParams.get("page") || "1"));
+  const pageParam = Number(searchParams.get("page") || "1");
+  const page = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1;
   const PAGE_SIZE = 25;
 
+  const VALID_STATUSES = ["DRAFT", "ACTIVE", "PAID_IN_FULL", "CANCELLED"] as const;
   const where: any = {};
-  if (status) where.status = status;
+  if (status) {
+    if (!(VALID_STATUSES as readonly string[]).includes(status)) {
+      return NextResponse.json({ error: "Invalid status filter" }, { status: 400 });
+    }
+    where.status = status;
+  }
   if (plan) where.paymentPlanId = plan;
   if (q) {
     where.OR = [
@@ -82,8 +89,9 @@ export async function POST(request: NextRequest) {
 
   const qty = Number(plotQuantity) || 1;
   const price = Number(unitPrice);
-  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(qty) || qty < 1) {
-    return NextResponse.json({ error: "Invalid unitPrice or plotQuantity" }, { status: 400 });
+  // Money is integer naira — reject floats, not just non-numbers.
+  if (!Number.isInteger(price) || price <= 0 || !Number.isInteger(qty) || qty < 1) {
+    return NextResponse.json({ error: "Enter whole-naira unitPrice and plotQuantity" }, { status: 400 });
   }
 
   try {

@@ -182,7 +182,6 @@ function SidebarInner() {
       items: [
         { href: "/admin", label: "Dashboard", icon: DashboardIcon, active: pathname === "/admin" },
         { href: "/admin/inbox", label: "Inbox", icon: InspectionsIcon, active: isActive("/admin/inbox") },
-        { href: "/admin/activity", label: "Activity", icon: ReportsIcon, active: isActive("/admin/activity") },
       ],
     },
     {
@@ -192,7 +191,7 @@ function SidebarInner() {
         { href: "/admin/transactions", label: "Transactions", icon: TransactionsIcon, active: isActive("/admin/transactions") },
         { href: "/admin/payments", label: "Payments", icon: PaymentsIcon, active: isActive("/admin/payments") },
         { href: "/admin/receipts", label: "Receipts", icon: ReceiptsIcon, active: isActive("/admin/receipts") },
-        { href: "/admin/inspections", label: "Completed Inspections", icon: InspectionsIcon, active: isActive("/admin/inspections") },
+        { href: "/admin/inspections", label: "Inspections", icon: InspectionsIcon, active: isActive("/admin/inspections") },
       ],
     },
     {
@@ -313,13 +312,6 @@ function PaymentsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
-    </svg>
-  );
-}
-function ReportsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3h18v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3Z" /><path d="M8 13l3 3 5-6" />
     </svg>
   );
 }

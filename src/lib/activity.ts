@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
 // Read-only audit history: merges BookingActivity (booking lifecycle) with
-// AuditEvent (payment/transaction/receipt mutations). For detail pages and
-// the /admin/activity log. Never used for action state.
+// AuditEvent (payment/transaction/receipt mutations). For detail pages.
+// Never used for action state.
 
 export type HistoryRow = {
   id: string;

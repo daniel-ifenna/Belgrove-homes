@@ -5,6 +5,7 @@ import { amountToWords } from "./amountToWords";
 import { formatNaira } from "../currency";
 import { formatDisplayName } from "../formatName";
 import { receiptAmountsRows } from "../receipt-amounts";
+import { drawLetterhead } from "../documents/brand";
 
 // Server-only: signature asset stored in private path, never as public URL
 const SIGNATURE_REL = path.join(process.cwd(), "src/lib/receipts/belgrove-cashier-signature.png");
@@ -40,14 +41,6 @@ export type ReceiptData = {
   outstandingBalance?: number;
   transactionRef?: string;
   installmentLabel?: string;
-};
-
-const COMPANY = {
-  name: "BELGROVE HOMES AND PROPERTIES LIMITED",
-  address: "Ste 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory",
-  website: "www.belgrovehomes.com",
-  email: "info@belgrovehomes.com",
-  phone: "+234 8103760063",
 };
 
 function loadSignatureBase64(): string | null {
@@ -105,36 +98,10 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
 
   const W = doc.internal.pageSize.getWidth();
   const margin = 12;
-  let y = 14;
-
-  // --- Header — company name left, contact ONLY top-right (no duplicate) ---
-  doc.setFont(fontName, "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(22, 40, 31);
-  doc.text(COMPANY.name, margin, y);
-  doc.setFont(fontName, "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(107, 102, 86);
-  y += 5;
-  // Address only under name — contact block is top-right only
-  const addrLines = doc.splitTextToSize(COMPANY.address, 110);
-  doc.text(addrLines, margin, y);
-  y = y + addrLines.length * 3.5 + 2;
-
-  // right-aligned contact — single source of truth
-  doc.setFontSize(7);
-  doc.setTextColor(22, 40, 31);
-  doc.setFont(fontName, "normal");
   const rightX = W - margin;
-  doc.text(COMPANY.website, rightX, 14, { align: "right" });
-  doc.text(COMPANY.email, rightX, 18, { align: "right" });
-  doc.text(COMPANY.phone, rightX, 22, { align: "right" });
-
-  y = Math.max(y, 26) + 6;
-  doc.setDrawColor(212, 179, 104);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y, W - margin, y);
-  y += 12;
+  // Branded letterhead (shared module): logo + company block + gold rule.
+  // Returns the y where body content starts — never overlapping the header.
+  let y = drawLetterhead(doc, fontName, { margin, top: 14 });
 
   // Title & receipt number — no hashtag, no overlap with golden border
   doc.setFont(fontName, "bold");

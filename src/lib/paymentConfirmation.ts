@@ -78,7 +78,7 @@ export function wouldExceedSchedule(
 
 // Never render these raw: Prisma messages carry constraint names, table
 // names, and driver detail that mean nothing to an admin and may leak paths.
-export function toUserFacingError(error: unknown, action: "confirm" | "record" | "void" | "save"): string {
+export function toUserFacingError(error: unknown, action: "confirm" | "record" | "void" | "save" | "booking"): string {
   const verb =
     action === "confirm"
       ? "confirm payment"
@@ -86,7 +86,9 @@ export function toUserFacingError(error: unknown, action: "confirm" | "record" |
         ? "record payment"
         : action === "void"
           ? "void payment"
-          : "save";
+          : action === "booking"
+            ? "update booking"
+            : "save";
   if (error instanceof PaymentAlreadyHandledError) {
     return action === "confirm"
       ? "This payment was already confirmed or voided. Refresh to see the latest state."
@@ -108,6 +110,7 @@ export function toUserFacingError(error: unknown, action: "confirm" | "record" |
   if (code === "P2002") return "This was already recorded. Refresh to see the latest state.";
   if (code === "P2025") return "The record no longer exists. Refresh to see the latest state.";
   if (code === "P2034") return "Someone else just changed this. Refresh and try again.";
+  if (code === "P2022") return "Database update pending: deploy the latest migrations, then retry.";
   return `Couldn't ${verb}. Please try again.`;
 }
 

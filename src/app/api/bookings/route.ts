@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { prefixedRef, generateUniqueBookingRef } from "@/lib/ref";
 import { bookingSubmissionSchema } from "@/lib/validation";
+import { BELGROVE_PLOTS } from "@/lib/belgroveData";
 
 function isUniqueRefConflict(err: unknown): boolean {
   return (
@@ -33,6 +34,26 @@ export async function POST(request: NextRequest) {
   }
 
   const { name, email, phone, preferredDate, preferredTime, location, agentName, estate, plotCode, unitType, sqm, sqmNeeded, selectionType } = parsed.data;
+
+  // Rule: no booking for a sold-out property. Enforced here — the form also
+  // hides sold plots, but the API is the actual gate.
+  if (plotCode) {
+    const plot = BELGROVE_PLOTS.find((p) => p.code === plotCode);
+    if (plot && plot.status !== "available") {
+      return NextResponse.json(
+        { error: "This property is sold out and can't be booked for inspection. Please choose an available plot." },
+        { status: 400 }
+      );
+    }
+  } else if (estate) {
+    const estatePlots = BELGROVE_PLOTS.filter((p) => p.estate === estate);
+    if (estatePlots.length > 0 && estatePlots.every((p) => p.status !== "available")) {
+      return NextResponse.json(
+        { error: "This estate is fully sold out. Please choose an available estate." },
+        { status: 400 }
+      );
+    }
+  }
 
   const preferredDateObj = new Date(preferredDate);
   if (Number.isNaN(preferredDateObj.getTime())) {

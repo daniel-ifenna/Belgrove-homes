@@ -196,7 +196,7 @@ export default async function AdminBookingsPage({
           </div>
           <div className="flex items-center gap-2.5">
             <Link href="/admin/inspections" className="hidden lg:inline-flex items-center gap-1.5 mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] text-[var(--ops-text)] rounded-full px-4 py-2.5 hover:bg-[var(--ops-bg)]">
-              Completed Inspections →
+              Inspections conducted →
             </Link>
             <a
               href={`/api/admin/bookings/export${buildQuery({ page: undefined })}`}

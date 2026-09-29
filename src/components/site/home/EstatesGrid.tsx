@@ -32,13 +32,14 @@ function Card({ name }: { name: string }) {
         </div>
         <span
           className={`absolute top-3 left-3 mono text-[12px] tracking-[0.14em] uppercase px-2.5 py-1 rounded-full pointer-events-none ${
-            e.status === "Pre-sale" ? "bg-[#C49A3A] text-[#12291F]" : "bg-white/95 text-[#12291F]"
+            e.status === "Pre-sale"
+              ? "bg-[#C49A3A] text-[#12291F]"
+              : e.status === "Sold out"
+                ? "bg-[#12291F]/90 text-[#D4B368]"
+                : "bg-white/95 text-[#12291F]"
           }`}
         >
           {e.status}
-        </span>
-        <span className="absolute bottom-3 right-3 mono text-[10px] tracking-[0.06em] uppercase bg-black/55 text-white px-2.5 py-1 rounded-full pointer-events-none">
-          Artist&apos;s impression
         </span>
       </div>
       <div className="p-5">
@@ -113,7 +114,7 @@ export default function EstatesGrid({ filter, onClear }: { filter: EstateFilter;
             className="public inline-flex items-center justify-center border border-[#12291F] text-[#12291F] px-8 h-[52px] rounded-[10px] text-[15px] font-semibold w-full"
             aria-expanded={expanded}
           >
-            View all 5 estates
+            View all {names.length} estates
           </button>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { formatDisplayName } from "../formatName";
 import { formatNaira } from "../currency";
+import { getAppUrl } from "../app-url";
 
 // Client-facing greeting names are title-cased at render time — the stored
 // DB value keeps its original casing; only the presentation layer changes.
@@ -7,11 +8,22 @@ function clientName(name: string): string {
   return formatDisplayName(name);
 }
 
+function logoImg(): string {
+  // The logo must never break sending: if the public origin is unknown,
+  // the email goes out with the wordmark alone.
+  try {
+    return `<img src="${getAppUrl()}/belgrove-icon.png" alt="Belgrove Homes" width="34" height="27" style="display: inline-block; vertical-align: middle; border: 0; margin-right: 10px;" />`;
+  } catch {
+    return "";
+  }
+}
+
 function layout(title: string, bodyHtml: string): string {
   return `
   <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #2b2620;">
     <div style="background: #3a3226; padding: 24px 32px;">
-      <span style="color: #f5ece1; font-size: 20px; letter-spacing: 0.05em;">BELGROVE HOMES</span>
+      ${logoImg()}
+      <span style="color: #f5ece1; font-size: 20px; letter-spacing: 0.05em; vertical-align: middle;">BELGROVE HOMES</span>
     </div>
     <div style="padding: 32px; background: #fdfbf7;">
       <h1 style="font-size: 20px; margin: 0 0 16px;">${title}</h1>

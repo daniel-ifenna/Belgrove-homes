@@ -35,7 +35,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
       <style>{`.fraunces{font-family:Fraunces,serif} .mono{font-family:IBM Plex Mono,monospace} .public{font-family:Public Sans,sans-serif}`}</style>
 
       <div className="max-w-[860px] mx-auto px-6 lg:px-8 py-12">
-        <Link href="/#blog" className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B5E3C] hover:text-[#1F3328]">← Back to insights</Link>
+        <Link href="/" className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B5E3C] hover:text-[#1F3328]">← Back to home</Link>
         <div className="mono text-[11px] tracking-[0.14em] uppercase bg-[#1F3328] text-[#E4C892] inline-block px-2 py-1 rounded-[2px] mt-6">{post.category}</div>
         <div className="mono text-[11px] tracking-[0.12em] uppercase text-[#8B5E3C] mt-3">{post.date}</div>
         <h1 className="fraunces text-[30px] lg:text-[36px] leading-[1.05] text-[#1F3328] mt-2">{post.title}</h1>

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import ContactModal from "./ContactModal";
@@ -8,9 +9,10 @@ const links = [
   { href: "/#estates", label: "ESTATES" },
   { href: "/gallery", label: "GALLERY" },
   { href: "/about", label: "ABOUT" },
-  { href: "/blog", label: "GUIDES" },
-  { href: "/#contact", label: "CONTACT" },
 ];
+
+const getInTouchCls =
+  "mono text-[12px] tracking-[0.08em] uppercase text-[#5B5346] hover:text-[#16281D] transition-colors";
 
 export default function Nav() {
   const pathname = usePathname();
@@ -28,6 +30,7 @@ export default function Nav() {
 
   const logo = (
     <Link href="/" className="flex items-center gap-0 shrink-0">
+        <Image src="/belgrove-icon.png" alt="Belgrove Homes" width={30} height={24} className="mr-1.5" priority />
         <span className="font-serif text-[16px] tracking-[-0.02em] text-[#16281D] font-semibold">Belgrove</span>
         <span className="font-serif text-[16px] tracking-[-0.02em] text-[#8a6d2b] font-semibold ml-1">Homes</span>
     </Link>
@@ -48,6 +51,7 @@ export default function Nav() {
                 {l.label}
               </Link>
             ))}
+            <button onClick={() => setContactOpen(true)} className={getInTouchCls}>GET IN TOUCH</button>
           </div>
           <Link href="/book-inspection" className="hidden md:inline-flex mono text-[12px] tracking-[0.08em] uppercase bg-[#C49A3A] text-[#12291F] px-7 py-2.5 rounded-[6px] hover:bg-[#E8C77A] transition-colors font-medium">
             BOOK INSPECTION
@@ -66,6 +70,7 @@ export default function Nav() {
             {links.map((l) => (
               <Link key={l.href} href={l.href} className="public text-[13px] text-[#1C2B20]" onClick={() => setOpen(false)}>{l.label}</Link>
             ))}
+            <button className="public text-[13px] text-left text-[#1C2B20]" onClick={() => { setOpen(false); setContactOpen(true); }}>GET IN TOUCH</button>
             <Link href="/book-inspection" className="mono text-[12px] uppercase tracking-[0.08em] bg-[#C49A3A] text-[#12291F] px-4 py-3 rounded-[6px] text-center font-medium" onClick={() => setOpen(false)}>BOOK INSPECTION</Link>
           </div>
         )}
@@ -82,7 +87,7 @@ export default function Nav() {
           {links.map((l) => (
             <Link key={l.href} href={l.href} className={`mono text-[12px] tracking-[0.08em] uppercase ${pathname === l.href ? "text-[#C89B3C]" : "text-[#5B5346] hover:text-[#1C2B20]"} transition-colors`}>{l.label}</Link>
           ))}
-          <button onClick={() => setContactOpen(true)} className="mono text-[12px] tracking-[0.08em] uppercase text-[#5B5346] hover:text-[#1C2B20] transition-colors">GET IN TOUCH</button>
+          <button onClick={() => setContactOpen(true)} className={getInTouchCls}>GET IN TOUCH</button>
           <Link href="/book-inspection" className="mono text-[12px] tracking-[0.08em] uppercase bg-[#16281D] text-[#F5EFE2] px-7 py-2.5 rounded-[6px] hover:bg-[#1B2E23] transition-colors font-medium">BOOK INSPECTION</Link>
         </div>
         <button className="md:hidden h-8 w-8 grid place-items-center text-[#16281D]" onClick={() => setOpen(!open)} aria-label="Menu">{open ? "✕" : "☰"}</button>

@@ -111,7 +111,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} receipts · Page {page} of {totalPages}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/admin/inspections" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Completed Inspections</Link>
+            <Link href="/admin/inspections" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Inspections conducted</Link>
           </div>
         </div>
 

@@ -43,10 +43,18 @@ export default function BookingForm() {
 
   const estates = useMemo(() => [...new Set(BELGROVE_PLOTS.map((p) => p.estate))], []);
   const plotsForEstate = useMemo(
-    () => (form.estate ? BELGROVE_PLOTS.filter((p) => p.estate === form.estate) : []),
+    // Sold plots can never be booked — the API rejects them too.
+    () => (form.estate ? BELGROVE_PLOTS.filter((p) => p.estate === form.estate && p.status === "available") : []),
     [form.estate]
   );
   const selectedPlot = useMemo(() => plotsForEstate.find((p) => p.id === form.plotId) ?? null, [plotsForEstate, form.plotId]);
+  const estateSoldOut = useMemo(
+    () =>
+      form.estate !== "" &&
+      BELGROVE_PLOTS.some((p) => p.estate === form.estate) &&
+      !BELGROVE_PLOTS.some((p) => p.estate === form.estate && p.status === "available"),
+    [form.estate]
+  );
 
   // Prefill from estate/plot detail or gallery: /book-inspection?estate=...&size=...&code=...&unit=...&price=...&phase=...
   // Homepage inspection form also passes name, phone and date.
@@ -124,6 +132,13 @@ export default function BookingForm() {
 
     // Build payload matching server schema: location + estate/plot fields
     let estate = form.estate.trim();
+
+    // Rule: no booking for a sold-out property (the API enforces this too).
+    if (estateSoldOut) {
+      setError(`${form.estate} is fully sold out. Please choose an available estate.`);
+      setSubmitting(false);
+      return;
+    }
     let plotCode: string | undefined;
     let unitType: string | undefined;
     let sqm: number | undefined;
@@ -331,7 +346,16 @@ export default function BookingForm() {
         </select>
         <p className="mono text-[11px] text-[#8B5E3C] mt-1">Choose a plot, or tell us the size you need.</p>
 
-        {form.estate && (
+        {form.estate && estateSoldOut && (
+          <div className="mt-4 rounded-lg border border-[#A6402F]/30 bg-[#A6402F]/5 px-4 py-3">
+            <p className="public text-[13px] font-semibold text-[#A6402F]">This estate is fully sold out.</p>
+            <p className="public text-[13px] leading-[1.6] text-stone-600 mt-1">
+              Inspections can&apos;t be booked here. Please choose an available estate above.
+            </p>
+          </div>
+        )}
+
+        {form.estate && !estateSoldOut && (
           <div className="mt-4 space-y-3">
             <div className="flex gap-2">
               <label className={`flex-1 flex items-center gap-2 border rounded-full px-3 py-2 text-xs cursor-pointer ${form.selectionType === "unit" ? "bg-[#1F3328] text-white border-[#1F3328]" : "bg-white border-stone-300 text-stone-700"}`}>
@@ -404,7 +428,6 @@ export default function BookingForm() {
           className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
           autoComplete="off"
         />
-        <p className="mono text-[11px] mt-1 text-stone-500">If an adviser invited you, write their name here so we can thank them.</p>
       </div>
 
       {/* location hidden but shown for transparency when manually entered */}
@@ -420,7 +443,7 @@ export default function BookingForm() {
             onChange={(e) => update("location", e.target.value)}
             className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
           />
-          <p className="mono text-[11px] text-stone-500 mt-1">Or pick an estate above. This field will be auto-filled.</p>
+          <p className="mono text-[11px] text-stone-500 mt-1">Or pick an estate above and we&apos;ll fill this in for you.</p>
         </div>
       )}
       {form.estate && (

@@ -47,9 +47,14 @@ export const BELGROVE_PLOTS: BelgrovePlot[] = [
   { id: 'starlight-350', estate: 'Starlight Estate', location: 'Kyami, Abuja', unitType: '4 Bedroom Detached Duplex', size: 350, price: 33000000, status: 'sold', code: 'STL-350SQM', image: 'starlight-350-detached.jpeg' },
   { id: 'starlight-450', estate: 'Starlight Estate', location: 'Kyami, Abuja', unitType: '5 Bedroom Detached Duplex', size: 450, price: 39000000, status: 'sold', code: 'STL-450SQM', image: 'starlight-450-detached.jpeg' },
   { id: 'starlight-750', estate: 'Starlight Estate', location: 'Kyami, Abuja', unitType: '3 Bedroom Block Of Flats', size: 750, price: 70000000, status: 'sold', code: 'STL-750SQM', image: 'starlight-750-flats.jpeg' },
+  { id: 'downtown-250', estate: 'Downtown Golf Resort', location: 'Kuje, Abuja', unitType: '2 Bedroom Semi-Detached Bungalow', size: 250, price: 2500000, status: 'sold', code: 'DTN-250SQM', image: 'gallery/downtown-golf-resort/2-bed-semi-detached-250sqm.jpg' },
+  { id: 'downtown-350', estate: 'Downtown Golf Resort', location: 'Kuje, Abuja', unitType: '3 Bedroom Bungalow', size: 350, price: 3300000, status: 'sold', code: 'DTN-350SQM', image: 'gallery/downtown-golf-resort/3-bed-bungalow-350sqm.jpg' },
+  { id: 'downtown-450', estate: 'Downtown Golf Resort', location: 'Kuje, Abuja', unitType: '4 Bedroom Bungalow with BQ', size: 450, price: 4100000, status: 'sold', code: 'DTN-450SQM', image: 'gallery/downtown-golf-resort/4-bedroom-bungalow.jpg' },
+  { id: 'downtown-550', estate: 'Downtown Golf Resort', location: 'Kuje, Abuja', unitType: '5 Bedroom Penthouse', size: 550, price: 4900000, status: 'sold', code: 'DTN-550SQM', image: 'gallery/downtown-golf-resort/5-bed-penthouse-550sqm.jpg' },
+  { id: 'downtown-1000', estate: 'Downtown Golf Resort', location: 'Kuje, Abuja', unitType: '3 Bedroom Block Of Flats', size: 1000, price: 8500000, status: 'sold', code: 'DTN-1000SQM', image: 'gallery/downtown-golf-resort/3-bed-block-of-flats-1000sqm.jpg' },
 ];
 
-export const BELGROVE_SIZES = [150, 200, 250, 300, 350, 400, 450, 500, 750, 800, 900];
+export const BELGROVE_SIZES = [150, 200, 250, 300, 350, 400, 450, 500, 750, 800, 900, 1000];
 
 export const BELGROVE_ESTATE_INFO: Record<string, { tagline: string; features: string[]; whatsapp: string; instagram: string }> = {
   'Starlight Estate': {
@@ -73,6 +78,12 @@ export const BELGROVE_ESTATE_INFO: Record<string, { tagline: string; features: s
   'Sunrise Estate': {
     tagline: 'FCTA Approved: Kabusa Ketti-North',
     features: ['FCTA Approved'],
+    whatsapp: '+234 810 376 0063',
+    instagram: '@belgrove_homes',
+  },
+  'Downtown Golf Resort': {
+    tagline: 'Golf Resort Living in Kuje — Fully Sold Out',
+    features: ['Street Lights', 'Parking', 'Perimeter Fence', 'CCTV', 'Good Roads', 'Golf Resort', 'Water Park', 'Wellness Center'],
     whatsapp: '+234 810 376 0063',
     instagram: '@belgrove_homes',
   },

@@ -14,7 +14,7 @@ export type SiteEstate = {
   minSize: number;
   maxSize: number;
   from: number;
-  status: "Available" | "Pre-sale";
+  status: "Available" | "Pre-sale" | "Sold out";
   titleType?: string;
   paymentPlan?: string;
   images: SiteEstateImage[];
@@ -103,6 +103,24 @@ export const SITE_ESTATES: SiteEstate[] = [
       { src: "/starlight-450-detached.jpeg", alt: "Starlight Estate detached duplex", render: true },
     ],
   },
+  {
+    slug: "downtown-golf-resort",
+    name: "Downtown Golf Resort",
+    area: "Kuje",
+    landmark: "Abuja",
+    sizes: "250–1000 sqm",
+    minSize: 250,
+    maxSize: 1000,
+    from: 2500000,
+    status: "Sold out",
+    images: [
+      { src: "/gallery/downtown-golf-resort/2-bed-semi-detached-250sqm.jpg", alt: "Downtown Golf Resort 2 bedroom semi-detached bungalow render", render: true },
+      { src: "/gallery/downtown-golf-resort/3-bed-bungalow-350sqm.jpg", alt: "Downtown Golf Resort 3 bedroom bungalow render", render: true },
+      { src: "/gallery/downtown-golf-resort/4-bedroom-bungalow.jpg", alt: "Downtown Golf Resort 4 bedroom bungalow with BQ render", render: true },
+      { src: "/gallery/downtown-golf-resort/5-bed-penthouse-550sqm.jpg", alt: "Downtown Golf Resort 5 bedroom penthouse render", render: true },
+      { src: "/gallery/downtown-golf-resort/3-bed-block-of-flats-1000sqm.jpg", alt: "Downtown Golf Resort 3 bedroom block of flats render", render: true },
+    ],
+  },
 ];
 
 export const HERO_SLIDES: (SiteEstateImage & { caption: string })[] = [
@@ -145,12 +163,6 @@ export const GROUND_PHOTOS: (SiteEstateImage & { caption: string })[] = [
   },
 ];
 
-export const VERIFICATION_PHOTO = {
-  src: "/our-vision-bromax.jpg",
-  alt: "Compactor working the access road",
-  caption: "ON SITE · ABUJA · SEP 2026",
-};
-
 /** Shared with the cinematic entrance. Rendered as real numbers, never animated. */
 export const SITE_STATS = [
   { display: "33,000+", label: "SQM SOLD" },
@@ -163,7 +175,7 @@ export const SITE_CONTACT = {
   phoneHref: "tel:+2348103760063",
   phones: ["+234 810 376 0063"],
   email: "info@belgrovehomes.com",
-  address: "Ste 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja",
+  address: "Suite 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja",
   whatsapp: "https://wa.me/2348103760063",
   mapEmbed:
     "https://www.google.com/maps?q=Lebrex+Plaza,+47+Ajose+Adeogun+St,+Utako,+Abuja&output=embed",
@@ -209,7 +221,7 @@ export const METHOD_STEPS: MethodStep[] = [
   },
 ];
 
-export const PLOT_SIZES = [150, 200, 250, 300, 350, 400, 450, 500, 750, 800, 900];
+export const PLOT_SIZES = [150, 200, 250, 300, 350, 400, 450, 500, 750, 800, 900, 1000];
 
 export const BUDGETS = [
   { value: "any", label: "Any budget" },

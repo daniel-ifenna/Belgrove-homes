@@ -78,12 +78,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     });
     if (recentDup) return NextResponse.json({ payment: recentDup, deduped: true });
 
+    // Minted before the transaction so the DB callback holds no extra queries.
+    const paymentReference = await generateUniquePaymentRef();
     const { payment } = await prisma.$transaction(async (tx) => {
       const created = await tx.payment.create({
         data: {
           transactionId: id,
           installmentId: installmentIdToUse,
-          paymentReference: await generateUniquePaymentRef(),
+          paymentReference,
           amount: amt,
           paymentDate: date,
           paymentMethod: paymentMethod || "Bank Transfer",

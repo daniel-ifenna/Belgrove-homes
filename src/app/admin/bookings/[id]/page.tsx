@@ -387,6 +387,9 @@ export default async function AdminBookingDetailPage({
                 updatedAt: booking.updatedAt,
                 lockedAt: booking.lockedAt,
                 agentConfirmedAt: booking.agentConfirmedAt,
+                outcome: booking.outcome,
+                formConfirmedAt: booking.formConfirmedAt,
+                inspectedAt: booking.inspectedAt,
               }}
               staffUsers={staffUsers as any}
               agents={agents as any}

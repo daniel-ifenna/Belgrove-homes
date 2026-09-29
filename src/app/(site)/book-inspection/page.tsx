@@ -13,7 +13,7 @@ export default function BookInspectionPage() {
       <div className="grid lg:grid-cols-[0.92fr_1.08fr] min-h-[calc(100vh-64px)]">
         {/* Left vertical split, high quality */}
         <div className="relative min-h-[420px] lg:min-h-full overflow-hidden bg-[#0F1A12]">
-          <img src="/belgrove-inspection-team.jpg" alt="Belgrove team WhatsApp Image 2026-09-06" className="absolute inset-0 w-full h-full object-cover" loading="eager" decoding="async" />
+          <img src="/belgrove-inspection-team.jpg" alt="Belgrove inspection team on site" className="absolute inset-0 w-full h-full object-cover" loading="eager" decoding="async" />
           <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(15,26,18,0.16) 0%, rgba(15,26,18,0.14) 45%, rgba(15,26,18,0.68) 100%)" }} />
           <div className="absolute left-6 right-6 bottom-6 lg:left-8 lg:right-8 lg:bottom-8">
             <div className="inline-flex mono text-[10px] tracking-[0.16em] uppercase bg-[#C79A46] text-[#1F3328] px-2.5 py-1 rounded-[2px] font-medium">No Rent Campaign</div>

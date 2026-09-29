@@ -31,7 +31,7 @@ export default function EstatesSection() {
               Find your ground.
             </h2>
             <p className="public text-[17px] leading-[1.6] text-[#5B5346] mt-3 max-w-[60ch]">
-              Five estates across Abuja. Choose a location, then a plot.
+              Six estates across Abuja. Choose a location, then a plot.
             </p>
           </Reveal>
           <div className="mt-8">

@@ -1,6 +1,5 @@
-import Link from "next/link";
 import Image from "next/image";
-import { Check, FileCheck, Ruler, Route } from "lucide-react";
+import { Check } from "lucide-react";
 import CinematicIntroLoader from "@/components/site/CinematicIntroLoader";
 import Hero from "@/components/site/home/Hero";
 import EstatesSection from "@/components/site/home/EstatesSection";
@@ -9,9 +8,7 @@ import Ground from "@/components/site/home/Ground";
 import MethodTabs from "@/components/site/home/MethodTabs";
 import VisitForm from "@/components/site/home/VisitForm";
 import Reveal from "@/components/site/home/Reveal";
-import { SITE_CONTACT, SITE_STATS, VERIFICATION_PHOTO } from "@/lib/site";
-
-const ICON = { size: 20, strokeWidth: 1.75 } as const;
+import { SITE_CONTACT, SITE_STATS } from "@/lib/site";
 
 function Label({ children, light = false }: { children: React.ReactNode; light?: boolean }) {
   return (
@@ -48,52 +45,42 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 5 — VERIFICATION */}
+      {/* 5 — WEALTH STEPS */}
       <section style={{ background: "#F6EEE3" }}>
         <div className="max-w-[1200px] mx-auto px-6 lg:px-12 py-[64px] lg:py-[112px]">
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-            <Reveal className="relative rounded-[14px] overflow-hidden aspect-[4/3]">
-              <Image src={VERIFICATION_PHOTO.src} alt={VERIFICATION_PHOTO.alt} fill sizes="(max-width: 1024px) 100vw, 50vw" loading="lazy" className="object-cover" />
-              <div
-                className="absolute inset-x-0 bottom-0 h-[40%]"
-                style={{ background: "linear-gradient(180deg, rgba(18,41,31,0), rgba(18,41,31,0.7))" }}
-              />
-              <span className="absolute bottom-3 left-3 mono text-[10px] tracking-[0.06em] uppercase bg-black/55 text-white px-2.5 py-1 rounded-full">
-                {VERIFICATION_PHOTO.caption}
-              </span>
-            </Reveal>
-            <Reveal>
-              <Label>Verified, not promised</Label>
-              <h2 className="fraunces text-[28px] lg:text-[44px] leading-[1.08] tracking-[-0.02em] mt-2">
-                Checked before you see it.
-              </h2>
-              <p className="public text-[17px] leading-[1.6] text-[#5B5346] mt-3 max-w-[60ch]">
-                Our 7-point standard runs on every plot, before publication.
-              </p>
-              <ul className="mt-8 space-y-5">
-                {[
-                  { icon: <FileCheck {...ICON} aria-hidden="true" />, t: "Title", c: "Ownership confirmed" },
-                  { icon: <Ruler {...ICON} aria-hidden="true" />, t: "Boundaries", c: "Pegged and measured" },
-                  { icon: <Route {...ICON} aria-hidden="true" />, t: "Access", c: "Roads you can drive" },
-                ].map((v) => (
-                  <li key={v.t} className="flex items-center gap-4">
-                    <span className="h-12 w-12 rounded-[10px] grid place-items-center shrink-0 text-white" style={{ background: "#12291F" }} aria-hidden="true">
-                      {v.icon}
-                    </span>
-                    <span>
-                      <span className="fraunces block text-[19px] leading-tight">{v.t}</span>
-                      <span className="public block text-[13px] text-[#5B5346]">{v.c}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/about"
-                className="mono text-[12px] tracking-[0.14em] uppercase text-[#12291F] underline decoration-[#C49A3A] decoration-2 underline-offset-4 mt-8 inline-block hover:text-[#8a6d2b]"
-              >
-                How we verify →
-              </Link>
-            </Reveal>
+          <Reveal>
+            <Label>Wealth steps · The Belgrove method</Label>
+            <h2 className="fraunces text-[28px] lg:text-[44px] leading-[1.08] tracking-[-0.02em] mt-2">
+              Build. Hold. Grow.
+            </h2>
+            <p className="public text-[17px] leading-[1.6] text-[#5B5346] mt-3 max-w-[60ch]">
+              Three words that shape every advisory conversation. Whether you are pouring a foundation next quarter or holding for a decade, the discipline is the same.
+            </p>
+          </Reveal>
+          <div className="grid md:grid-cols-3 gap-4 mt-8">
+            {[
+              {
+                t: "Build: The plot for the home you have imagined.",
+                c: "We start with your vision not our inventory. How many bedrooms? How close to work? What does “home” feel like at 7am? From that warm first conversation we curate plots where that life fits, verify each, handle transfer and registration, and stay through foundation. You don’t just buy ground; you buy a clear path to front door.",
+                i: "Ideal for families ready to build within 0–24 months.",
+              },
+              {
+                t: "Hold: An asset that waits for you.",
+                c: "Not every plot must be built tomorrow. Held land, well chosen, is patient capital hedged against inflation, free of tenant headaches, quietly appreciating as roads, schools and commerce arrive. We help you select corridors with real long-term potential and we tell you honestly when to wait. Land rewards patience; we reward it with discipline.",
+                i: "Ideal for investors building a 3–10 year portfolio.",
+              },
+              {
+                t: "Grow: A legacy for your family.",
+                c: "Property, well planned, is one of the surest foundations of enduring wealth because it compounds beyond you. A plot bought wisely today becomes a home for your children, a rental that funds education, or a parcel that multiplies when the neighborhood matures. Value that grows while you sleep, and a story your family will tell long after the transfer papers fade.",
+                i: "Ideal for generational wealth 10+ year horizon.",
+              },
+            ].map((s) => (
+              <Reveal key={s.t} className="bg-white border border-[#E4D8C1] rounded-[14px] p-6">
+                <h3 className="fraunces text-[19px] leading-[1.3] text-[#1C2B20]">{s.t}</h3>
+                <p className="public text-[15px] leading-[1.6] text-[#5B5346] mt-2">{s.c}</p>
+                <p className="mono text-[12px] tracking-[0.06em] uppercase text-[#1C2B20] mt-4">→ {s.i}</p>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>

@@ -96,8 +96,12 @@ model InspectionBooking {
   lockedAt DateTime?
 
   // When the inspection actually happened (set by mark_active). record_outcome
-  // requires it; the Completed Inspections page orders by it.
+  // requires it; the inspections list orders by it.
   inspectedAt DateTime?
+
+  // When the client-submitted subscription form was verified (set by
+  // confirm_form). Required after an Interested outcome before Sold/Not Sold.
+  formConfirmedAt DateTime?
 
   // Test-data flag (Phase 1): records marked here never appear in metrics,
   // queues, or default list results. See scripts/mark-test-data.ts.

@@ -74,7 +74,7 @@ export default function AboutPage() {
             <div className="relative flex">
               <div className="absolute -z-0 inset-0 lg:left-6 bg-[#16281D] rounded-[8px] hidden lg:block" />
               <div className="relative rounded-[16px] overflow-hidden border border-[#E4D8C1] bg-white photo-warm shadow-[0_12px_24px_rgba(22,40,29,0.08)] w-full h-full min-h-[560px] z-10">
-                <img src="/manager-dp.jpg" alt="Belgrove Story: General Manager" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "top" }} />
+                <img src="/general-manager.jpg" alt="General Manager, Belgrove Homes and Properties Limited" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "top" }} />
               </div>
             </div>
           </div>
@@ -105,74 +105,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* 7. General Manager welcome (moved from homepage) */}
-      <section id="leadership" className="bg-white py-16 lg:py-24 border-y border-[#E4D8C1] scroll-mt-20">
-        <div className="max-w-[980px] mx-auto px-6 lg:px-8">
-          <div className="mono text-[11px] tracking-[0.18em] uppercase text-[#1C2B20] font-medium text-center">A Welcome from the General Manager</div>
-          <div className="relative mt-6">
-            <div className="relative h-[320px] lg:h-[380px] overflow-hidden rounded-[4px]">
-              <img src="/belgrove-team.jpg" alt="Belgrove team" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(28,43,32,0.08), rgba(28,43,32,0.32))" }} />
-            </div>
-            <div className="relative -mt-20 lg:-mt-24 mx-auto max-w-[760px] bg-white shadow-[0_16px_40px_rgba(22,40,29,0.12)] border border-[#E4D8C1] p-6 lg:p-8 rounded-[4px]">
-              <blockquote className="fraunces italic text-[16px] lg:text-[17px] leading-[1.5] text-[#1C2B20] border-l-2 border-[#C89B3C] pl-4">
-                Real estate cannot be lost or stolen, nor can it be carried away. Purchased with common sense, paid for in full, and managed with reasonable care, it is about the safest investment in the world.
-              </blockquote>
-              <div className="mono text-[10px] tracking-[0.08em] uppercase text-[#5B5346] mt-2">FRANKLIN D. ROOSEVELT</div>
-              <div className="flex gap-4 items-start mt-6">
-                <img src="/manager-dp.jpg" alt="General Manager" className="h-20 w-20 rounded-full object-cover shrink-0 hidden sm:block border border-[#E4D8C1]" style={{ objectPosition: "top" }} />
-                <div>
-                  <h2 className="fraunces text-[24px] lg:text-[27px] leading-[1.15] font-semibold text-[#1C2B20]">Welcome to Belgrove.</h2>
-                  <div className="mono text-[11px] tracking-[0.06em] uppercase text-[#5B5346] mt-1">General Manager, Belgrove Homes and Properties Limited, Headquarters, Abuja</div>
-                </div>
-              </div>
-              <div className="public text-[14px] leading-[1.7] text-[#5B5346] mt-5 space-y-4">
-                <p>
-                  We believe land, chosen well, is the most honest investment there is, it doesn&apos;t move, decline, or wear out. It waits for you, whether you&apos;re building the home you&apos;ve imagined, holding an asset for the years ahead, or laying the foundation of something your family can stand on.
-                </p>
-                <p>
-                  Every plot we present has cleared our 7-point verification standard before you ever see it, title, boundaries, access, and documentation, checked and confirmed. Every client gets a named adviser, not a call centre, transparent fees on one page, and an honest answer, even when that answer is &quot;not this one.&quot;
-                </p>
-                <p>
-                  Founded in 2025 and based in Abuja, we intend to earn your trust the only way that lasts: by being right about the land, every single time.
-                </p>
-              </div>
-              <div className="mt-6 pt-5 border-t border-[#E4D8C1]">
-                <div className="fraunces italic text-[14px] text-[#1C2B20]">The General Manager</div>
-                <div className="mono text-[11px] tracking-[0.06em] uppercase text-[#5B5346] mt-1">Belgrove Homes and Properties Limited, Abuja</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 8. Build. Hold. Grow. (moved from homepage) */}
-      <section className="bg-[#F7EFE2] texture-cream py-16 lg:py-24">
-        <div className="max-w-[1280px] mx-auto px-6 lg:px-8">
-          <span className="mono text-[11px] tracking-[0.18em] uppercase text-[#C89B3C]">WEALTH STEPS · THE BELGROVE METHOD</span><div className="hairline-gold"></div>
-          <h2 className="fraunces text-[34px] leading-[1.05] text-[#1C2B20] mt-2">Build. Hold. Grow.</h2>
-          <p className="public text-[14px] leading-[1.6] text-[#5B5346] mt-2 max-w-[62ch]">Three words that shape every advisory conversation. Whether you are pouring a foundation next quarter or holding for a decade, the discipline is the same.</p>
-          <div className="grid md:grid-cols-3 gap-4 mt-8">
-            <div className="bg-white border border-[#E4D8C1] rounded-[6px] p-5">
-              <h3 className="fraunces text-[16px] text-[#1C2B20]">Build: The plot for the home you have imagined.</h3>
-              <p className="public text-[13.5px] leading-[1.6] text-[#5B5346] mt-2">We start with your vision not our inventory. How many bedrooms? How close to work? What does “home” feel like at 7am? From that warm first conversation we curate plots where that life fits, verify each, handle transfer and registration, and stay through foundation. You don’t just buy ground; you buy a clear path to front door.</p>
-              <p className="mono text-[11px] text-[#1C2B20] mt-3">→ Ideal for families ready to build within 0–24 months.</p>
-            </div>
-            <div className="bg-white border border-[#E4D8C1] rounded-[6px] p-5">
-              <h3 className="fraunces text-[16px] text-[#1C2B20]">Hold: An asset that waits for you.</h3>
-              <p className="public text-[13.5px] leading-[1.6] text-[#5B5346] mt-2">Not every plot must be built tomorrow. Held land, well chosen, is patient capital hedged against inflation, free of tenant headaches, quietly appreciating as roads, schools and commerce arrive. We help you select corridors with real long-term potential and we tell you honestly when to wait. Land rewards patience; we reward it with discipline.</p>
-              <p className="mono text-[11px] text-[#1C2B20] mt-3">→ Ideal for investors building a 3–10 year portfolio.</p>
-            </div>
-            <div className="bg-white border border-[#E4D8C1] rounded-[6px] p-5">
-              <h3 className="fraunces text-[16px] text-[#1C2B20]">Grow: A legacy for your family.</h3>
-              <p className="public text-[13.5px] leading-[1.6] text-[#5B5346] mt-2">Property, well planned, is one of the surest foundations of enduring wealth because it compounds beyond you. A plot bought wisely today becomes a home for your children, a rental that funds education, or a parcel that multiplies when the neighborhood matures. Value that grows while you sleep, and a story your family will tell long after the transfer papers fade.</p>
-              <p className="mono text-[11px] text-[#1C2B20] mt-3">→ Ideal for generational wealth 10+ year horizon.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 10. Bottom CTA banner */}
+      {/* 8. Bottom CTA banner */}
       <section className="bg-[#F7EFE2] texture-cream py-24 lg:py-[128px] reveal">
         <div className="max-w-[1280px] mx-auto px-6 lg:px-8">
           <div className="rounded-[16px] p-8 lg:p-12 text-center" style={{ background: "linear-gradient(135deg, #C89B3C, #9A6F2A)" }}>

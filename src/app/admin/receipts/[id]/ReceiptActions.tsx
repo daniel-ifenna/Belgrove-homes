@@ -28,16 +28,28 @@ export default function ReceiptActions({
     }
   }
 
-  async function resend() {
-    if (!confirm(`Resend receipt ${receipt.ref} to its recipient? This will reuse the same reference and create a new send attempt.`)) return;
+  async function resend(regen = false) {
+    if (!confirm(regen
+      ? `Rebuild receipt ${receipt.ref} with current branding and resend it? The download updates once rebuilt.`
+      : `Resend receipt ${receipt.ref} to its recipient? This will reuse the same reference and create a new send attempt.`)) return;
     setBusy(true);
     setErr(null);
     setMsg(null);
     try {
-      const res = await fetch(`/api/admin/receipts/${receipt.id}/resend`, { method: "POST" });
+      const res = await fetch(`/api/admin/receipts/${receipt.id}/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regen ? { regen: true } : {}),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Resend failed");
-      setMsg(`Resent to ${data.receipt?.recipientEmail ?? "recipient"} (${data.receipt?.status})`);
+      if (data.regenerated) {
+        setMsg(`Rebuilding with current branding and resending to ${data.receipt?.recipientEmail ?? "recipient"} — download again shortly.`);
+      } else if (data.queued) {
+        setMsg(`Queued for resend to ${data.receipt?.recipientEmail ?? "recipient"} — sends automatically with retries.`);
+      } else {
+        setMsg(`Resent to ${data.receipt?.recipientEmail ?? "recipient"} (${data.receipt?.status})`);
+      }
       router.refresh();
     } catch (e: any) {
       setErr(e.message ?? "Resend failed");
@@ -53,8 +65,11 @@ export default function ReceiptActions({
       <div className="flex flex-wrap items-center gap-2">
         <a href={receipt.receiptUrl} target="_blank" className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">View</a>
         <a href={pdfHref} target="_blank" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 hover:bg-[var(--ops-deep)]">Download PDF</a>
-        <button onClick={resend} disabled={busy} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)] disabled:opacity-50">
+        <button onClick={() => resend(false)} disabled={busy} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)] disabled:opacity-50">
           {busy ? "Resending…" : "Resend"}
+        </button>
+        <button onClick={() => resend(true)} disabled={busy} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)] disabled:opacity-50" title="Rebuild the PDF with current branding, then resend">
+          {busy ? "Working…" : "Regenerate & resend"}
         </button>
         <div className="relative">
           <button
