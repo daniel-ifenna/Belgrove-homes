@@ -3,7 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
-import { enqueueEmail, kickOutbox } from "@/lib/email/outbox";
+import { enqueueEmail, scheduleInlineOutboxSend } from "@/lib/email/outbox";
+
+// The inline outbox send runs after the response; allow headroom for the
+// request's own DB work plus the post-response SMTP send (Hobby max: 300s).
+export const maxDuration = 30;
 import { logServerError } from "@/lib/paymentConfirmation";
 import { receiptPdfAbsolute } from "@/lib/receipt-storage";
 import { promises as fsp } from "node:fs";
@@ -32,14 +36,19 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     await fsp.unlink(receiptPdfAbsolute(receipt.pdfPath)).catch(() => null);
   }
 
+  let outboxId: string;
   try {
-    await enqueueEmail(prisma, {
-      type: "receipt",
-      to: receipt.recipientEmail,
-      payload: { receiptId: receipt.id },
-      relatedType: "receipt",
-      relatedId: receipt.id,
-    });
+    // Explicit user action: force bypasses dedupe so a resend always sends.
+    outboxId = (
+      await enqueueEmail(prisma, {
+        type: "receipt",
+        to: receipt.recipientEmail,
+        payload: { receiptId: receipt.id },
+        relatedType: "receipt",
+        relatedId: receipt.id,
+        force: true,
+      })
+    ).id;
   } catch (e) {
     logServerError(`receipt ${receipt.ref}: resend enqueue failed`, e);
     return NextResponse.json({ error: "Couldn't queue the resend. Please try again." }, { status: 500 });
@@ -55,7 +64,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       after: { queued: true, regenerated: regen, to: receipt.recipientEmail },
     },
   });
-  kickOutbox();
+  scheduleInlineOutboxSend([outboxId]);
 
   return NextResponse.json({ queued: true, regenerated: regen, receipt }, { status: 202 });
 }

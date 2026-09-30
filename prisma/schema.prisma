@@ -536,6 +536,11 @@ model EmailOutbox {
   to            Json // string | string[]
   subject       String?
   payload       Json
+  // Deterministic dedupe key (relatedType:relatedId:type:recipients, or a
+  // caller override). Nullable so legacy rows are untouched; new rows always
+  // set it and the unique index turns a duplicate enqueue into a P2002 that
+  // enqueueEmail converts into "return the existing row".
+  dedupeKey     String?           @unique
   status        EmailOutboxStatus @default(PENDING)
   attempts      Int               @default(0)
   nextAttemptAt DateTime          @default(now())

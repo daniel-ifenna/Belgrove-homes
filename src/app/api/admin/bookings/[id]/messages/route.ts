@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 
+// The inline outbox send runs after the response; allow headroom for the
+// request's own DB work plus the post-response SMTP send (Hobby max: 300s).
+export const maxDuration = 30;
+
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!isInternalRole(session?.user?.role)) {
@@ -69,8 +73,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     try {
       const agent = await prisma.agent.findUnique({ where: { id: booking.agentId } });
       if (agent) {
-        const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
-        await enqueueEmail(prisma, {
+        const { enqueueEmail, scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
+        // One row per message: the default key would swallow a second,
+        // different message to the same agent, so key on the message id.
+        const row = await enqueueEmail(prisma, {
           type: "agent_followup",
           to: agent.email,
           payload: {
@@ -86,8 +92,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           },
           relatedType: "booking",
           relatedId: id,
+          dedupeKey: `booking:${id}:agent_followup:${msg.id}`,
         });
-        kickOutbox();
+        scheduleInlineOutboxSend([row.id]);
         await prisma.bookingActivity.create({
           data: {
             bookingId: id,

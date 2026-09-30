@@ -114,8 +114,10 @@ function matchBooking(b: (typeof BOOKINGS)[number], w: Where): boolean {
 }
 
 function matchOutbox(o: (typeof OUTBOX)[number], w: Where): boolean {
-  if ("type" in w && o.type !== w.type) return false;
-  if ("status" in w && o.status !== w.status) return false;
+  if ("type" in w && !strEq(o.type, w.type)) return false;
+  if ("status" in w && !strEq(o.status, w.status)) return false;
+  const ca = w.createdAt as { lt?: Date } | undefined;
+  if (ca?.lt && o.createdAt >= ca.lt) return false;
   return true;
 }
 

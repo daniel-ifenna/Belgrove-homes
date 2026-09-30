@@ -10,6 +10,7 @@ import { lagosDayKey, lagosTodayInput } from "@/lib/time";
 export type InboxCategory =
   | "PAYMENT_PENDING_VERIFICATION"
   | "RECEIPT_SEND_FAILED"
+  | "EMAIL_STUCK"
   | "SOLD_WITHOUT_TRANSACTION"
   | "INSTALLMENT_OVERDUE"
   | "BOOKING_NEW"
@@ -20,13 +21,19 @@ export type InboxCategory =
 export const INBOX_CATEGORIES: { category: InboxCategory; priority: number; label: string; actionLabel: string }[] = [
   { category: "PAYMENT_PENDING_VERIFICATION", priority: 1, label: "Payments to verify", actionLabel: "Verify payment" },
   { category: "RECEIPT_SEND_FAILED", priority: 2, label: "Failed receipt sends", actionLabel: "Resend" },
-  { category: "SOLD_WITHOUT_TRANSACTION", priority: 3, label: "Sold without transaction", actionLabel: "Create transaction" },
-  { category: "INSTALLMENT_OVERDUE", priority: 4, label: "Overdue installments", actionLabel: "View transaction" },
-  { category: "BOOKING_NEW", priority: 5, label: "New bookings", actionLabel: "Review booking" },
-  { category: "BOOKING_UNASSIGNED", priority: 6, label: "Unassigned bookings", actionLabel: "Assign agent" },
-  { category: "INSPECTION_AWAITING_OUTCOME", priority: 7, label: "Awaiting outcome", actionLabel: "Record outcome" },
-  { category: "INSPECTION_DUE_TODAY", priority: 8, label: "Inspections today", actionLabel: "View" },
+  { category: "EMAIL_STUCK", priority: 3, label: "Stuck emails", actionLabel: "Investigate" },
+  { category: "SOLD_WITHOUT_TRANSACTION", priority: 4, label: "Sold without transaction", actionLabel: "Create transaction" },
+  { category: "INSTALLMENT_OVERDUE", priority: 5, label: "Overdue installments", actionLabel: "View transaction" },
+  { category: "BOOKING_NEW", priority: 6, label: "New bookings", actionLabel: "Review booking" },
+  { category: "BOOKING_UNASSIGNED", priority: 7, label: "Unassigned bookings", actionLabel: "Assign agent" },
+  { category: "INSPECTION_AWAITING_OUTCOME", priority: 8, label: "Awaiting outcome", actionLabel: "Record outcome" },
+  { category: "INSPECTION_DUE_TODAY", priority: 9, label: "Inspections today", actionLabel: "View" },
 ];
+
+// Mail that has sat unsent (PENDING/SENDING) longer than this is surfaced as
+// stuck — it means no worker is draining the outbox (cron down) or sends are
+// stalling. Receipt rows that already FAILED stay under RECEIPT_SEND_FAILED.
+export const STUCK_AFTER_MINUTES = 15;
 
 export type ActionItem = {
   id: string;
@@ -38,6 +45,8 @@ export type ActionItem = {
   age: string;
   actionLabel: string;
   href: string;
+  // EmailOutbox row id for EMAIL_STUCK items (drives the Retry now button).
+  outboxId?: string;
 };
 
 export function ageString(at: Date | string, now: Date = new Date()): string {
@@ -62,7 +71,15 @@ type PendingRow = {
   createdAt: Date;
   transaction: { id: string; ref: string; customerName: string } | null;
 };
-type OutboxRow = { id: string; relatedId: string | null; updatedAt: Date; createdAt: Date };
+type OutboxRow = {
+  id: string;
+  relatedId: string | null;
+  updatedAt: Date;
+  createdAt: Date;
+  type?: string;
+  to?: unknown;
+  relatedType?: string | null;
+};
 type ReceiptRow = { id: string; ref: string; customerName: string; finalAmount: number };
 type BookingRow = {
   id: string;
@@ -111,7 +128,8 @@ export async function getActionItems(
 
   const overdue = opts.overdue ?? (await getOverdueInstallments(undefined, undefined, { includeTest }));
 
-  const [pendings, failedSends, soldNoTxn, fresh, unassigned, awaiting, scheduled] = await Promise.all([
+  const stuckCutoff = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
+  const [pendings, failedSends, stuckMails, soldNoTxn, fresh, unassigned, awaiting, scheduled] = await Promise.all([
     db.payment.findMany({
       where: { status: "PENDING_VERIFICATION", ...txnFilter(includeTest) },
       orderBy: { createdAt: "asc" },
@@ -121,6 +139,11 @@ export async function getActionItems(
     db.emailOutbox.findMany({
       where: { type: "receipt", status: "FAILED" },
       orderBy: { updatedAt: "desc" },
+      take: LIST_LIMIT,
+    }),
+    db.emailOutbox.findMany({
+      where: { status: { in: ["PENDING", "SENDING"] }, createdAt: { lt: stuckCutoff } },
+      orderBy: { createdAt: "asc" },
       take: LIST_LIMIT,
     }),
     db.inspectionBooking.findMany({
@@ -183,11 +206,31 @@ export async function getActionItems(
     });
   }
 
+  for (const o of stuckMails) {
+    const kind = typeof o.type === "string" && o.type ? o.type : "email";
+    const recipients = Array.isArray(o.to) ? o.to.join(", ") : String(o.to ?? "—");
+    let href = "/admin/inbox";
+    if (o.relatedType === "receipt" && o.relatedId) href = `/admin/receipts/${o.relatedId}`;
+    else if (o.relatedType === "booking" && o.relatedId) href = `/admin/bookings/${o.relatedId}`;
+    items.push({
+      id: `stuck-${o.id}`,
+      category: "EMAIL_STUCK",
+      priority: 3,
+      ref: kind,
+      title: `Stuck email (${kind})`,
+      subtitle: `${recipients} · unsent for ${ageString(o.createdAt, now)}`,
+      age: ageString(o.createdAt, now),
+      actionLabel: "Investigate",
+      href,
+      outboxId: o.id,
+    });
+  }
+
   for (const b of soldNoTxn) {
     items.push({
       id: `sold-${b.id}`,
       category: "SOLD_WITHOUT_TRANSACTION",
-      priority: 3,
+      priority: 4,
       ref: b.ref,
       title: "Create transaction",
       subtitle: `${b.name} · ${b.estate ?? b.location}`,
@@ -207,7 +250,7 @@ export async function getActionItems(
     items.push({
       id: `overdue-${o.id}`,
       category: "INSTALLMENT_OVERDUE",
-      priority: 4,
+      priority: 5,
       ref: t?.ref ?? "installment",
       title: `Overdue ${formatNaira(o.scheduledAmount - o.confirmedPaid)}`,
       subtitle: `${t?.customerName ?? "-"} · #${o.installmentNumber}`,
@@ -221,7 +264,7 @@ export async function getActionItems(
     items.push({
       id: `new-${b.id}`,
       category: "BOOKING_NEW",
-      priority: 5,
+      priority: 6,
       ref: b.ref,
       title: "Review booking",
       subtitle: `${b.name} · ${b.location}`,
@@ -235,7 +278,7 @@ export async function getActionItems(
     items.push({
       id: `unassigned-${b.id}`,
       category: "BOOKING_UNASSIGNED",
-      priority: 6,
+      priority: 7,
       ref: b.ref,
       title: "Assign agent",
       subtitle: `${b.name} · ${b.location}`,
@@ -249,7 +292,7 @@ export async function getActionItems(
     items.push({
       id: `awaiting-${b.id}`,
       category: "INSPECTION_AWAITING_OUTCOME",
-      priority: 7,
+      priority: 8,
       ref: b.ref,
       title: "Record outcome",
       subtitle: `${b.name} · inspected ${b.inspectedAt ? ageString(b.inspectedAt, now) + " ago" : ""}`,
@@ -265,7 +308,7 @@ export async function getActionItems(
     items.push({
       id: `due-${b.id}`,
       category: "INSPECTION_DUE_TODAY",
-      priority: 8,
+      priority: 9,
       ref: b.ref,
       title: "Inspection today",
       subtitle: `${b.name} · ${b.location}`,
@@ -286,6 +329,7 @@ export function emptyCounts(): ActionCounts {
     byCategory: {
       PAYMENT_PENDING_VERIFICATION: 0,
       RECEIPT_SEND_FAILED: 0,
+      EMAIL_STUCK: 0,
       SOLD_WITHOUT_TRANSACTION: 0,
       INSTALLMENT_OVERDUE: 0,
       BOOKING_NEW: 0,
@@ -297,13 +341,17 @@ export function emptyCounts(): ActionCounts {
 }
 
 export async function getActionCounts(
-  opts: { includeTest?: boolean; db?: InboxDb; overdue?: Awaited<ReturnType<typeof getOverdueInstallments>> } = {}
+  opts: { includeTest?: boolean; db?: InboxDb; overdue?: Awaited<ReturnType<typeof getOverdueInstallments>>; now?: Date } = {}
 ): Promise<ActionCounts> {
-  const { includeTest = false, db = realDb } = opts;
+  const { includeTest = false, db = realDb, now = new Date() } = opts;
   const overdue = opts.overdue ?? (await getOverdueInstallments(undefined, undefined, { includeTest }));
-  const [pending, failed, sold, newCount, unassigned, awaiting, scheduled] = await Promise.all([
+  const stuckCutoff = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
+  const [pending, failed, stuck, sold, newCount, unassigned, awaiting, scheduled] = await Promise.all([
     db.payment.count({ where: { status: "PENDING_VERIFICATION", ...txnFilter(includeTest) } }),
     db.emailOutbox.count({ where: { type: "receipt", status: "FAILED" } }),
+    db.emailOutbox.count({
+      where: { status: { in: ["PENDING", "SENDING"] }, createdAt: { lt: stuckCutoff } },
+    }),
     db.inspectionBooking.count({ where: { outcome: "sold", transaction: null, ...testFilter(includeTest) } }),
     db.inspectionBooking.count({ where: { status: "new", ...testFilter(includeTest) } }),
     db.inspectionBooking.count({ where: { agentId: null, status: { not: "closed" }, ...testFilter(includeTest) } }),
@@ -321,6 +369,7 @@ export async function getActionCounts(
   const byCategory: Record<InboxCategory, number> = {
     PAYMENT_PENDING_VERIFICATION: pending,
     RECEIPT_SEND_FAILED: failed,
+    EMAIL_STUCK: stuck,
     SOLD_WITHOUT_TRANSACTION: sold,
     INSTALLMENT_OVERDUE: overdue.length,
     BOOKING_NEW: newCount,

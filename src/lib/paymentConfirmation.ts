@@ -137,6 +137,10 @@ export type ConfirmDbResult = {
   installment: { id: string; type: string; installmentNumber: number } | null;
   transactionId: string;
   receiptId: string;
+  // Outbox row id for the receipt email, so the caller can schedule the
+  // inline send after the transaction commits. Matches an existing row when
+  // dedupe collapses a repeat enqueue.
+  outboxId: string;
   newTotalPaid: number;
   newOutstanding: number;
   isPaidInFull: boolean;
@@ -287,16 +291,16 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   });
 
   // Receipt email queued in the SAME atomic unit (DB work only — delivery
-  // happens post-commit via the outbox processor). If confirmation commits,
-  // the email is durably queued; no post-commit enqueue can be lost.
-  await tx.emailOutbox.create({
-    data: {
-      type: "receipt",
-      to: transaction.customerEmail,
-      payload: { receiptId: receipt.id },
-      relatedType: "receipt",
-      relatedId: receipt.id,
-    },
+  // happens post-commit via the inline send, with the outbox as retry).
+  // If confirmation commits, the email is durably queued; no post-commit
+  // enqueue can be lost. One row per receipt (dedupe key = receipt id).
+  const { enqueueEmail } = await import("./email/outbox");
+  const outboxRow = await enqueueEmail(tx as unknown as Parameters<typeof enqueueEmail>[0], {
+    type: "receipt",
+    to: transaction.customerEmail,
+    payload: { receiptId: receipt.id },
+    relatedType: "receipt",
+    relatedId: receipt.id,
   });
 
   // Immutable audit row in the same unit: who confirmed what.
@@ -324,6 +328,7 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       : null,
     transactionId: transaction.id,
     receiptId: receipt.id,
+    outboxId: outboxRow.id,
     newTotalPaid,
     newOutstanding,
     isPaidInFull,

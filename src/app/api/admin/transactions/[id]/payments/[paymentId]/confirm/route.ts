@@ -16,6 +16,10 @@ import {
 } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
+// The inline outbox send runs after the response; allow headroom for the
+// request's own DB work plus the post-response SMTP send (Hobby max: 300s).
+export const maxDuration = 30;
+
 function formatDateDMY(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -186,10 +190,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     });
   }
 
-  // The receipt email was queued inside the confirmation transaction;
-  // kick delivery without ever blocking on SMTP.
-  const { kickOutbox } = await import("@/lib/email/outbox");
-  kickOutbox();
+  // The receipt email was queued inside the confirmation transaction
+  // (committed above): inline-send it after the response, never blocking SMTP.
+  const { scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
+  scheduleInlineOutboxSend([confirmed.outboxId]);
 
   return NextResponse.json({
     receipt: { id: confirmed.receiptId, ref: receiptRef },

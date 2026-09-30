@@ -4,6 +4,11 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { createManualTransaction } from "@/lib/transactionService";
 import { getTransactionOverviews } from "@/lib/finance";
+import { scheduleInlineOutboxSend } from "@/lib/email/outbox";
+
+// The inline outbox send runs after the response; allow headroom for the
+// request's own DB work plus the post-response SMTP sends (Hobby max: 300s).
+export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -129,6 +134,8 @@ export async function POST(request: NextRequest) {
     // email failure never fails creation — it is retried from the outbox.
     let confirmationEmail: { sent: boolean; error: string | null } = { sent: false, error: null };
     let confirmationQueued = false;
+    // Outbox ids enqueued below (all committed before any return below).
+    const outboxIds: string[] = [];
     try {
       const created = await prisma.transaction.findUnique({
         where: { id: transaction.id },
@@ -142,32 +149,37 @@ export async function POST(request: NextRequest) {
         const bookingRef = bookingId
           ? (await prisma.inspectionBooking.findUnique({ where: { id: bookingId }, select: { ref: true } }))?.ref ?? null
           : null;
-        const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
-        await enqueueEmail(prisma, {
-          type: "transaction_confirmation",
-          to: created.customerEmail,
-          payload: {
-            to: created.customerEmail,
-            params: {
-              name: created.customerName,
-              txnRef: created.ref,
-              bookingRef,
-              propertyLine: `${created.estate}${created.unitType ? ` · ${created.unitType}` : ""}${created.plotCode ? ` · ${created.plotCode}` : ""}`,
-              planName: created.paymentPlan.name,
-              planCode: created.paymentPlan.code,
-              depositAmount: initial && created.paymentPlan.remainingInstallments > 0 ? initial.scheduledAmount : null,
-              depositDueDate: fmtD(initial?.dueDate ?? created.createdAt),
-              schedule: monthlies.map((m) => ({ label: `Month ${m.installmentNumber}`, dueDate: fmtD(m.dueDate), amount: m.scheduledAmount })),
-              interestAmount: created.interestAmount,
-              interestRate: Number(created.interestRate),
-              totalPayable: created.totalPayable,
-            },
-          },
-          relatedType: "transaction",
-          relatedId: created.id,
-        });
+        const { enqueueEmail } = await import("@/lib/email/outbox");
+        // Default dedupe key (transaction:id:type:recipient): one confirmation
+        // email per transaction by construction.
+        outboxIds.push(
+          (
+            await enqueueEmail(prisma, {
+              type: "transaction_confirmation",
+              to: created.customerEmail,
+              payload: {
+                to: created.customerEmail,
+                params: {
+                  name: created.customerName,
+                  txnRef: created.ref,
+                  bookingRef,
+                  propertyLine: `${created.estate}${created.unitType ? ` · ${created.unitType}` : ""}${created.plotCode ? ` · ${created.plotCode}` : ""}`,
+                  planName: created.paymentPlan.name,
+                  planCode: created.paymentPlan.code,
+                  depositAmount: initial && created.paymentPlan.remainingInstallments > 0 ? initial.scheduledAmount : null,
+                  depositDueDate: fmtD(initial?.dueDate ?? created.createdAt),
+                  schedule: monthlies.map((m) => ({ label: `Month ${m.installmentNumber}`, dueDate: fmtD(m.dueDate), amount: m.scheduledAmount })),
+                  interestAmount: created.interestAmount,
+                  interestRate: Number(created.interestRate),
+                  totalPayable: created.totalPayable,
+                },
+              },
+              relatedType: "transaction",
+              relatedId: created.id,
+            })
+          ).id
+        );
         confirmationQueued = true;
-        kickOutbox();
         if (bookingId) {
           const line = `Transaction ${created.ref} created (${created.paymentPlan.name} plan), confirmation email ${confirmationQueued ? "queued" : `failed: ${confirmationEmail.error ?? "unknown"}`}.`;
           await prisma.bookingMessage.create({
@@ -203,6 +215,9 @@ export async function POST(request: NextRequest) {
           recordedById: session!.user.id,
           recordedByName: session!.user.name ?? session!.user.email ?? "Unknown",
         });
+        // Both rows committed (confirmation email above, receipt email inside
+        // the payment transaction): inline-send both after the response.
+        scheduleInlineOutboxSend([...outboxIds, result.outboxId]);
         return NextResponse.json({ transaction, payment: result.payment, receipt: result.receipt, confirmationEmail, confirmationQueued }, { status: 201 });
       } catch (e) {
         const { toUserFacingError, logServerError, OverScheduleError } = await import("@/lib/paymentConfirmation");
@@ -214,6 +229,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Confirmation email row committed above: inline-send after the response.
+    scheduleInlineOutboxSend(outboxIds);
     return NextResponse.json({ transaction, confirmationEmail, confirmationQueued }, { status: 201 });
   } catch (e: any) {
     const { toUserFacingError } = await import("@/lib/paymentConfirmation");

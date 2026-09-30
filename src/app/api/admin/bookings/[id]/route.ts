@@ -24,6 +24,10 @@ function parseSlotMinutes(slot: string): number | null {
   return h * 60 + mm;
 }
 
+// The inline outbox send runs after the response; allow headroom for the
+// request's own DB work plus the post-response SMTP sends (Hobby max: 300s).
+export const maxDuration = 30;
+
 export async function PATCH(
   request: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -113,13 +117,23 @@ async function patchInner(
   let emailQueued = false;
   const fromStatus: BookingStatus = booking.status;
 
-  // Outbox delivery: enqueue (durable) + non-blocking kick. The request never
+  // Outbox delivery: enqueue (durable), then one inline send after the
+  // response (scheduled at the tail of the handler). The request never
   // waits for SMTP; retries and failures live in EmailOutbox.
-  async function queue(type: import("@/lib/email/outbox").OutboxType, to: string | string[], payload: Record<string, unknown>) {
-    const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
-    await enqueueEmail(prisma, { type, to, payload, relatedType: "booking", relatedId: id });
+  // Repeatable admin actions pass a dedupeKey of action + new value +
+  // updatedAt: a genuine repeat (new value) still sends, while a concurrent
+  // double-submit (same updatedAt) collapses to one row.
+  const outboxIds: string[] = [];
+  async function queue(
+    type: import("@/lib/email/outbox").OutboxType,
+    to: string | string[],
+    payload: Record<string, unknown>,
+    dedupeKey?: string
+  ) {
+    const { enqueueEmail } = await import("@/lib/email/outbox");
+    const row = await enqueueEmail(prisma, { type, to, payload, relatedType: "booking", relatedId: id, dedupeKey });
+    outboxIds.push(row.id);
     emailQueued = true;
-    kickOutbox();
   }
 
   switch (input.action) {
@@ -150,10 +164,15 @@ async function patchInner(
       }
       const confirmedDate = updated.rescheduledDate ?? updated.preferredDate;
       const confirmedTime = updated.rescheduledTime ?? updated.preferredTime;
-      await queue("booking_approved", updated.email, {
-        to: updated.email,
-        booking: { ...updated, preferredDate: confirmedDate, preferredTime: confirmedTime },
-      });
+      await queue(
+        "booking_approved",
+        updated.email,
+        {
+          to: updated.email,
+          booking: { ...updated, preferredDate: confirmedDate, preferredTime: confirmedTime },
+        },
+        `booking:${id}:booking_approved:approved:${updated.updatedAt.getTime()}`
+      );
       emailAttempted = true;
       note = input.note ? `${input.note}${shouldWarm ? " • Auto-warmed lead to warm" : ""}` : shouldWarm ? "Auto: lead warmed to warm on approval" : null;
       break;
@@ -215,33 +234,43 @@ async function patchInner(
       if (input.note) note += ` ${input.note}`;
       if (input.notifyClient !== false) {
         // Notify visitor
-        await queue("booking_rescheduled", updated.email, {
-          to: updated.email,
-          booking: {
-            name: updated.name,
-            ref: updated.ref,
-            rescheduledDate: updated.rescheduledDate!,
-            rescheduledTime: updated.rescheduledTime!,
-            location: updated.location,
+        await queue(
+          "booking_rescheduled",
+          updated.email,
+          {
+            to: updated.email,
+            booking: {
+              name: updated.name,
+              ref: updated.ref,
+              rescheduledDate: updated.rescheduledDate!,
+              rescheduledTime: updated.rescheduledTime!,
+              location: updated.location,
+            },
           },
-        });
+          `booking:${id}:booking_rescheduled:${updated.rescheduledDate!.toISOString()}:${updated.rescheduledTime}:${updated.updatedAt.getTime()}`
+        );
         emailAttempted = true;
         // Also notify assigned agent (follow-up requirement: both must receive)
         if (updated.agentId) {
           try {
             const agent = await prisma.agent.findUnique({ where: { id: updated.agentId } });
             if (agent) {
-              await queue("agent_rescheduled_notice", agent.email, {
-                to: agent.email,
-                params: {
-                  agentName: agent.name,
-                  ref: updated.ref,
-                  clientName: updated.name,
-                  rescheduledDate: updated.rescheduledDate!,
-                  rescheduledTime: updated.rescheduledTime!,
-                  location: updated.location,
+              await queue(
+                "agent_rescheduled_notice",
+                agent.email,
+                {
+                  to: agent.email,
+                  params: {
+                    agentName: agent.name,
+                    ref: updated.ref,
+                    clientName: updated.name,
+                    rescheduledDate: updated.rescheduledDate!,
+                    rescheduledTime: updated.rescheduledTime!,
+                    location: updated.location,
+                  },
                 },
-              });
+                `booking:${id}:agent_rescheduled_notice:${agent.email}:${updated.rescheduledDate!.toISOString()}:${updated.rescheduledTime}:${updated.updatedAt.getTime()}`
+              );
               // Log agent notification separately for audit
               await prisma.bookingActivity.create({
                 data: {
@@ -270,7 +299,12 @@ async function patchInner(
         where: { id },
         data: { status: "on_hold", reviewedById: actorId, reviewedAt: new Date() },
       });
-      await queue("booking_status", updated.email, { to: updated.email, booking: updated, status: "on_hold" });
+      await queue(
+        "booking_status",
+        updated.email,
+        { to: updated.email, booking: updated, status: "on_hold" },
+        `booking:${id}:booking_status:on_hold:${updated.updatedAt.getTime()}`
+      );
       emailAttempted = true;
       note = input.note || null;
       break;
@@ -290,7 +324,12 @@ async function patchInner(
         note = input.assignedToId ? "Reassigned" : "Unassigned";
       }
       if (input.note) note = note ? `${note} ${input.note}` : input.note;
-      await queue("booking_status", updated.email, { to: updated.email, booking: updated, status: "under_review" });
+      await queue(
+        "booking_status",
+        updated.email,
+        { to: updated.email, booking: updated, status: "under_review" },
+        `booking:${id}:booking_status:under_review:${input.assignedToId ?? "-"}:${updated.updatedAt.getTime()}`
+      );
       emailAttempted = true;
       break;
     }
@@ -357,10 +396,15 @@ async function patchInner(
         if (input.note) note += ` ${input.note}`;
         const propertyName = booking.location;
         const text = getInterestedMessageText(propertyName);
-        await queue("interested_outcome", updated.email, {
-          to: updated.email,
-          params: { name: updated.name, ref: updated.ref, propertyName },
-        });
+        await queue(
+          "interested_outcome",
+          updated.email,
+          {
+            to: updated.email,
+            params: { name: updated.name, ref: updated.ref, propertyName },
+          },
+          `booking:${id}:interested_outcome:${propertyName}:${updated.updatedAt.getTime()}`
+        );
         emailAttempted = true;
         await prisma.bookingMessage.create({
           data: {
@@ -431,7 +475,12 @@ async function patchInner(
         const notSoldText = `Thank you for visiting ${booking.location} with Belgrove Homes (ref ${booking.ref}). We understand you’ve decided not to proceed at this time. Your feedback helps us serve you better. Your file remains warm for 30 days; reply to this email or call +234 810 376 0063 if you’d like to revisit, and we’ll keep you notified of similar plots.`;
         const notSoldSubject = `Following up on ${booking.location}: ${booking.ref}`;
         const notSoldHtml = `<div style="font-family:Inter, sans-serif; max-width:560px; margin:0 auto; color:#10231E;"><div style="background:#0D3328; padding:18px 20px; color:#C8A04A; font-weight:bold;">Belgrove Homes</div><div style="padding:20px; background:#fff; border:1px solid #E3E6E1;"><p>Hi ${updated.name},</p><p>${notSoldText}</p><p style="margin-top:16px; font-size:12px; color:#65736E;">Ref: ${updated.ref} • ${booking.location}</p></div></div>`;
-        await queue("not_sold_followup", updated.email, { to: updated.email, subject: notSoldSubject, html: notSoldHtml });
+        await queue(
+          "not_sold_followup",
+          updated.email,
+          { to: updated.email, subject: notSoldSubject, html: notSoldHtml },
+          `booking:${id}:not_sold_followup:not_sold:${updated.updatedAt.getTime()}`
+        );
         emailAttempted = true;
         await prisma.bookingMessage.create({
           data: { bookingId: id, authorId: null, authorName: "System", message: notSoldText },
@@ -619,23 +668,28 @@ async function patchInner(
       }
 
       if (!input.silent) {
-        await queue("agent_assignment", agent.email, {
-          to: agent.email,
-          params: {
-            agentName: agent.name,
-            clientName: updated.name,
-            clientEmail: updated.email,
-            clientPhone: updated.phone,
-            ref: updated.ref,
-            preferredDate: updated.preferredDate,
-            preferredTime: updated.preferredTime,
-            rescheduledDate: updated.rescheduledDate,
-            rescheduledTime: updated.rescheduledTime,
-            location: updated.location,
-            agentCategory: agent.category,
-            assignmentNote: input.note ?? null,
+        await queue(
+          "agent_assignment",
+          agent.email,
+          {
+            to: agent.email,
+            params: {
+              agentName: agent.name,
+              clientName: updated.name,
+              clientEmail: updated.email,
+              clientPhone: updated.phone,
+              ref: updated.ref,
+              preferredDate: updated.preferredDate,
+              preferredTime: updated.preferredTime,
+              rescheduledDate: updated.rescheduledDate,
+              rescheduledTime: updated.rescheduledTime,
+              location: updated.location,
+              agentCategory: agent.category,
+              assignmentNote: input.note ?? null,
+            },
           },
-        });
+          `booking:${id}:agent_assignment:${agent.id}:${updated.updatedAt.getTime()}`
+        );
         emailAttempted = true;
       }
 
@@ -709,6 +763,10 @@ async function patchInner(
       emailError: emailQueued ? "queued via outbox" : emailResult.error,
     },
   });
+
+  // Inline send after the response — every write above has committed.
+  const { scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
+  scheduleInlineOutboxSend(outboxIds);
 
   return NextResponse.json({ booking: updated, emailResult, emailQueued });
 }

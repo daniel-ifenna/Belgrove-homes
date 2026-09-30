@@ -156,6 +156,11 @@ function makeMockTx(state: MockState): TxClient {
       },
     },
     emailOutbox: {
+      findFirst: async (args: unknown) => {
+        const { where } = args as { where: { dedupeKey?: string } };
+        if (!where?.dedupeKey) return null;
+        return (state.outbox.find((o) => (o as { dedupeKey?: string }).dedupeKey === where.dedupeKey) as { id: string } | undefined) ?? null;
+      },
       create: async (args: unknown) => {
         const { data } = args as { data: Record<string, unknown> };
         const row = { id: `out-${state.outbox.length + 1}`, ...data };

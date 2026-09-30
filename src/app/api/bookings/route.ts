@@ -5,6 +5,10 @@ import { prefixedRef, generateUniqueBookingRef } from "@/lib/ref";
 import { bookingSubmissionSchema } from "@/lib/validation";
 import { BELGROVE_PLOTS } from "@/lib/belgroveData";
 
+// The inline outbox send runs after the response; allow headroom for the
+// request's own DB work plus the post-response SMTP sends (Hobby max: 300s).
+export const maxDuration = 30;
+
 function isUniqueRefConflict(err: unknown): boolean {
   return (
     err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest) {
   let ref = await generateUniqueBookingRef();
   const { findOrCreateCustomer } = await import("@/lib/customer");
   const { normalizeEmail, normalizeName, normalizePhoneE164 } = await import("@/lib/phone");
-  const { enqueueEmail, kickOutbox } = await import("@/lib/email/outbox");
+  const { enqueueEmail, scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
   const customerName = normalizeName(name) ?? name;
   const customerEmail = normalizeEmail(email) ?? email;
   const customerPhone = normalizePhoneE164(phone);
@@ -112,6 +116,10 @@ export async function POST(request: NextRequest) {
       return [];
     });
   let booking;
+  // Outbox ids enqueued inside the transaction. Collected in-tx, but the
+  // inline send is scheduled only AFTER the transaction commits (below) —
+  // scheduling inside would send before the rows exist and silently defer.
+  const outboxIds: string[] = [];
   for (let attempt = 0; ; attempt++) {
     try {
       // One DB transaction: booking row + notifications + email outbox rows.
@@ -150,13 +158,18 @@ export async function POST(request: NextRequest) {
           email: created.email,
         };
         // Visitor confirmation queued (never awaited — response returns now).
-        await enqueueEmail(tx, {
-          type: "booking_received",
-          to: created.email,
-          payload: { to: created.email, booking: bookingLike },
-          relatedType: "booking",
-          relatedId: created.id,
-        });
+        // Default dedupe key (booking:id:type:recipient): one row per booking.
+        outboxIds.push(
+          (
+            await enqueueEmail(tx, {
+              type: "booking_received",
+              to: created.email,
+              payload: { to: created.email, booking: bookingLike },
+              relatedType: "booking",
+              relatedId: created.id,
+            })
+          ).id
+        );
         if (staffRecipients.length > 0) {
           await tx.notification.createMany({
             data: staffRecipients.map((r) => ({
@@ -166,13 +179,17 @@ export async function POST(request: NextRequest) {
               bookingId: created.id,
             })),
           });
-          await enqueueEmail(tx, {
-            type: "admin_booking_alert",
-            to: staffRecipients.map((r) => r.email),
-            payload: { to: staffRecipients.map((r) => r.email), booking: bookingLike },
-            relatedType: "booking",
-            relatedId: created.id,
-          });
+          outboxIds.push(
+            (
+              await enqueueEmail(tx, {
+                type: "admin_booking_alert",
+                to: staffRecipients.map((r) => r.email),
+                payload: { to: staffRecipients.map((r) => r.email), booking: bookingLike },
+                relatedType: "booking",
+                relatedId: created.id,
+              })
+            ).id
+          );
         }
         return created;
       });
@@ -186,8 +203,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Non-blocking delivery kick — the response does not wait for SMTP.
-  kickOutbox();
+  // Inline send after the response — the transaction above has committed,
+  // so the rows exist. Never blocks SMTP on the request.
+  scheduleInlineOutboxSend(outboxIds);
 
   return NextResponse.json({ ref: booking.ref, id: booking.id }, { status: 201 });
 }
