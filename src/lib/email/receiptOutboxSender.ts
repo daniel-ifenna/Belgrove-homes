@@ -1,10 +1,8 @@
 import fs from "node:fs";
-import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
-import { generateQrDataUrl } from "@/lib/receipts/qr";
 import { sendReceiptEmail } from "@/lib/receipts/emailReceipt";
-import { receiptPdfAbsolute, receiptPdfPath } from "@/lib/receipt-storage";
+import { receiptPdfAbsolute, receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
+import { renderReceiptPdfBuffer } from "@/lib/receipt-render";
 import { logServerError } from "@/lib/paymentConfirmation";
 import type { EmailResult } from "./sendEmail";
 
@@ -31,54 +29,16 @@ export async function sendReceiptForOutbox(receiptId: string, rowId?: string): P
   }
   if (!pdfBuffer) {
     try {
-      const qr = await generateQrDataUrl(receipt.qrTargetUrl);
-      const outboxPreviously =
-        receipt.transaction && receipt.payment
-          ? receipt.transaction.payments
-              .filter(
-                (p) =>
-                  p.paymentDate < receipt.payment!.paymentDate ||
-                  (p.paymentDate.getTime() === receipt.payment!.paymentDate.getTime() && p.id < receipt.paymentId)
-              )
-              .reduce((s, p) => s + p.amount, 0)
-          : 0;
-      const outboxTotal = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
-      pdfBuffer = generateReceiptPdf({
-        ref: receipt.ref,
-        issuedDate: receipt.issuedAt.toLocaleDateString("en-GB").split("/").join("-"),
-        clientName: receipt.customerName,
-        clientAddress: receipt.property,
-        clientPhone: receipt.customerPhone ?? "",
-        clientEmail: receipt.customerEmail,
-        estateName: receipt.estate ?? "",
-        unitType: receipt.unitType ?? "",
-        plotCode: receipt.plotCode ?? receipt.ref,
-        amountPaid: receipt.finalAmount,
-        soldPrice: receipt.amountBeforeDiscount,
-        discount: receipt.discount || undefined,
-        payments: (receipt.paymentHistory as unknown as { date: string; method: string; amount: number }[] | null) ?? [
-          {
-            date: receipt.issuedAt.toLocaleDateString("en-GB").split("/").join("-"),
-            method: receipt.paymentMethod ?? "Bank Transfer",
-            amount: receipt.finalAmount,
-          },
-        ],
-        receiptUrl: receipt.receiptUrl,
-        qrDataUrl: qr,
-        totalPayable: outboxTotal,
-        previouslyPaid: outboxPreviously,
-        totalPaidAfter: outboxPreviously + receipt.finalAmount,
-        outstandingBalance: outboxTotal - outboxPreviously - receipt.finalAmount,
-        installmentLabel: receipt.payment?.installment
-          ? receipt.payment.installment.type === "INITIAL"
-            ? "Initial payment"
-            : `Month ${receipt.payment.installment.installmentNumber} payment`
-          : undefined,
-      });
+      pdfBuffer = await renderReceiptPdfBuffer(receipt.id);
       const pdfPath = receipt.pdfPath ?? receiptPdfPath(receipt.ref);
-      const abs = receiptPdfAbsolute(pdfPath);
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, pdfBuffer);
+      // Best-effort cache refresh (serverless /tmp — writable, ephemeral).
+      // A cache-write failure must never fail the email: the buffer above
+      // is already in memory and is what gets attached.
+      try {
+        await writeReceiptPdf(pdfPath, pdfBuffer);
+      } catch (e) {
+        logServerError(`receipt ${receipt.ref}: PDF cache write failed, sending anyway`, e);
+      }
       await prisma.receipt.update({
         where: { id: receipt.id },
         data: { pdfStatus: "GENERATED", pdfPath, lastError: null },

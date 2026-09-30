@@ -39,7 +39,7 @@ export default function Nav() {
   if (isHome) {
     return (
       <header className={`fixed top-0 inset-x-0 z-30 flex justify-center px-4 pt-4 transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${scrolled ? "bg-[rgba(246,238,227,0.92)] backdrop-blur-md border-b border-[#E4D8C1] shadow-[0_4px_16px_rgba(22,40,29,0.08)]" : "bg-transparent border-transparent"}` }>
-        <nav className={`w-full max-w-[1160px] bg-white rounded-[8px] flex items-center justify-between px-5 lg:px-7 py-3 transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${scrolled ? "shadow-[0_4px_16px_rgba(22,40,29,0.08)]" : "shadow-[0_8px_28px_rgba(22,40,29,0.16)]"}`}>
+        <nav className={`w-full max-w-[1280px] bg-white rounded-[8px] flex items-center justify-between px-5 lg:px-7 py-3 transition-all duration-[250ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${scrolled ? "shadow-[0_4px_16px_rgba(22,40,29,0.08)]" : "shadow-[0_8px_28px_rgba(22,40,29,0.16)]"}`}>
           {logo}
           <div className="hidden md:flex items-center gap-6">
             {links.map((l) => (
