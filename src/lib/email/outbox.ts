@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import type { EmailResult } from "./sendEmail";
 import { logServerError } from "@/lib/paymentConfirmation";
@@ -90,7 +91,13 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 export async function enqueueEmail(db: OutboxWriter, input: EnqueueInput): Promise<{ id: string }> {
-  const dedupeKey = input.dedupeKey ?? computeDedupeKey(input);
+  const baseKey = input.dedupeKey ?? computeDedupeKey(input);
+  // Explicit user actions (e.g. receipt resend) always create a fresh row.
+  // The suffixed key keeps the unique index from collapsing the resend into
+  // the pre-existing row (which may still be sitting there as SENT/FAILED)
+  // and P2002-failing the request — the exact "Couldn't queue the resend"
+  // failure. Non-force enqueues keep the plain key so repeats collapse.
+  const dedupeKey = input.force ? `${baseKey}:resend:${randomUUID()}` : baseKey;
   if (!input.force) {
     const existing = await db.emailOutbox.findFirst({ where: { dedupeKey } });
     if (existing) return { id: existing.id };

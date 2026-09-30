@@ -87,6 +87,14 @@ function mockDb(initial: Partial<Row>[] = []) {
         return rows.find((r) => r.dedupeKey === args.where.dedupeKey) ?? null;
       },
       create: async (args: { data: Record<string, unknown> }) => {
+        // Faithful to the real unique index on dedupeKey: a duplicate
+        // non-null key throws P2002 like Prisma does in production.
+        const key = (args.data.dedupeKey as string | null) ?? null;
+        if (key !== null && rows.some((r) => r.dedupeKey === key)) {
+          throw Object.assign(new Error("Unique constraint failed on the fields: (`dedupeKey`)"), {
+            code: "P2002",
+          });
+        }
         const row = {
           id: `o${rows.length + 1}`,
           type: (args.data.type as string) ?? "booking_received",
@@ -404,6 +412,34 @@ describe("dedupe", () => {
     await enqueueEmail(db, input);
     await enqueueEmail(db, input);
     expect(rows).toHaveLength(2);
+  });
+
+  it("force resend succeeds while a FAILED row holds the base key (no P2002)", async () => {
+    // Regression: the old row is never deleted, so its dedupeKey is still
+    // taken — a plain-key force insert P2002-failed the resend request
+    // ("Couldn't queue the resend") instead of sending.
+    const { db, rows } = mockDb([
+      {
+        id: "old",
+        type: "receipt",
+        to: "client@x.com",
+        status: "FAILED",
+        attempts: 5,
+        dedupeKey: "receipt:r1:receipt:client@x.com",
+      },
+    ]);
+    const out = await enqueueEmail(db, {
+      type: "receipt" as const,
+      to: "client@x.com",
+      payload: { receiptId: "r1" },
+      relatedType: "receipt",
+      relatedId: "r1",
+      force: true,
+    });
+    expect(out.id).not.toBe("old");
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.id === "old")!.status).toBe("FAILED");
+    expect(rows.find((r) => r.id === out.id)!.status).toBe("PENDING");
   });
 
   it("a P2002 race on insert returns the winner instead of failing", async () => {
