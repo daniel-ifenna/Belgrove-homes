@@ -22,6 +22,16 @@ function getTransporter() {
     transporterFingerprint = fp;
     // Zoho (production) uses ZOHO_APP_PASSWORD + info@belgrovehomes.com
     // Falls back to generic SMTP_HOST for local dev (MailHog)
+    // Short timeouts are load-bearing on serverless: nodemailer's defaults
+    // wait minutes on a stalled connection, but the function is killed at
+    // maxDuration (30s) — the outbox row would wedge in SENDING with an empty
+    // lastError. Failing fast turns a stall into a normal deferral (PENDING
+    // + lastError + backoff) that the next drain retries.
+    const timeouts = {
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    };
     if (process.env.ZOHO_APP_PASSWORD) {
       transporter = nodemailer.createTransport({
         host: "smtp.zoho.com",
@@ -31,6 +41,7 @@ function getTransporter() {
           user: "info@belgrovehomes.com",
           pass: process.env.ZOHO_APP_PASSWORD,
         },
+        ...timeouts,
       });
     } else {
       transporter = nodemailer.createTransport({
@@ -38,6 +49,7 @@ function getTransporter() {
         port: Number(process.env.SMTP_PORT ?? 587),
         secure: false,
         auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+        ...timeouts,
       });
     }
   }
