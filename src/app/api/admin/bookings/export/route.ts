@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
-import { allStatuses, allTemperatures } from "@/lib/booking-ui";
-import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
+import { allOutcomes, allStatuses, allTemperatures } from "@/lib/booking-ui";
+import type { Prisma, BookingStatus, LeadTemperature, SaleOutcome } from "@/generated/prisma/client";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { drawReportBanner } from "@/lib/documents/brand";
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const where: Prisma.InspectionBookingWhereInput = {};
   const status = params.get("status");
   const leadTemperature = params.get("leadTemperature");
+  const outcome = params.get("outcome");
   const agent = params.get("agent");
   const agentId = params.get("agentId");
   const missingAgent = params.get("missingAgent");
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
   }
   if (leadTemperature && (allTemperatures as readonly string[]).includes(leadTemperature)) {
     where.leadTemperature = leadTemperature as LeadTemperature;
+  }
+  if (outcome && (allOutcomes as readonly string[]).includes(outcome)) {
+    where.outcome = outcome as SaleOutcome;
   }
   if (missingAgent === "1") where.agentId = null;
   else if (agentId) where.agentId = agentId;

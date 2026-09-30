@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
-import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
-import { allStatuses, allTemperatures, formatDate } from "@/lib/booking-ui";
+import type { Prisma, BookingStatus, LeadTemperature, SaleOutcome } from "@/generated/prisma/client";
+import { allOutcomes, allStatuses, allTemperatures, formatDate } from "@/lib/booking-ui";
 import AdminPagination from "@/components/admin/AdminPagination";
 import AdminListCard from "@/components/admin/AdminListCard";
 import StatusBadge from "@/components/admin/StatusBadge";
@@ -18,6 +18,7 @@ const PAGE_SIZE = 25;
 type SearchParams = {
   status?: string;
   leadTemperature?: string;
+  outcome?: string;
   missingAgent?: string;
   agentId?: string;
   q?: string;
@@ -92,6 +93,9 @@ export default async function AdminBookingsPage({
   if (params.leadTemperature && (allTemperatures as readonly string[]).includes(params.leadTemperature)) {
     where.leadTemperature = params.leadTemperature as LeadTemperature;
   }
+  if (params.outcome && (allOutcomes as readonly string[]).includes(params.outcome)) {
+    where.outcome = params.outcome as SaleOutcome;
+  }
   if (params.missingAgent === "1") {
     where.agentId = null;
   }
@@ -154,6 +158,7 @@ export default async function AdminBookingsPage({
     const qs = new URLSearchParams();
     if (params.status) qs.set("status", params.status);
     if (params.leadTemperature) qs.set("leadTemperature", params.leadTemperature);
+    if (params.outcome) qs.set("outcome", params.outcome);
     if (params.missingAgent) qs.set("missingAgent", params.missingAgent);
     if (params.agentId) qs.set("agentId", params.agentId);
     if (params.q) qs.set("q", params.q);
@@ -166,6 +171,7 @@ export default async function AdminBookingsPage({
     const qs = new URLSearchParams();
     if (merged.status) qs.set("status", merged.status);
     if (merged.leadTemperature) qs.set("leadTemperature", merged.leadTemperature);
+    if (merged.outcome) qs.set("outcome", merged.outcome);
     if (merged.missingAgent) qs.set("missingAgent", merged.missingAgent);
     if (merged.agentId) qs.set("agentId", merged.agentId);
     if (merged.q) qs.set("q", merged.q);
@@ -253,11 +259,32 @@ export default async function AdminBookingsPage({
                   );
                 })}
               </div>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] self-center mr-1">Outcome:</span>
+                {[
+                  { label: "All", value: "" },
+                  { label: "Sold", value: "sold" },
+                  { label: "Interested", value: "interested" },
+                  { label: "Not sold", value: "not_sold" },
+                ].map((f) => {
+                  const active = (params.outcome ?? "") === f.value;
+                  return (
+                    <Link
+                      key={f.label}
+                      href={`/admin/bookings${buildQuery({ outcome: f.value || undefined, page: "1" })}`}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : f.value === "sold" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0] hover:bg-[#D1FAE5]" : f.value === "interested" ? "bg-[#C89B3C] text-white border-[#C89B3C] hover:bg-[#B08A35]" : f.value === "not_sold" ? "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB] hover:bg-[#E5E7EB]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}
+                    >
+                      {f.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
 
             <form className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start xl:justify-end" action="/admin/bookings" method="get">
               {params.status && <input type="hidden" name="status" value={params.status} />}
               {params.leadTemperature && <input type="hidden" name="leadTemperature" value={params.leadTemperature} />}
+              {params.outcome && <input type="hidden" name="outcome" value={params.outcome} />}
               <select
                 name="agentId"
                 defaultValue={params.agentId ?? ""}
@@ -277,7 +304,7 @@ export default async function AdminBookingsPage({
               <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)] transition-colors w-full sm:w-auto">
                 Apply
               </button>
-              {(params.status || params.leadTemperature || params.missingAgent || params.agentId || params.q) && (
+              {(params.status || params.leadTemperature || params.outcome || params.missingAgent || params.agentId || params.q) && (
                 <Link href="/admin/bookings" className="text-xs text-[var(--ops-muted)] self-start sm:self-center underline underline-offset-4 hover:text-[var(--ops-text)]">
                   Clear
                 </Link>
@@ -289,6 +316,7 @@ export default async function AdminBookingsPage({
             <form className="flex-1 relative" action="/admin/bookings" method="get">
               {params.status && <input type="hidden" name="status" value={params.status} />}
               {params.leadTemperature && <input type="hidden" name="leadTemperature" value={params.leadTemperature} />}
+              {params.outcome && <input type="hidden" name="outcome" value={params.outcome} />}
               {params.agentId && <input type="hidden" name="agentId" value={params.agentId} />}
               {params.missingAgent && <input type="hidden" name="missingAgent" value={params.missingAgent} />}
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
@@ -307,7 +335,7 @@ export default async function AdminBookingsPage({
         {/* Table — desktop */}
         <div className="hidden lg:block bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm admin-table">
+            <table className="w-full text-sm admin-table admin-table-compact">
               <thead>
                 <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left">
                   <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Booking Reference</th>
@@ -325,8 +353,8 @@ export default async function AdminBookingsPage({
               <tbody className="divide-y divide-[var(--ops-border)]/60">
                 {sorted.map((b) => (
                   <tr key={b.id} className="hover:bg-[var(--ops-bg)]/50 transition-colors group">
-                    <td className="px-4 py-3.5">
-                      <Link href={`/admin/bookings/${b.id}`} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline group-hover:text-[var(--ops-deep)]">
+                    <td className="px-4 py-3.5 align-middle">
+                      <Link href={`/admin/bookings/${b.id}`} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline group-hover:text-[var(--ops-deep)] whitespace-nowrap">
                         {b.ref}
                       </Link>
                       <div className="mono text-[10px] text-[var(--ops-muted)] mt-0.5">{new Date(b.createdAt).toLocaleDateString("en-GB")}</div>
@@ -336,23 +364,32 @@ export default async function AdminBookingsPage({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-middle">
                       <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-words">{b.name}</div>
                       <div className="text-[12px] text-[var(--ops-muted)] break-words">{b.email}</div>
                       {b.phone && <div className="text-[11px] text-[var(--ops-muted)]">{b.phone}</div>}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-[13px] text-[var(--ops-text)] leading-tight break-words">{b.location}</div>
-                      <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">{b.agentName ?? "-"}</div>
+                    <td className="px-4 py-3 align-middle min-w-[240px]">
+                      <div className="text-[13px] font-semibold text-[var(--ops-text)] leading-snug">
+                        {b.estate ? `${b.estate}${b.unitType ? ` · ${b.unitType}` : ""}` : b.location}
+                      </div>
+                      {(b.plotCode || b.sqm) && (
+                        <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">
+                          {[b.plotCode, b.sqm ? `${b.sqm}sqm` : null].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      {b.agentName && (
+                        <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">Via {b.agentName}</div>
+                      )}
                       {(b as any).selectionType === "unit" && (b as any).plotCode ? (
-                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">Unit selected · {(b as any).plotCode}</span>
+                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">Unit selected · {(b as any).plotCode}</span>
                       ) : (b as any).selectionType === "sqm_needed" && (b as any).sqmNeeded ? (
-                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing: {(b as any).sqmNeeded}sqm requested</span>
+                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing: {(b as any).sqmNeeded}sqm requested</span>
                       ) : (b as any).estate ? (
-                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-white text-[#4B5563] border border-[#E5E7EB]">{(b as any).estate}</span>
+                        <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-white text-[#4B5563] border border-[#E5E7EB]">{(b as any).estate}</span>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-middle">
                       {b.rescheduledDate ? (
                         <div>
                           <div className="text-[13px] font-medium text-[var(--ops-text)]">{formatDate(b.rescheduledDate)}</div>
@@ -368,24 +405,24 @@ export default async function AdminBookingsPage({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-middle">
                       <StatusBadge status={b.status === "closed" && b.outcome ? "closed" : b.status} />{b.status === "closed" && b.outcome ? <span className="ml-1"><StatusBadge status={b.outcome} /></span> : null}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-middle">
                       <StatusBadge status={b.leadTemperature} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-middle">
                       <AgentCell agent={(b as any).agent} customerEmail={b.email} customerPhone={b.phone} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-middle">
                       {b.outcome ? (
                         <StatusBadge status={b.outcome} />
                       ) : (
                         <span className="text-[12px] text-[var(--ops-muted)]">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{new Date(b.updatedAt).toLocaleDateString("en-GB")}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 align-middle mono text-[11px] text-[var(--ops-muted)] whitespace-nowrap">{new Date(b.updatedAt).toLocaleDateString("en-GB")}</td>
+                    <td className="px-4 py-3 align-middle text-right">
                       <Link href={`/admin/bookings/${b.id}`} className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ops-primary)] hover:text-[var(--ops-deep)] border border-[var(--ops-border)] rounded-full px-3 py-1.5 bg-white hover:bg-[var(--ops-bg)] transition-colors">
                         View
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 18l6-6-6-6"/></svg>
@@ -419,6 +456,7 @@ export default async function AdminBookingsPage({
               key={b.id}
               href={`/admin/bookings/${b.id}`}
               refText={b.ref}
+              refNoWrap
               name={b.name}
               email={b.email}
               badges={
@@ -440,7 +478,7 @@ export default async function AdminBookingsPage({
                 {
                   label: "Outcome",
                   value: b.outcome ? (
-                    <span className="text-xs px-2 py-1 rounded-full border bg-white">{b.outcome}</span>
+                    <StatusBadge status={b.outcome} />
                   ) : (
                     <span className="text-[var(--ops-muted)]">-</span>
                   ),

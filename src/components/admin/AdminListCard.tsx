@@ -22,6 +22,7 @@ export default function AdminListCard({
   email,
   badges,
   rows,
+  refNoWrap = false,
 }: {
   href: string;
   refText: string;
@@ -29,6 +30,8 @@ export default function AdminListCard({
   email?: string | null;
   badges: ReactNode;
   rows: AdminCardRow[];
+  // References (BEL-2026-XXXXX) must never break mid-string.
+  refNoWrap?: boolean;
 }) {
   return (
     <Link
@@ -38,7 +41,7 @@ export default function AdminListCard({
       <div className="flex items-start justify-between gap-3 min-w-0">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-w-0">
-            <span className="font-mono text-[12px] font-medium text-[var(--ops-primary)] break-words min-w-0">
+            <span className={`font-mono text-[12px] font-medium text-[var(--ops-primary)] min-w-0 ${refNoWrap ? "whitespace-nowrap" : "break-words"}`}>
               {refText}
             </span>
             <span className="flex flex-wrap items-center gap-1.5 min-w-0">{badges}</span>

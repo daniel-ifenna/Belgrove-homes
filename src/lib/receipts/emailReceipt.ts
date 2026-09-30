@@ -44,6 +44,7 @@ export async function sendReceiptEmail(opts: {
   receiptUrl: string;
   pdfBuffer: Buffer;
   idempotencyKey?: string;
+  plotsSummary?: string | null;
 }) {
   // Use system email template styling — same as bookingReceivedTemplate etc.
   // Prevent mail clients (iOS data detectors, Gmail, Outlook) from auto-linking
@@ -52,7 +53,7 @@ export async function sendReceiptEmail(opts: {
   // what carries Gmail/Outlook.
   const body = `
       <p>Hi ${formatDisplayName(opts.clientName)},</p>
-      <p>Your receipt for <strong>${opts.ref}</strong> is attached as PDF. You can also view or re-download it anytime at:</p>
+      <p>Your receipt for <strong>${opts.ref}</strong> is attached as PDF.${opts.plotsSummary ? ` (${opts.plotsSummary})` : ""} You can also view or re-download it anytime at:</p>
       <p style="overflow-wrap:anywhere;"><a href="${opts.receiptUrl}" style="color:#1E3A2E; font-weight:bold; overflow-wrap:anywhere; word-break:normal;">${opts.receiptUrl}</a></p>
       <p>Scan the QR code on the receipt to verify it instantly. It points to the same link above.</p>
       <p>Thank you. It is a pleasure doing business with you.</p>

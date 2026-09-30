@@ -17,6 +17,10 @@ export async function renderReceiptPdfBuffer(receiptId: string): Promise<Buffer>
       transaction: {
         select: {
           totalPayable: true,
+          unitPrice: true,
+          plotQuantity: true,
+          interestAmount: true,
+          paymentPlan: { select: { name: true } },
           payments: {
             where: { status: "CONFIRMED" },
             select: { id: true, amount: true, paymentDate: true },
@@ -65,6 +69,10 @@ export async function renderReceiptPdfBuffer(receiptId: string): Promise<Buffer>
     payments: history,
     receiptUrl: receipt.receiptUrl,
     qrDataUrl: qr,
+    unitPrice: receipt.unitPrice ?? receipt.transaction?.unitPrice ?? undefined,
+    plotQuantity: receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? undefined,
+    paymentPlanName: receipt.paymentPlanName ?? receipt.transaction?.paymentPlan?.name ?? undefined,
+    interestAmount: receipt.transaction?.interestAmount ?? undefined,
     totalPayable,
     previouslyPaid,
     totalPaidAfter: previouslyPaid + receipt.finalAmount,

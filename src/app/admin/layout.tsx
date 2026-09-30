@@ -30,7 +30,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen flex bg-[var(--ops-bg)] overflow-x-hidden">
+    <div className="min-h-screen flex bg-[var(--ops-bg)]">
       <AdminSidebar open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="flex-1 min-w-0 flex flex-col">
         <AdminTopBar onOpenNav={() => setNavOpen(true)} />

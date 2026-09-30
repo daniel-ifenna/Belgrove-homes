@@ -42,6 +42,8 @@ export const allStatuses = [
 
 export const allTemperatures = ["cold", "warm", "hot"] as const;
 
+export const allOutcomes = ["sold", "interested", "not_sold"] as const;
+
 // Date display goes through Lagos time (src/lib/time.ts) — never server-local.
 import { formatLagos } from "@/lib/time";
 

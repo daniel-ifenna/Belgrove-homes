@@ -163,27 +163,27 @@ function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () 
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + "/");
-  const [badges, setBadges] = useState<{ total: number; pendingPayments: number; bookingsNewUnassigned: number } | null>(null);
+  const [badges, setBadges] = useState<{ total: number; pendingPayments: number; bookingsNewUnassigned: number; bookingsNeedsAction?: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/admin/inbox/counts", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!cancelled && j && typeof j.total === "number") setBadges(j);
-      })
-      .catch(() => {});
-    const interval = setInterval(() => {
+    const load = () => {
       fetch("/api/admin/inbox/counts", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((j) => {
           if (!cancelled && j && typeof j.total === "number") setBadges(j);
         })
         .catch(() => {});
-    }, 60000);
+    };
+    load();
+    // Live badges: poll every 30s and refresh whenever the tab regains
+    // focus (e.g. back from a mutation on another page). Hidden at 0.
+    const interval = setInterval(load, 30000);
+    window.addEventListener("focus", load);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      window.removeEventListener("focus", load);
     };
   }, [pathname]);
 
@@ -191,7 +191,7 @@ function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () 
     if (!badges) return 0;
     if (href === "/admin/inbox") return badges.total;
     if (href === "/admin/payments") return badges.pendingPayments;
-    if (href === "/admin/bookings") return badges.bookingsNewUnassigned;
+    if (href === "/admin/bookings") return badges.bookingsNeedsAction ?? badges.bookingsNewUnassigned;
     return 0;
   };
 
@@ -230,7 +230,7 @@ function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () 
         />
       )}
       <aside
-        className={`w-[252px] shrink-0 bg-[var(--ops-deep)] text-white flex flex-col h-screen border-r border-white/[0.06] fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:sticky lg:top-0 ${open ? "translate-x-0" : ""}`}
+        className={`w-[252px] shrink-0 bg-[var(--ops-deep)] text-white flex flex-col h-dvh border-r border-white/[0.06] fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:z-auto lg:translate-x-0 lg:sticky lg:top-0 ${open ? "translate-x-0" : ""}`}
       >
       <div className="px-6 pt-7 pb-6">
         <Link href="/admin" className="block">

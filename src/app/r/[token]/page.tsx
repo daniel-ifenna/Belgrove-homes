@@ -25,6 +25,8 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
       transaction: {
         select: {
           totalPayable: true,
+          unitPrice: true,
+          plotQuantity: true,
           payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } },
         },
       },
@@ -57,6 +59,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
       : 0;
   const totalPrice = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
   const paidToDate = previouslyPaid + receipt.finalAmount;
+  const plotQty = receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? null;
 
   return (
     <div className="min-h-screen bg-[#F7F2E7] py-8 px-6">
@@ -115,6 +118,11 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
 
           <div className="mono text-[11px] font-bold text-[#16281F] mt-6">{receipt.property}</div>
           {installmentLabel && <div className="mono text-[11px] text-[#6B6656] mt-1">{installmentLabel}</div>}
+          {plotQty != null && (
+            <div className="mono text-[11px] text-[#6B6656] mt-1">
+              Plots: {receipt.sqm ? `${plotQty} × ${receipt.sqm}sqm` : `${plotQty} plot${plotQty === 1 ? "" : "s"}`}
+            </div>
+          )}
 
           <div className="mt-4 border border-[#E4DCC7] rounded-lg overflow-hidden">
             <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[11px] font-medium">

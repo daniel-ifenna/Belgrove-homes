@@ -103,6 +103,8 @@ html, body { overflow-x: clip; }
    signal the row is interactive. */
 .admin-table tbody td { padding-top: 14px; padding-bottom: 14px; }
 .admin-table tbody tr { transition: background-color 200ms ease-out; }
+/* Compact variant (bookings list): tighter rhythm, same hover language. */
+.admin-table-compact tbody td { padding-top: 10px; padding-bottom: 10px; }
 .admin-table tbody td:first-child .row-lead { transition: font-weight 150ms ease-out; }
 .admin-table tbody tr:hover td:first-child .row-lead { font-weight: 500; }
 

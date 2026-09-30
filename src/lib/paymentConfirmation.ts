@@ -431,6 +431,32 @@ export async function reverseConfirmedPaymentDbUnit(
     },
   });
 
+  // Undoing the sale: with no confirmed money left on the transaction, a
+  // linked booking the sale auto-marked Sold returns to Interested — the
+  // only state the auto-flip ever moves out of. (No transaction-cancel flow
+  // exists today; voiding the last confirmed payment is the closest thing
+  // to "the sale is off".)
+  if (newTotalPaid === 0 && transaction.bookingId) {
+    const linked = await tx.inspectionBooking.findUnique({ where: { id: transaction.bookingId } });
+    if (linked && linked.outcome === "sold") {
+      await tx.inspectionBooking.update({
+        where: { id: linked.id },
+        data: { outcome: "interested", updatedAt: now },
+      });
+      await tx.bookingActivity.create({
+        data: {
+          bookingId: linked.id,
+          actorId: input.actorId ?? null,
+          actorName: input.actorName ?? "System",
+          action: "record_outcome",
+          fromStatus: linked.status,
+          toStatus: linked.status,
+          note: "Auto: reverted to Interested — no confirmed payments remain",
+        },
+      });
+    }
+  }
+
   return { paymentId: payment.id, newTotalPaid, newOutstanding };
 }
 

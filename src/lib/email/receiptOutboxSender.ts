@@ -55,6 +55,7 @@ export async function sendReceiptForOutbox(receiptId: string, rowId?: string): P
 
   let result: EmailResult;
   try {
+    const plotQty = receipt.plotQuantity ?? null;
     result = await sendReceiptEmail({
       to: receipt.recipientEmail,
       clientName: receipt.customerName,
@@ -62,6 +63,12 @@ export async function sendReceiptForOutbox(receiptId: string, rowId?: string): P
       receiptUrl: receipt.receiptUrl,
       pdfBuffer: pdfBuffer!,
       idempotencyKey: rowId,
+      plotsSummary:
+        plotQty != null
+          ? receipt.sqm
+            ? `Plots: ${plotQty} × ${receipt.sqm}sqm`
+            : `Plots: ${plotQty}`
+          : null,
     });
   } catch (e) {
     result = { sent: false, error: e instanceof Error ? e.message : "Email failed" };

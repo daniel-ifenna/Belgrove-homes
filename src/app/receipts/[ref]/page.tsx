@@ -41,6 +41,12 @@ export default async function AdminReceiptRefPage({ params }: { params: Promise<
           <div className="public text-[14px] font-semibold text-[#16281F] mt-2">{formatDisplayName(receipt.customerName)}</div>
           <div className="mono text-[12px] text-[#6B6656]">{receipt.customerEmail}</div>
           <div className="mono text-[12px] text-[#6B6656] mt-1">{receipt.property}</div>
+          {receipt.plotQuantity != null && (
+            <div className="mono text-[12px] text-[#6B6656] mt-1">
+              Plots: {receipt.sqm ? `${receipt.plotQuantity} × ${receipt.sqm}sqm` : `${receipt.plotQuantity} plot${receipt.plotQuantity === 1 ? "" : "s"}`}
+              {receipt.unitPrice != null ? ` · ${formatNaira(receipt.unitPrice)} each` : ""}
+            </div>
+          )}
           <div className="fraunces text-[20px] font-bold text-[#16281F] mt-3">{formatNaira(receipt.finalAmount)}</div>
           <div className="mono text-[11px] text-[#6B6656] mt-1">Status: {receipt.status} · Payment: {receipt.payment?.status ?? "-"}</div>
         </div>

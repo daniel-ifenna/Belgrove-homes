@@ -26,6 +26,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       transaction: {
         select: {
           id: true, ref: true, bookingId: true, manualReason: true, totalPayable: true,
+          unitPrice: true, plotQuantity: true,
           booking: { select: { id: true, ref: true } },
           payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } },
         },
@@ -58,6 +59,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       ? "Initial payment"
       : `Month ${receipt.payment.installment.installmentNumber} payment`
     : null;
+  // Plot quantity: receipt snapshot first, live transaction as fallback.
+  const plotQty = receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? null;
+  const unitPrice = receipt.unitPrice ?? receipt.transaction?.unitPrice ?? null;
   const outbox = await prisma.emailOutbox.findMany({
     where: { type: "receipt", relatedId: receipt.id },
     orderBy: { createdAt: "desc" },
@@ -140,6 +144,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Unit</span><span className="font-medium">{receipt.unitType ?? "-"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SKU / Plot Code</span><span className="font-mono text-[12px]">{receipt.plotCode ?? "-"}</span></div>
                 {receipt.sqm && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">SQM</span><span className="font-medium">{receipt.sqm}sqm</span></div>}
+                {plotQty != null && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Plots</span><span className="font-medium">{receipt.sqm ? `${plotQty} × ${receipt.sqm}sqm` : `${plotQty} plot${plotQty === 1 ? "" : "s"}`}</span></div>}
+                {unitPrice != null && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Unit price</span><span className="font-mono price">{formatNaira(unitPrice)}</span></div>}
+                {plotQty != null && unitPrice != null && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Amount due (unit × qty)</span><span className="font-mono price font-medium">{formatNaira(unitPrice * plotQty)}</span></div>}
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Source</span><StatusBadge status={receipt.source} /></div>
               </div>
             </div>

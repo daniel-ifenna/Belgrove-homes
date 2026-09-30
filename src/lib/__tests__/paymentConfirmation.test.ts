@@ -67,6 +67,8 @@ type MockState = {
   receipts: Record<string, unknown>[];
   outbox: Record<string, unknown>[];
   audits: Record<string, unknown>[];
+  bookings: { id: string; status: string; outcome: string | null }[];
+  activities: Record<string, unknown>[];
 };
 
 function makeMockTx(state: MockState): TxClient {
@@ -176,6 +178,27 @@ function makeMockTx(state: MockState): TxClient {
         return row;
       },
     },
+    inspectionBooking: {
+      findUnique: async (args: unknown) => {
+        const { where } = args as { where: { id: string } };
+        return state.bookings.find((b) => b.id === where.id) ?? null;
+      },
+      update: async (args: unknown) => {
+        const { where, data } = args as { where: { id: string }; data: Record<string, unknown> };
+        const b = state.bookings.find((x) => x.id === where.id);
+        if (!b) throw new Error("not found");
+        Object.assign(b, data);
+        return b;
+      },
+    },
+    bookingActivity: {
+      create: async (args: unknown) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const row = { id: `act-${state.activities.length + 1}`, ...data };
+        state.activities.push(row);
+        return row;
+      },
+    },
   } as unknown as TxClient;
 }
 
@@ -212,7 +235,7 @@ function seed2900(): MockState {
     paymentPlan: { code: "OUTRIGHT", name: "Outright" },
     installments: [installment],
   };
-  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], outbox: [], audits: [] };
+  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], outbox: [], audits: [], bookings: [], activities: [] };
 }
 
 function pendingPayment(id: string): MockPayment {
@@ -381,6 +404,45 @@ describe("reverseConfirmedPaymentDbUnit", () => {
     await expect(
       reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1" })
     ).rejects.toBeInstanceOf(PaymentAlreadyHandledError);
+  });
+
+  it("voiding the last confirmed payment reverts an auto-sold booking to interested", async () => {
+    const state = seed2900();
+    state.payments.push({ ...pendingPayment("pay-1"), status: "CONFIRMED" });
+    state.installments[0].paidAmount = 2_900_000;
+    state.installments[0].status = "PAID";
+    state.transactions[0].totalPaid = 2_900_000;
+    state.transactions[0].outstandingBalance = 0;
+    state.transactions[0].status = "PAID_IN_FULL";
+    state.transactions[0].bookingId = "book-1";
+    state.bookings.push({ id: "book-1", status: "active", outcome: "sold" });
+    const tx = makeMockTx(state);
+
+    const result = await reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1" });
+
+    expect(result.newTotalPaid).toBe(0);
+    expect(state.bookings[0].outcome).toBe("interested");
+    expect(state.activities).toHaveLength(1);
+    expect((state.activities[0] as { action: string }).action).toBe("record_outcome");
+  });
+
+  it("voiding one of several confirmed payments leaves a sold booking alone", async () => {
+    const state = seed2900();
+    state.payments.push({ ...pendingPayment("pay-1"), status: "CONFIRMED" });
+    state.payments.push({ ...pendingPayment("pay-2"), status: "CONFIRMED", amount: 1_000_000 });
+    state.installments[0].paidAmount = 2_900_000;
+    state.transactions[0].totalPaid = 2_900_000;
+    state.transactions[0].bookingId = "book-1";
+    state.bookings.push({ id: "book-1", status: "active", outcome: "sold" });
+    const tx = makeMockTx(state);
+
+    // Void a smaller payment so confirmed money remains.
+    state.payments[1].amount = 1_000_000;
+    const result = await reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-2", transactionId: "txn-1" });
+
+    expect(result.newTotalPaid).toBe(2_900_000);
+    expect(state.bookings[0].outcome).toBe("sold");
+    expect(state.activities).toHaveLength(0);
   });
 });
 

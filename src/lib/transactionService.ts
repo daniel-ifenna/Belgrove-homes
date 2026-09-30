@@ -105,6 +105,27 @@ export async function createTransactionFromBooking(
       });
     }
 
+    // Starting the transaction IS the sale: an Interested (or outcome-less)
+    // booking becomes Sold in the same atomic unit. Explicit human judgments
+    // (sold already recorded, or not_sold) are never overwritten here.
+    if (booking.outcome === "interested" || booking.outcome === null) {
+      await tx.inspectionBooking.update({
+        where: { id: booking.id },
+        data: { outcome: "sold", updatedAt: now },
+      });
+      await tx.bookingActivity.create({
+        data: {
+          bookingId: booking.id,
+          actorId: createdById ?? null,
+          actorName: actorName ?? "System",
+          action: "record_outcome",
+          fromStatus: booking.status,
+          toStatus: booking.status,
+          note: "Auto: marked Sold on transaction creation",
+        },
+      });
+    }
+
     return transaction;
   });
 }
