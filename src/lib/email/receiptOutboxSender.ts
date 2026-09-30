@@ -12,7 +12,7 @@ import type { EmailResult } from "./sendEmail";
 // Loads the receipt, reuses the stored PDF (regenerating from the snapshot
 // when missing), sends, then records receipt emailStatus + a
 // ReceiptSendAttempt audit row (decision a: attempts stay the audit history).
-export async function sendReceiptForOutbox(receiptId: string): Promise<EmailResult> {
+export async function sendReceiptForOutbox(receiptId: string, rowId?: string): Promise<EmailResult> {
   const receipt = await prisma.receipt.findUnique({
     where: { id: receiptId },
     include: {
@@ -101,6 +101,7 @@ export async function sendReceiptForOutbox(receiptId: string): Promise<EmailResu
       ref: receipt.ref,
       receiptUrl: receipt.receiptUrl,
       pdfBuffer: pdfBuffer!,
+      idempotencyKey: rowId,
     });
   } catch (e) {
     result = { sent: false, error: e instanceof Error ? e.message : "Email failed" };

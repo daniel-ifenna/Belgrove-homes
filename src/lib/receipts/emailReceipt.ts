@@ -43,6 +43,7 @@ export async function sendReceiptEmail(opts: {
   ref: string;
   receiptUrl: string;
   pdfBuffer: Buffer;
+  idempotencyKey?: string;
 }) {
   // Use system email template styling — same as bookingReceivedTemplate etc.
   // Prevent mail clients (iOS data detectors, Gmail, Outlook) from auto-linking
@@ -72,6 +73,7 @@ export async function sendReceiptEmail(opts: {
     to: opts.to,
     subject: `Your Belgrove receipt ${opts.ref}`,
     html,
+    idempotencyKey: opts.idempotencyKey,
     attachments: [
       ...(logo ? [logo] : []),
       {

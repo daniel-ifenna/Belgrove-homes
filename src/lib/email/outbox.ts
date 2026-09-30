@@ -20,7 +20,8 @@ export const INLINE_RETRY_WAITS_MS = [2000, 5000];
 // A row claimed as SENDING but untouched for this long belongs to a worker
 // that died mid-send (e.g. serverless freeze after the response). The reaper
 // below resets it to PENDING so the next run retries instead of wedging.
-export const STALE_SENDING_MINUTES = 10;
+// Short now that every send path has a hard timeout well under maxDuration.
+export const STALE_SENDING_MINUTES = 3;
 
 export type OutboxType =
   | "booking_received"
@@ -62,9 +63,13 @@ export type OutboxWriter = {
 
 // Pure: deterministic dedupe key for an enqueue. Recipients are lowercased
 // and sorted so ["a","B"] and ["B","a"] key identically.
-// Pure: minutes to wait before attempt N (1-based) → 2, 4, 8, 16, 32.
+// Pure: minutes to wait before attempt N (1-based) → 0.5, 2, 8, 32, 128.
+// The first retry comes fast (30s) so a transient provider stall recovers in
+// about a minute; later waits grow while the MAX_ATTEMPTS guard is unchanged.
+const BACKOFF_MINUTES = [0.5, 2, 8, 32, 128];
 export function computeBackoffMinutes(attempts: number): number {
-  return 2 ** Math.max(1, attempts);
+  const idx = Math.min(Math.max(1, attempts), BACKOFF_MINUTES.length) - 1;
+  return BACKOFF_MINUTES[idx];
 }
 
 export function computeDedupeKey(input: {
@@ -113,7 +118,12 @@ export async function enqueueEmail(db: OutboxWriter, input: EnqueueInput): Promi
   }
 }
 
-export type OutboxSender = (type: OutboxType, to: string | string[], payload: Record<string, unknown>) => Promise<EmailResult>;
+export type OutboxSender = (
+  type: OutboxType,
+  to: string | string[],
+  payload: Record<string, unknown>,
+  rowId: string
+) => Promise<EmailResult>;
 
 type OutboxRow = {
   id: string;
@@ -135,7 +145,12 @@ export type ProcessDb = {
 
 const realDb = prisma as unknown as ProcessDb & OutboxWriter;
 
-async function defaultSender(type: OutboxType, to: string | string[], payload: Record<string, unknown>): Promise<EmailResult> {
+async function defaultSender(
+  type: OutboxType,
+  to: string | string[],
+  payload: Record<string, unknown>,
+  rowId: string
+): Promise<EmailResult> {
   const {
     sendBookingReceived,
     sendAdminNewBookingAlert,
@@ -150,34 +165,37 @@ async function defaultSender(type: OutboxType, to: string | string[], payload: R
   } = await import("./emailService");
   const p = payload as Record<string, unknown>;
   const asParams = <T>(v: unknown): T => v as T;
+  // rowId rides along as each provider call's idempotency key, so a retried
+  // row can never double-send.
+  const key = { idempotencyKey: rowId };
   switch (type) {
     case "booking_received":
-      return sendBookingReceived(to as string, asParams(p.booking));
+      return sendBookingReceived(to as string, asParams(p.booking), key);
     case "admin_booking_alert":
-      return sendAdminNewBookingAlert(to as string[], asParams(p.booking));
+      return sendAdminNewBookingAlert(to as string[], asParams(p.booking), key);
     case "booking_approved":
-      return sendBookingApproved(to as string, asParams(p.booking));
+      return sendBookingApproved(to as string, asParams(p.booking), key);
     case "booking_rescheduled":
-      return sendBookingRescheduled(to as string, asParams(p.booking));
+      return sendBookingRescheduled(to as string, asParams(p.booking), key);
     case "agent_rescheduled_notice":
-      return sendAgentRescheduledNotice(to as string, asParams(p.params));
+      return sendAgentRescheduledNotice(to as string, asParams(p.params), key);
     case "booking_status":
-      return sendBookingStatusEmail(to as string, p.booking as { name: string; ref: string }, p.status as "on_hold" | "under_review");
+      return sendBookingStatusEmail(to as string, p.booking as { name: string; ref: string }, p.status as "on_hold" | "under_review", key);
     case "interested_outcome":
-      return sendInterestedOutcome(to as string, asParams(p.params));
+      return sendInterestedOutcome(to as string, asParams(p.params), key);
     case "not_sold_followup": {
       const { sendEmail } = await import("./sendEmail");
-      return sendEmail({ to, subject: asParams<string>(p.subject), html: asParams<string>(p.html) });
+      return sendEmail({ to, subject: asParams<string>(p.subject), html: asParams<string>(p.html), idempotencyKey: rowId });
     }
     case "agent_assignment":
-      return sendAgentAssignment(to as string, asParams(p.params));
+      return sendAgentAssignment(to as string, asParams(p.params), key);
     case "agent_followup":
-      return sendAgentFollowUp(to as string, asParams(p.params));
+      return sendAgentFollowUp(to as string, asParams(p.params), key);
     case "transaction_confirmation":
-      return sendTransactionConfirmation(to as string, asParams(p.params));
+      return sendTransactionConfirmation(to as string, asParams(p.params), key);
     case "receipt": {
       const { sendReceiptForOutbox } = await import("./receiptOutboxSender");
-      return sendReceiptForOutbox(p.receiptId as string);
+      return sendReceiptForOutbox(p.receiptId as string, rowId);
     }
     default:
       return { sent: false, error: `Unknown outbox type: ${type}` };
@@ -240,11 +258,18 @@ export async function processOutbox(
     let outcome: EmailResult = { sent: false, error: "Outbox sender did not run" };
     for (let rapid = 0; ; rapid++) {
       try {
-        outcome = await sender(row.type as OutboxType, row.to as string | string[], (row.payload ?? {}) as Record<string, unknown>);
+        outcome = await sender(
+          row.type as OutboxType,
+          row.to as string | string[],
+          (row.payload ?? {}) as Record<string, unknown>,
+          row.id
+        );
       } catch (e) {
         outcome = { sent: false, error: e instanceof Error ? e.message : "Outbox sender threw" };
       }
-      if (outcome.sent || rapid >= rapidRetries) break;
+      // Permanent verdicts (e.g. provider 4xx validation) never change on
+      // retry — break immediately instead of burning in-process attempts.
+      if (outcome.sent || outcome.permanent || rapid >= rapidRetries) break;
       await sleep(INLINE_RETRY_WAITS_MS[rapid]);
     }
     const attempts = row.attempts + 1;
@@ -254,7 +279,7 @@ export async function processOutbox(
         where: { id: row.id },
         data: { status: "SENT", attempts, sentAt: now, lastError: null },
       });
-    } else if (attempts >= MAX_ATTEMPTS) {
+    } else if (outcome.permanent || attempts >= MAX_ATTEMPTS) {
       result.failed++;
       await db.emailOutbox.update({
         where: { id: row.id },

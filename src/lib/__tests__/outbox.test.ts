@@ -114,8 +114,10 @@ function mockDb(initial: Partial<Row>[] = []) {
 }
 
 describe("outbox backoff", () => {
-  it("waits 2/4/8/16/32 minutes between attempts", () => {
-    expect([1, 2, 3, 4, 5].map(computeBackoffMinutes)).toEqual([2, 4, 8, 16, 32]);
+  it("waits 0.5/2/8/32/128 minutes between attempts (fast first retry)", () => {
+    expect([1, 2, 3, 4, 5].map(computeBackoffMinutes)).toEqual([0.5, 2, 8, 32, 128]);
+    expect(computeBackoffMinutes(0)).toBe(0.5);
+    expect(computeBackoffMinutes(99)).toBe(128);
   });
 });
 
@@ -142,8 +144,8 @@ describe("processOutbox", () => {
       if (attempt < MAX_ATTEMPTS) {
         expect(res.deferred).toBe(1);
         expect(rows[0].status).toBe("PENDING");
-        // Not due before the backoff elapses.
-        const early = await processOutbox({ db, now: new Date(now.getTime() + 60_000), sender, sleep: noSleep });
+        // Not due before the backoff elapses (first backoff is 30s).
+        const early = await processOutbox({ db, now: new Date(now.getTime() + 10_000), sender, sleep: noSleep });
         expect(early).toEqual({ sent: 0, failed: 0, deferred: 0 });
         now = new Date(rows[0].nextAttemptAt);
       } else {
@@ -174,7 +176,7 @@ describe("processOutbox", () => {
   });
 
   it("leaves a freshly claimed SENDING row alone (another worker may own it)", async () => {
-    const claimedAt = new Date("2026-09-28T11:55:00Z");
+    const claimedAt = new Date("2026-09-28T11:58:00Z");
     const { db, rows } = mockDb([{ status: "SENDING", attempts: 0, updatedAt: claimedAt }]);
     let sends = 0;
     const res = await processOutbox({
@@ -191,6 +193,41 @@ describe("processOutbox", () => {
     expect(res).toEqual({ sent: 0, failed: 0, deferred: 0 });
     expect(rows[0].status).toBe("SENDING");
     expect(rows[0].attempts).toBe(0);
+  });
+
+  it("passes the row id as the sender's 4th arg (provider idempotency key)", async () => {
+    const { db } = mockDb([{ id: "row-9" }]);
+    const seen: unknown[][] = [];
+    await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      sender: async (...args: unknown[]) => {
+        seen.push(args);
+        return { sent: true, error: null };
+      },
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0][3]).toBe("row-9");
+  });
+
+  it("a permanent failure fails the row immediately instead of deferring", async () => {
+    const { db, rows } = mockDb([{}]);
+    let calls = 0;
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      sleep: noSleep,
+      sender: async () => {
+        calls++;
+        return { sent: false as const, error: "Resend error 422: invalid from", permanent: true };
+      },
+    });
+    // No in-process retries for a verdict that will never change.
+    expect(calls).toBe(1);
+    expect(res).toEqual({ sent: 0, failed: 1, deferred: 0 });
+    expect(rows[0].status).toBe("FAILED");
+    expect(rows[0].attempts).toBe(1);
+    expect(rows[0].lastError).toContain("422");
   });
 
   it("a throwing sender is treated as a failed attempt, not a crash", async () => {

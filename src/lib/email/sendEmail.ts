@@ -1,6 +1,13 @@
 import nodemailer from "nodemailer";
+import { getEmailProvider, sendViaResend } from "./resendProvider";
 
-export type EmailResult = { sent: boolean; error: string | null };
+export type EmailResult = {
+  sent: boolean;
+  error: string | null;
+  // Permanent failures (e.g. Resend 4xx validation) must fail the outbox row
+  // immediately instead of riding the retry/backoff path forever.
+  permanent?: boolean;
+};
 
 let transporter: nodemailer.Transporter | null = null;
 let transporterFingerprint: string | null = null;
@@ -61,11 +68,15 @@ export async function sendEmail({
   subject,
   html,
   attachments,
+  idempotencyKey,
 }: {
   to: string | string[];
   subject: string;
   html: string;
   attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[];
+  // Outbox row id, forwarded as the provider's idempotency key so a retried
+  // row can never double-send. Optional so direct callers keep working.
+  idempotencyKey?: string;
 }): Promise<EmailResult> {
   const from = process.env.SMTP_FROM;
   if (!from) {
@@ -92,6 +103,17 @@ export async function sendEmail({
     }
   } catch (err) {
     return { sent: false, error: err instanceof Error ? err.message : "Email policy error" };
+  }
+  // Provider switch (default SMTP — nothing changes until EMAIL_PROVIDER is
+  // flipped). Dev-policy checks above stay common to both paths.
+  if (getEmailProvider() === "resend") {
+    return sendViaResend({
+      to: resolvedTo,
+      subject: resolvedSubject,
+      html,
+      attachments,
+      idempotencyKey,
+    });
   }
   try {
     await getTransporter().sendMail({

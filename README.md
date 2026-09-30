@@ -50,7 +50,7 @@ There is no scheduler — every layer below runs inside request traffic:
 3. **In-process retries** — a failed send is retried twice more in-process
    (waits of 2s then 5s) before the row is deferred with `attempts`
    incremented, `lastError` set, and `nextAttemptAt` on exponential backoff
-   (2/4/8/16/32 min, 5 attempts, then FAILED). Fits inside
+   (0.5/2/8/32/128 min, 5 attempts, then FAILED). Fits inside
    `maxDuration = 30` on every sending route.
 4. **Drain on admin inbox load** — the inbox page and its counts route call
    `drainOutboxOnAdminInboxLoad()`, one background pass over due rows at
@@ -73,8 +73,15 @@ caller secret differs from the app's `CRON_SECRET`; `500` means the app has
 no `CRON_SECRET` configured at all.
 
 Ops signal: mail unsent for >15 min appears in the admin inbox as
-"Stuck emails"; claims orphaned by a dead worker (>10 min in `SENDING`)
+"Stuck emails"; claims orphaned by a dead worker (>3 min in `SENDING`)
 are automatically reset to `PENDING` on the next run.
+
+Email provider: `EMAIL_PROVIDER` is `"smtp"` by default (Zoho). When direct
+SMTP stalls from the host (Vercel → Zoho), flip it to `"resend"` and set
+`RESEND_API_KEY` (Vercel project env too) — but verify the sending domain in
+Resend first, or every row fails fast with a permanent 4xx. Each send carries
+the outbox row id as Resend's `Idempotency-Key`, so retried rows never
+double-send.
 
 Money figures come from `src/lib/finance/` (CONFIRMED payments only).
 Data-changing scripts live in `/scripts` and default to `--dry-run`.
