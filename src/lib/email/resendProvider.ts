@@ -88,7 +88,14 @@ export async function sendViaResend(opts: {
       signal: controller.signal,
     });
     if (res.ok) {
-      return { sent: true, error: null };
+      let providerMessageId: string | null = null;
+      try {
+        const body = (await res.json()) as { id?: unknown };
+        if (typeof body?.id === "string") providerMessageId = body.id;
+      } catch {
+        // Non-JSON 2xx: still sent, just without a traceable id.
+      }
+      return { sent: true, error: null, provider: "resend", providerMessageId };
     }
     const detail = await res.text().catch(() => "");
     const error = `Resend error ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`;

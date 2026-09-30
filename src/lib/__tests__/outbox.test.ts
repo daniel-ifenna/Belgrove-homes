@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   computeBackoffMinutes,
   computeDedupeKey,
@@ -11,6 +11,16 @@ import {
   type ProcessDb,
   type OutboxWriter,
 } from "../email/outbox";
+
+// processOutbox refuses outside production unless explicitly allowed — the
+// suite opts in so delivery behavior stays testable; the refusal itself is
+// covered by dedicated tests below.
+beforeEach(() => {
+  vi.stubEnv("ALLOW_DEV_SEND", "true");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 // In-process retries wait 2s/5s for real — tests inject an instant sleep.
 const noSleep = async () => undefined;
@@ -468,6 +478,48 @@ describe("scheduleInlineOutboxSend", () => {
       },
     });
     expect(called).toBe(false);
+  });
+});
+
+describe("environment safety", () => {
+  it("refuses outside production without ALLOW_DEV_SEND: no rows touched, one warning", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("ALLOW_DEV_SEND", "");
+    const { db, rows } = mockDb([{}]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const res = await processOutbox({ db, now: new Date("2026-09-28T12:00:00Z"), sender: async () => ({ sent: true, error: null }) });
+      expect(res).toEqual({ sent: 0, failed: 0, deferred: 0 });
+      expect(rows[0].status).toBe("PENDING");
+      expect(rows[0].attempts).toBe(0);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain("ALLOW_DEV_SEND");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("sends when ALLOW_DEV_SEND=true is set explicitly", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("ALLOW_DEV_SEND", "true");
+    const { db, rows } = mockDb([{}]);
+    const res = await processOutbox({ db, now: new Date("2026-09-28T12:00:00Z"), sender: async () => ({ sent: true, error: null }) });
+    expect(res.sent).toBe(1);
+    expect(rows[0].status).toBe("SENT");
+  });
+});
+
+describe("proof of sending", () => {
+  it("persists provider and providerMessageId on SENT", async () => {
+    const { db, rows } = mockDb([{}]);
+    await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      sender: async () => ({ sent: true, error: null, provider: "resend" as const, providerMessageId: "email-abc" }),
+    });
+    expect(rows[0].status).toBe("SENT");
+    expect((rows[0] as Record<string, unknown>).provider).toBe("resend");
+    expect((rows[0] as Record<string, unknown>).providerMessageId).toBe("email-abc");
   });
 });
 

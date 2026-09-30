@@ -62,7 +62,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
     where: { type: "receipt", relatedId: receipt.id },
     orderBy: { createdAt: "desc" },
     take: 5,
-    select: { id: true, status: true, attempts: true, lastError: true, createdAt: true },
+    select: { id: true, status: true, attempts: true, lastError: true, createdAt: true, provider: true, providerMessageId: true },
   });
 
   return (
@@ -161,7 +161,12 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                     {outbox.map((o) => (
                       <div key={o.id} className="mono text-[11px] text-[var(--ops-muted)] mt-1 flex justify-between gap-2">
                         <StatusBadge status={o.status} className="px-2 py-0.5 text-[10px]" />
-                        <span>{o.attempts} attempt{o.attempts === 1 ? "" : "s"}{o.lastError ? ` · ${o.lastError.slice(0, 60)}` : ""}</span>
+                        <span className="text-right break-words">
+                          {o.attempts} attempt{o.attempts === 1 ? "" : "s"}
+                          {o.provider ? ` · via ${o.provider}` : ""}
+                          {o.providerMessageId ? ` · id ${o.providerMessageId}` : ""}
+                          {o.lastError ? ` · ${o.lastError.slice(0, 60)}` : ""}
+                        </span>
                       </div>
                     ))}
                   </div>

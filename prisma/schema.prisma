@@ -541,6 +541,11 @@ model EmailOutbox {
   // set it and the unique index turns a duplicate enqueue into a P2002 that
   // enqueueEmail converts into "return the existing row".
   dedupeKey     String?           @unique
+  // Proof of sending, written on SENT only: which provider delivered the row
+  // and that provider's message id (Resend email id / SMTP Message-ID) for
+  // tracing a delivery with the provider. Both stay NULL unless sent.
+  provider          String?
+  providerMessageId String?
   status        EmailOutboxStatus @default(PENDING)
   attempts      Int               @default(0)
   nextAttemptAt DateTime          @default(now())

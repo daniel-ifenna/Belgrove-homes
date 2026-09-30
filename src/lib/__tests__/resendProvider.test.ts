@@ -58,7 +58,7 @@ describe("sendViaResend", () => {
       attachments: [{ filename: "r.pdf", content: pdf, contentType: "application/pdf" }],
       idempotencyKey: "out-row-1",
     });
-    expect(res).toEqual({ sent: true, error: null });
+    expect(res).toEqual({ sent: true, error: null, provider: "resend", providerMessageId: "email-id-1" });
     expect(seen).toHaveLength(1);
     expect(seen[0].url).toBe("https://api.resend.com/emails");
     const headers = new Headers(seen[0].init.headers);
@@ -139,6 +139,30 @@ describe("sendViaResend", () => {
 
   it("has a 10s default timeout", () => {
     expect(RESEND_TIMEOUT_MS).toBe(10_000);
+  });
+});
+
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: () => ({
+      sendMail: async () => ({ messageId: "<smtp-test-id>" }),
+    }),
+  },
+}));
+
+describe("SMTP proof of sending", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns provider smtp with the SMTP Message-ID", async () => {
+    vi.stubEnv("EMAIL_PROVIDER", "smtp");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SMTP_FROM", "Belgrove Homes <info@belgrovehomes.com>");
+    vi.stubEnv("SMTP_HOST", "smtp.example");
+    vi.stubEnv("ZOHO_APP_PASSWORD", "");
+    const res = await sendEmail({ to: "c@x.com", subject: "Hi", html: "<p>Hi</p>" });
+    expect(res).toEqual({ sent: true, error: null, provider: "smtp", providerMessageId: "<smtp-test-id>" });
   });
 });
 

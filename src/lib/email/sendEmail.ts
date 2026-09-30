@@ -7,6 +7,10 @@ export type EmailResult = {
   // Permanent failures (e.g. Resend 4xx validation) must fail the outbox row
   // immediately instead of riding the retry/backoff path forever.
   permanent?: boolean;
+  // Proof of sending, populated on success only: which provider delivered
+  // and that provider's message id (Resend email id / SMTP Message-ID).
+  provider?: "resend" | "smtp";
+  providerMessageId?: string | null;
 };
 
 let transporter: nodemailer.Transporter | null = null;
@@ -116,14 +120,14 @@ export async function sendEmail({
     });
   }
   try {
-    await getTransporter().sendMail({
+    const info = await getTransporter().sendMail({
       from,
       to: resolvedTo,
       subject: resolvedSubject,
       html,
       ...(attachments ? { attachments } : {}),
     });
-    return { sent: true, error: null };
+    return { sent: true, error: null, provider: "smtp", providerMessageId: typeof info?.messageId === "string" ? info.messageId : null };
   } catch (err) {
     console.error("Email send failed:", err);
     return { sent: false, error: err instanceof Error ? err.message : "Unknown email error" };

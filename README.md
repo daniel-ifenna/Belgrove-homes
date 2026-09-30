@@ -64,7 +64,7 @@ There is no scheduler — every layer below runs inside request traffic:
    the app's `CRON_SECRET` (header or `?secret=`), for manual recovery:
 
 ```bash
-curl -X POST "https://belgrove-homes-uu1x.vercel.app/api/cron/outbox" \
+curl -X POST "https://www.belgrovehomes.com/api/cron/outbox" \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 

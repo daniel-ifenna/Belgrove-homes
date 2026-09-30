@@ -215,6 +215,17 @@ export async function processOutbox(
   const batchSize = opts.batchSize ?? BATCH_SIZE;
   const sleep = opts.sleep ?? defaultSleep;
   const result = { sent: 0, failed: 0, deferred: 0 };
+  // Environment safety: never send outside production unless explicitly
+  // allowed. A local dev server or script sharing the production DATABASE_URL
+  // must not claim real rows and mark them SENT — it would black-hole
+  // production mail (dev policy redirects it to a dead inbox). Refuse before
+  // touching any row. Local email testing sets ALLOW_DEV_SEND=true.
+  if (process.env.NODE_ENV !== "production" && process.env.ALLOW_DEV_SEND !== "true") {
+    console.warn(
+      "[email-safety] Refusing to send: not production and ALLOW_DEV_SEND is not true. No outbox rows touched."
+    );
+    return result;
+  }
   const onlyIds = opts.ids && opts.ids.length > 0 ? [...new Set(opts.ids)] : null;
 
   if (!onlyIds) {
@@ -277,7 +288,14 @@ export async function processOutbox(
       result.sent++;
       await db.emailOutbox.update({
         where: { id: row.id },
-        data: { status: "SENT", attempts, sentAt: now, lastError: null },
+        data: {
+          status: "SENT",
+          attempts,
+          sentAt: now,
+          lastError: null,
+          provider: outcome.provider ?? null,
+          providerMessageId: outcome.providerMessageId ?? null,
+        },
       });
     } else if (outcome.permanent || attempts >= MAX_ATTEMPTS) {
       result.failed++;
