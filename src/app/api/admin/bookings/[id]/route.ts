@@ -36,9 +36,13 @@ export async function PATCH(
     return await patchInner(request, ctx);
   } catch (e) {
     // Safety net: no booking action may fail with an empty/non-JSON 500.
-    // Map to a friendly message; the full error stays server-side.
+    // Full error stays server-side; in development the message + Prisma code
+    // ride along so the red banner names the real failure (e.g. a P1001
+    // cold-compute timeout) instead of the generic line.
     logServerError("booking action", e);
-    return NextResponse.json({ error: toUserFacingError(e, "booking") }, { status: 500 });
+    const code = typeof e === "object" && e !== null && "code" in e ? ` [${String((e as { code: unknown }).code)}]` : "";
+    const detail = process.env.NODE_ENV !== "production" ? `: ${e instanceof Error ? e.message : String(e)}${code}` : "";
+    return NextResponse.json({ error: `${toUserFacingError(e, "booking")}${detail}`.slice(0, 500) }, { status: 500 });
   }
 }
 
@@ -498,7 +502,9 @@ async function patchInner(
         return NextResponse.json({ error: "Record Interested first, then confirm the form." }, { status: 400 });
       }
       if (booking.formConfirmedAt) {
-        return NextResponse.json({ error: "Form already confirmed." }, { status: 400 });
+        // Include the row so a stale page can resync to the already-unlocked
+        // Sold / Not Sold step instead of stranding the admin on a dead button.
+        return NextResponse.json({ error: "Form already confirmed.", booking }, { status: 400 });
       }
       updated = await prisma.inspectionBooking.update({
         where: { id },

@@ -148,6 +148,14 @@ export default function BookingActions({
         setError(data.error ?? "Not allowed approver role required.");
         return;
       }
+      // Stale-page self-heal: when the server returns its current row with
+      // a rejection (e.g. "Form already confirmed" because another tab or
+      // the transaction flow moved first), resync and refresh so the panel
+      // shows the now-available actions instead of a dead button.
+      if (!res.ok && data.booking?.updatedAt) {
+        setExpectedUpdatedAt(data.booking.updatedAt);
+        router.refresh();
+      }
       if (!res.ok) throw new Error(data.error ?? "Action failed");
       if (!data.booking) throw new Error("Action failed");
       setLastEmail(data.emailResult ?? null);
