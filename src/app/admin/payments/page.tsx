@@ -166,7 +166,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
                     <td className="px-4 py-3 font-mono text-[11px] text-[var(--ops-muted)]">{p.bankReference ?? "-"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "-"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><div className="mono text-[10px] text-[var(--ops-muted)]">{p.transaction.estate}</div></td>
-                    <td className="px-4 py-3"><div className="text-[13px] leading-none break-all">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-all">{p.transaction.customerEmail}</div></td>
+                    <td className="px-4 py-3"><div className="text-[13px] leading-none break-words">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-words">{p.transaction.customerEmail}</div></td>
                     <td className="px-4 py-3 mono text-[11px]">{p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "-"}</td>
                     <td className="px-4 py-3 mono text-[12px] font-medium text-right price">{formatNaira(p.amount)}</td>
                     <td className="px-4 py-3 mono text-[11px]">{p.paymentMethod ?? "-"}</td>

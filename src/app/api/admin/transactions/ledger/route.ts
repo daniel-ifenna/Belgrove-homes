@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Prisma } from "@/generated/prisma/client";
 import { drawReportBanner } from "@/lib/documents/brand";
+import { wrapLongWords, TABLE_OVERFLOW_LINEBREAK } from "@/lib/documents/exportTables";
 
 export const dynamic = "force-dynamic";
 
@@ -87,27 +88,28 @@ export async function GET(request: NextRequest) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(16, 35, 30);
-    doc.text(`${t.customerName} — ${t.ref}`, margin, y);
+    // Wrap so long names/refs stay on the page instead of running past it.
+    doc.text(wrapLongWords(`${t.customerName} — ${t.ref}`, 60), margin, y, { maxWidth: pageW - margin * 2 });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(101, 115, 110);
     const sub = `${t.estate}${t.plotCode ? ` · ${t.plotCode}` : ""} · ${t.paymentPlan?.name ?? "Plan"} · ${t.status.replace("_", " ")}`;
-    doc.text(sub, margin, y + 4);
+    doc.text(wrapLongWords(sub, 80), margin, y + 4, { maxWidth: pageW - margin * 2 });
     y += 8;
 
     const confirmed = t.payments.filter((p) => p.status === "CONFIRMED");
     const pendingCount = t.payments.filter((p) => p.status === "PENDING_VERIFICATION").length;
     let running = t.totalPayable;
     const body: (string | number)[][] = [
-      [fmtDate(new Date(t.createdAt)), `Opening balance — total payable (${t.ref})`, t.ref, fmtNgn(t.totalPayable), "-", fmtNgn(running)],
+      [fmtDate(new Date(t.createdAt)), wrapLongWords(`Opening balance — total payable (${t.ref})`), wrapLongWords(t.ref, 20), fmtNgn(t.totalPayable), "-", fmtNgn(running)],
     ];
     for (const p of confirmed) {
       running -= p.amount;
       const rct = receiptByPayment.get(p.id);
       body.push([
         fmtDate(new Date(p.paymentDate)),
-        `Payment — ${p.paymentMethod ?? "Bank Transfer"}${rct ? ` (Receipt ${rct})` : ""}`,
-        p.paymentReference,
+        wrapLongWords(`Payment — ${p.paymentMethod ?? "Bank Transfer"}${rct ? ` (Receipt ${rct})` : ""}`),
+        wrapLongWords(p.paymentReference, 20),
         "-",
         fmtNgn(p.amount),
         fmtNgn(running),
@@ -121,7 +123,7 @@ export async function GET(request: NextRequest) {
       head: [["Date", "Particulars", "Ref", "Debit", "Credit", "Balance"]],
       body,
       theme: "grid",
-      styles: { fontSize: 6.5, cellPadding: 1.8, lineColor: [227, 230, 225] },
+      styles: { fontSize: 6.5, cellPadding: 1.8, lineColor: [227, 230, 225], overflow: TABLE_OVERFLOW_LINEBREAK },
       headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
       columnStyles: {
         0: { cellWidth: 22 },

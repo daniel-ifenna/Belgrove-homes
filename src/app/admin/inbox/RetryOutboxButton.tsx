@@ -49,7 +49,7 @@ export default function RetryOutboxButton({ outboxId }: { outboxId: string }) {
       >
         {state === "sending" ? "Retrying…" : "Retry now"}
       </button>
-      {detail ? <span className="text-[11px] text-[var(--ops-muted)] max-w-[220px] text-right break-all">{detail}</span> : null}
+      {detail ? <span className="text-[11px] text-[var(--ops-muted)] max-w-[220px] text-right break-words">{detail}</span> : null}
     </span>
   );
 }

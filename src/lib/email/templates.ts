@@ -20,7 +20,7 @@ function logoImg(): string {
 
 function layout(title: string, bodyHtml: string): string {
   return `
-  <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #2b2620;">
+  <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #2b2620; overflow-wrap: anywhere;">
     <div style="background: #3a3226; padding: 24px 32px;">
       ${logoImg()}
       <span style="color: #f5ece1; font-size: 20px; letter-spacing: 0.05em; vertical-align: middle;">BELGROVE HOMES</span>
@@ -54,12 +54,12 @@ export function bookingReceivedTemplate(params: {
     `
     <p>Hi ${clientName(name)},</p>
     <p>Thank you for booking a property inspection with Belgrove Homes. Here's what you submitted:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">Reference</td><td style="padding:6px 0; font-weight:bold;">${ref}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Requested date</td><td style="padding:6px 0;">${fmtDate(preferredDate)}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Requested time</td><td style="padding:6px 0;">${preferredTime}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
-      ${phone ? `<tr><td style="padding:6px 0; color:#6b6055;">Phone</td><td style="padding:6px 0;">${phone}</td></tr>` : ""}
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">Reference</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${ref}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Requested date</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${fmtDate(preferredDate)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Requested time</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${preferredTime}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${location}</td></tr>
+      ${phone ? `<tr><td style="padding:6px 0; color:#6b6055;">Phone</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${phone}</td></tr>` : ""}
     </table>
     <p>Keep your reference code <strong>${ref}</strong> handy an agent will follow up shortly to confirm.</p>
     `
@@ -80,15 +80,15 @@ export function adminNewBookingAlertTemplate(params: {
   return layout(
     "New inspection booking submitted",
     `
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">Reference</td><td style="padding:6px 0; font-weight:bold;">${ref}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Visitor</td><td style="padding:6px 0;">${name}</td></tr>
-      ${email ? `<tr><td style="padding:6px 0; color:#6b6055;">Email</td><td style="padding:6px 0;">${email}</td></tr>` : ""}
-      ${phone ? `<tr><td style="padding:6px 0; color:#6b6055;">Phone</td><td style="padding:6px 0;">${phone}</td></tr>` : ""}
-      <tr><td style="padding:6px 0; color:#6b6055;">Requested date</td><td style="padding:6px 0;">${fmtDate(preferredDate)}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Requested time</td><td style="padding:6px 0;">${preferredTime}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Agent</td><td style="padding:6px 0;">${agentName || " not provided "}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">Reference</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${ref}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Visitor</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${name}</td></tr>
+      ${email ? `<tr><td style="padding:6px 0; color:#6b6055;">Email</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${email}</td></tr>` : ""}
+      ${phone ? `<tr><td style="padding:6px 0; color:#6b6055;">Phone</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${phone}</td></tr>` : ""}
+      <tr><td style="padding:6px 0; color:#6b6055;">Requested date</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${fmtDate(preferredDate)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Requested time</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${preferredTime}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${location}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Agent</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${agentName || " not provided "}</td></tr>
     </table>
     <p>Review this booking in the admin dashboard.</p>
     `
@@ -108,10 +108,10 @@ export function bookingApprovedTemplate(params: {
     `
     <p>Hi ${clientName(name)},</p>
     <p>Your inspection booking <strong>${ref}</strong> has been confirmed as requested:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">Date</td><td style="padding:6px 0; font-weight:bold;">${fmtDate(preferredDate)}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Time</td><td style="padding:6px 0; font-weight:bold;">${preferredTime}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">Date</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${fmtDate(preferredDate)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Time</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${preferredTime}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${location}</td></tr>
     </table>
     <p>We look forward to seeing you then.</p>
     `
@@ -131,10 +131,10 @@ export function bookingRescheduledTemplate(params: {
     `
     <p>Hi ${clientName(name)},</p>
     <p>Your inspection booking <strong>${ref}</strong> has a new date and time:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">New date</td><td style="padding:6px 0; font-weight:bold;">${fmtDate(rescheduledDate)}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">New time</td><td style="padding:6px 0; font-weight:bold;">${rescheduledTime}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">New date</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${fmtDate(rescheduledDate)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">New time</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${rescheduledTime}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${location}</td></tr>
     </table>
     <p>If this doesn't work for you, reply to this email and we'll help find another time.</p>
     `
@@ -199,11 +199,11 @@ export function agentRescheduledNoticeTemplate(params: {
     `
     <p>Hi ${agentName},</p>
     <p>The inspection for <strong>${clientName}</strong> (<strong>${ref}</strong>) has been rescheduled:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">New date</td><td style="padding:6px 0; font-weight:bold;">${fmtDate(rescheduledDate)}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">New time</td><td style="padding:6px 0; font-weight:bold;">${rescheduledTime}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Client</td><td style="padding:6px 0;">${clientName}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">New date</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${fmtDate(rescheduledDate)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">New time</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${rescheduledTime}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${location}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Client</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${clientName}</td></tr>
     </table>
     <p>Please confirm availability. This is also being sent to the visitor.</p>
     `
@@ -224,7 +224,7 @@ export function agentFollowUpTemplate(params: {
     `
     <p>Hi ${agentName},</p>
     <p><strong>${authorName}</strong> from Belgrove Homes left a follow-up on booking <strong>${ref}</strong> (${location}, client: ${clientName}):</p>
-    <div style="background:#fdfbf7; border:1px solid #efe8dc; border-left:3px solid #1E3A2E; padding:14px 16px; margin:16px 0; white-space:pre-wrap;">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+    <div style="background:#fdfbf7; border:1px solid #efe8dc; border-left:3px solid #1E3A2E; padding:14px 16px; margin:16px 0; white-space:pre-wrap; overflow-wrap:anywhere;">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
     <p>Ref: <strong>${ref}</strong></p>
     `
   );
@@ -273,25 +273,25 @@ export function transactionConfirmationTemplate(params: {
   const scheduleRows = schedule
     .map(
       (s) =>
-        `<tr><td style="padding:6px 0; color:#6b6055;">${s.label}</td><td style="padding:6px 0;">${s.dueDate}</td><td style="padding:6px 0; font-weight:bold; text-align:right;">${formatNaira(s.amount)}</td></tr>`
+        `<tr><td style="padding:6px 0; color:#6b6055;">${s.label}</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${s.dueDate}</td><td style="padding:6px 0; font-weight:bold; text-align:right; overflow-wrap: anywhere; word-break: normal;">${formatNaira(s.amount)}</td></tr>`
     )
     .join("");
 
   const planBlock = isOutright
     ? `
     <p>You are on the <strong>Outright</strong> plan: the full amount is due in a single payment:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">Total due now</td><td style="padding:6px 0; font-weight:bold; text-align:right;">${formatNaira(totalPayable)}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">Total due now</td><td style="padding:6px 0; font-weight:bold; text-align:right; overflow-wrap: anywhere; word-break: normal;">${formatNaira(totalPayable)}</td></tr>
     </table>`
     : `
     <p>You are on the <strong>${planName}</strong> plan. A 50% deposit is due first, with the balance spread evenly across ${schedule.length} monthly installment${schedule.length === 1 ? "" : "s"}:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">Deposit due (50%)</td><td style="padding:6px 0;">${depositDueDate}</td><td style="padding:6px 0; font-weight:bold; text-align:right;">${formatNaira(depositAmount ?? 0)}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">Deposit due (50%)</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${depositDueDate}</td><td style="padding:6px 0; font-weight:bold; text-align:right; overflow-wrap: anywhere; word-break: normal;">${formatNaira(depositAmount ?? 0)}</td></tr>
     </table>
     ${interestAmount > 0 ? `<p style="background:#fef3c7; border:1px solid #fcd34d; padding:10px 12px; border-radius:4px; font-size:13px;">Includes ${interestRate}% flat interest (${formatNaira(interestAmount)}) applied to the full agreed price before the deposit split.</p>` : ""}
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
       ${scheduleRows}
-      <tr><td style="padding:6px 0; color:#6b6055;" colspan="2">Total payable</td><td style="padding:6px 0; font-weight:bold; text-align:right;">${formatNaira(totalPayable)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;" colspan="2">Total payable</td><td style="padding:6px 0; font-weight:bold; text-align:right; overflow-wrap: anywhere; word-break: normal;">${formatNaira(totalPayable)}</td></tr>
     </table>`;
 
   return layout(
@@ -357,17 +357,17 @@ export function agentAssignmentTemplate(params: {
     `
     <p>Hi ${agentName},</p>
     <p>You have been assigned a new inspection booking to follow up. Please contact the client promptly:</p>
-    <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding:6px 0; color:#6b6055;">Reference</td><td style="padding:6px 0; font-weight:bold;">${ref}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Client</td><td style="padding:6px 0;">${clientName}</td></tr>
+    <table style="width:100%; border-collapse: collapse; table-layout: fixed; margin: 16px 0;">
+      <tr><td style="padding:6px 0; color:#6b6055;">Reference</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${ref}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Client</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${clientName}</td></tr>
       <tr><td style="padding:6px 0; color:#6b6055;">Email</td><td style="padding:6px 0;"><a href="mailto:${clientEmail}">${clientEmail}</a></td></tr>
       ${clientPhone ? `<tr><td style="padding:6px 0; color:#6b6055;">Phone</td><td style="padding:6px 0;"><a href="tel:${clientPhone}">${clientPhone}</a></td></tr>` : ""}
-      <tr><td style="padding:6px 0; color:#6b6055;">${isRescheduled ? "Rescheduled date" : "Requested date"}</td><td style="padding:6px 0; font-weight:bold;">${fmtDate(dateToShow)}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Time</td><td style="padding:6px 0; font-weight:bold;">${timeToShow}</td></tr>
-      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0;">${location}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">${isRescheduled ? "Rescheduled date" : "Requested date"}</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${fmtDate(dateToShow)}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Time</td><td style="padding:6px 0; font-weight:bold; overflow-wrap: anywhere; word-break: normal;">${timeToShow}</td></tr>
+      <tr><td style="padding:6px 0; color:#6b6055;">Location</td><td style="padding:6px 0; overflow-wrap: anywhere; word-break: normal;">${location}</td></tr>
       ${agentCategory ? `<tr><td style="padding:6px 0; color:#6b6055;">Your category</td><td style="padding:6px 0; text-transform: capitalize;">${agentCategory.replace("_", " ")}</td></tr>` : ""}
     </table>
-    ${assignmentNote ? `<div style="background:#f7f5ee; border:1px solid #e3e6e1; border-left:3px solid #0D3328; padding:12px 14px; margin:16px 0;"><div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#65736E; margin-bottom:6px;">Note from admin</div><div style="font-size:13px; color:#10231E; white-space:pre-wrap;">${assignmentNote.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
+    ${assignmentNote ? `<div style="background:#f7f5ee; border:1px solid #e3e6e1; border-left:3px solid #0D3328; padding:12px 14px; margin:16px 0;"><div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#65736E; margin-bottom:6px;">Note from admin</div><div style="font-size:13px; color:#10231E; white-space:pre-wrap; overflow-wrap:anywhere;">${assignmentNote.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
     <p style="background:#fef3c7; border:1px solid #fcd34d; padding:12px; border-radius:4px; font-size:13px;">Action required: Contact <strong>${clientName}</strong> within 24 hours to confirm the inspection and provide directions. Reply to this email if you need admin support.</p>
     <p>Client reference: <strong>${ref}</strong></p>
     `

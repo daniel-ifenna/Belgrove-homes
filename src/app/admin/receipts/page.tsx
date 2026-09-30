@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
+import AdminListCard from "@/components/admin/AdminListCard";
 export const dynamic = "force-dynamic";
 
 type SearchParams = { q?: string; status?: string; source?: string; page?: string; from?: string; to?: string; showTest?: string };
@@ -186,8 +187,8 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                       <div className="mono text-[10px] text-[var(--ops-muted)]">{r.plotCode ?? ""}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-all">{r.customerName}</div>
-                      <div className="text-[12px] text-[var(--ops-muted)] break-all">{r.customerEmail}</div>
+                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-words">{r.customerName}</div>
+                      <div className="text-[12px] text-[var(--ops-muted)] break-words">{r.customerEmail}</div>
                       {r.customerPhone && <div className="text-[11px] text-[var(--ops-muted)]">{r.customerPhone}</div>}
                     </td>
                     <td className="px-4 py-3">
@@ -242,22 +243,20 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
         {/* Mobile */}
         <div className="lg:hidden space-y-3 mt-4">
           {receipts.map((r) => (
-            <Link key={r.id} href={`/admin/receipts/${r.id}`} className="block bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4 shadow-[var(--ops-shadow-sm)]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-mono text-[12px] font-medium text-[var(--ops-primary)]">{r.ref}</div>
-                  <div className="text-[14px] font-medium text-[var(--ops-text)] mt-1 break-all">{r.customerName}</div>
-                  <div className="text-[12px] text-[var(--ops-muted)] break-all">{r.customerEmail}</div>
-                </div>
-                <StatusBadge status={r.status} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Property</div><div className="text-[13px] text-[var(--ops-text)] break-words">{r.property}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Amount</div><div className="mono text-[12px] font-medium price">{formatNaira(r.finalAmount)}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Issued</div><div className="mono text-[11px]">{formatDate(r.issuedAt)}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Sent</div><div className="mono text-[11px]">{r.sentAt ? formatDateTime(r.sentAt) : "-"}</div></div>
-              </div>
-            </Link>
+            <AdminListCard
+              key={r.id}
+              href={`/admin/receipts/${r.id}`}
+              refText={r.ref}
+              name={r.customerName}
+              email={r.customerEmail}
+              badges={<StatusBadge status={r.status} />}
+              rows={[
+                { label: "Property", value: r.property },
+                { label: "Amount", value: <span className="mono text-[12px] font-medium price">{formatNaira(r.finalAmount)}</span> },
+                { label: "Issued", value: <span className="mono text-[11px]">{formatDate(r.issuedAt)}</span> },
+                { label: "Sent", value: <span className="mono text-[11px]">{r.sentAt ? formatDateTime(r.sentAt) : "-"}</span> },
+              ]}
+            />
           ))}
           {receipts.length === 0 && <div className="bg-white border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-8 text-center"><p className="text-sm text-[var(--ops-muted)]">No receipts.</p></div>}
         </div>

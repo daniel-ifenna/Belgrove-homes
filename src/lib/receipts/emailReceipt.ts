@@ -22,7 +22,7 @@ function logoImg(): string {
 
 function systemLayout(title: string, bodyHtml: string, logoHtml: string): string {
   return `
-  <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #2b2620;">
+  <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #2b2620; overflow-wrap: anywhere;">
     <div style="background: #3a3226; padding: 24px 32px;">
       ${logoHtml}
       <span style="color: #f5ece1; font-size: 20px; letter-spacing: 0.05em; vertical-align: middle;">BELGROVE HOMES</span>
@@ -52,7 +52,7 @@ export async function sendReceiptEmail(opts: {
   const body = `
       <p>Hi ${formatDisplayName(opts.clientName)},</p>
       <p>Your receipt for <strong>${opts.ref}</strong> is attached as PDF. You can also view or re-download it anytime at:</p>
-      <p><a href="${opts.receiptUrl}" style="color:#1E3A2E; font-weight:bold; word-break:break-all;">${opts.receiptUrl}</a></p>
+      <p style="overflow-wrap:anywhere;"><a href="${opts.receiptUrl}" style="color:#1E3A2E; font-weight:bold; overflow-wrap:anywhere; word-break:normal;">${opts.receiptUrl}</a></p>
       <p>Scan the QR code on the receipt to verify it instantly. It points to the same link above.</p>
       <p>Thank you. It is a pleasure doing business with you.</p>
       <div style="margin-top:20px; padding:12px 14px; background:#fdfbf7; border:1px solid #efe8dc; font-size:12px; color:#6b6055; line-height:1.5;">

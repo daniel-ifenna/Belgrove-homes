@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
+import AdminListCard from "@/components/admin/AdminListCard";
 import { getTransactionOverviews } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 
@@ -146,8 +147,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                         <div className="mono text-[10px] text-[var(--ops-muted)]">{t.plotCode ?? ""} {t.sqm ? `· ${t.sqm}sqm` : ""}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-[13px] font-medium leading-none break-all">{t.customerName}</div>
-                        <div className="text-[12px] text-[var(--ops-muted)] break-all">{t.customerEmail}</div>
+                        <div className="text-[13px] font-medium leading-none break-words">{t.customerName}</div>
+                        <div className="text-[12px] text-[var(--ops-muted)] break-words">{t.customerEmail}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-[13px] leading-tight break-words max-w-[160px]">{t.estate} {t.unitType ? `· ${t.unitType}` : ""}</div>
@@ -186,21 +187,20 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             const ov = overviews.get(t.id);
             if (!ov) return null;
             return (
-            <Link key={t.id} href={`/admin/transactions/${t.id}`} className="block bg-white border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-mono text-[12px] font-medium text-[var(--ops-primary)]">{t.ref}</div>
-                  <div className="text-[14px] font-medium mt-1 break-all">{t.customerName}</div>
-                </div>
-                <StatusBadge status={t.status} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Property</div><div className="text-[13px] break-words">{t.estate}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Outstanding</div><div className="mono text-[12px] font-bold price">{formatNaira(ov.outstanding)}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Total</div><div className="mono text-[11px] price">{formatNaira(t.totalPayable)}</div></div>
-                <div><div className="mono text-[10px] uppercase text-[var(--ops-muted)]">Plan</div><div className="mono text-[11px]">{t.paymentPlan.name}</div></div>
-              </div>
-            </Link>
+              <AdminListCard
+                key={t.id}
+                href={`/admin/transactions/${t.id}`}
+                refText={t.ref}
+                name={t.customerName}
+                email={t.customerEmail}
+                badges={<StatusBadge status={t.status} />}
+                rows={[
+                  { label: "Property", value: t.estate },
+                  { label: "Outstanding", value: <span className="mono text-[12px] font-bold price">{formatNaira(ov.outstanding)}</span> },
+                  { label: "Total", value: <span className="mono text-[11px] price">{formatNaira(t.totalPayable)}</span> },
+                  { label: "Plan", value: <span className="mono text-[11px]">{t.paymentPlan.name}</span> },
+                ]}
+              />
             );
           })}
         </div>

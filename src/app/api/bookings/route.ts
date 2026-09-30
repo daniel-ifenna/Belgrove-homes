@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
       break;
     } catch (err) {
       if (isUniqueRefConflict(err) && attempt < 4) {
-        ref = prefixedRef("BKG");
+        ref = prefixedRef("BEL");
         continue;
       }
       throw err;

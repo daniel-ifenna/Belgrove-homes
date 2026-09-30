@@ -39,7 +39,7 @@ function Row({ href, primary, secondary }: { href: string; primary: string; seco
   return (
     <Link href={href} className="flex items-baseline justify-between gap-3 px-5 py-2.5 hover:bg-[rgba(28,43,32,0.03)] transition-colors">
       <span className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)]">{primary}</span>
-      <span className="text-[12px] text-[var(--ops-muted)] break-all text-right">{secondary}</span>
+      <span className="text-[12px] text-[var(--ops-muted)] break-words text-right">{secondary}</span>
     </Link>
   );
 }
@@ -181,8 +181,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               <Group title="Customers" href="/admin/bookings" count={customers.length}>
                 {customers.map((c) => (
                   <div key={c.id} className="flex items-baseline justify-between gap-3 px-5 py-2.5">
-                    <span className="row-lead text-[13px] font-medium text-[var(--ops-text)] break-all">{c.name}</span>
-                    <span className="font-mono text-[12px] text-[var(--ops-muted)] break-all text-right">{c.email}</span>
+                    <span className="row-lead text-[13px] font-medium text-[var(--ops-text)] break-words">{c.name}</span>
+                    <span className="font-mono text-[12px] text-[var(--ops-muted)] break-words text-right">{c.email}</span>
                   </div>
                 ))}
               </Group>

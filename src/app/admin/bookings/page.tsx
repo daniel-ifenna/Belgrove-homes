@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 import { allStatuses, allTemperatures, formatDate } from "@/lib/booking-ui";
 import AdminPagination from "@/components/admin/AdminPagination";
+import AdminListCard from "@/components/admin/AdminListCard";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { lagosDayKey, lagosTodayInput } from "@/lib/time";
 import { phonesMatch } from "@/lib/phone";
@@ -254,13 +255,13 @@ export default async function AdminBookingsPage({
               </div>
             </div>
 
-            <form className="flex flex-wrap gap-2 items-start xl:justify-end" action="/admin/bookings" method="get">
+            <form className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start xl:justify-end" action="/admin/bookings" method="get">
               {params.status && <input type="hidden" name="status" value={params.status} />}
               {params.leadTemperature && <input type="hidden" name="leadTemperature" value={params.leadTemperature} />}
               <select
                 name="agentId"
                 defaultValue={params.agentId ?? ""}
-                className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white min-w-[140px] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
+                className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white w-full sm:w-auto sm:min-w-[140px] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
               >
                 <option value="">All agents</option>
                 {agentsForFilter.map((a) => (
@@ -269,15 +270,15 @@ export default async function AdminBookingsPage({
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-1.5 text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-2 cursor-pointer hover:bg-[var(--ops-bg)]">
+              <label className="flex items-center gap-1.5 text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-2 cursor-pointer hover:bg-[var(--ops-bg)] w-full sm:w-auto">
                 <input type="checkbox" name="missingAgent" value="1" defaultChecked={params.missingAgent === "1"} className="rounded border-[var(--ops-border)]" />
                 <span className="text-[var(--ops-text)]">Missing agent</span>
               </label>
-              <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)] transition-colors">
+              <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)] transition-colors w-full sm:w-auto">
                 Apply
               </button>
               {(params.status || params.leadTemperature || params.missingAgent || params.agentId || params.q) && (
-                <Link href="/admin/bookings" className="text-xs text-[var(--ops-muted)] self-center underline underline-offset-4 hover:text-[var(--ops-text)]">
+                <Link href="/admin/bookings" className="text-xs text-[var(--ops-muted)] self-start sm:self-center underline underline-offset-4 hover:text-[var(--ops-text)]">
                   Clear
                 </Link>
               )}
@@ -336,8 +337,8 @@ export default async function AdminBookingsPage({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-all">{b.name}</div>
-                      <div className="text-[12px] text-[var(--ops-muted)] break-all">{b.email}</div>
+                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-words">{b.name}</div>
+                      <div className="text-[12px] text-[var(--ops-muted)] break-words">{b.email}</div>
                       {b.phone && <div className="text-[11px] text-[var(--ops-muted)]">{b.phone}</div>}
                     </td>
                     <td className="px-4 py-3">
@@ -414,37 +415,38 @@ export default async function AdminBookingsPage({
         {/* Mobile cards */}
         <div className="lg:hidden space-y-3 mt-4">
           {sorted.map((b) => (
-            <Link key={b.id} href={`/admin/bookings/${b.id}`} className="block bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4 shadow-[var(--ops-shadow-sm)] hover:shadow-[var(--ops-shadow-md)] transition-shadow">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-mono text-[12px] font-medium text-[var(--ops-primary)]">{b.ref}</div>
-                  <div className="text-[14px] font-medium text-[var(--ops-text)] mt-1 break-all">{b.name}</div>
-                  <div className="text-[12px] text-[var(--ops-muted)] break-all">{b.email}</div>
-                </div>
-                <div className="flex flex-col gap-1.5 items-end shrink-0">
+            <AdminListCard
+              key={b.id}
+              href={`/admin/bookings/${b.id}`}
+              refText={b.ref}
+              name={b.name}
+              email={b.email}
+              badges={
+                <>
                   <StatusBadge status={b.status} />
                   <StatusBadge status={b.leadTemperature} />
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Property</div>
-                  <div className="text-[13px] text-[var(--ops-text)] break-words">{b.location}</div>
-                </div>
-                <div>
-                  <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Inspection</div>
-                  <div className="text-[13px] text-[var(--ops-text)]">{b.rescheduledDate ? formatDate(b.rescheduledDate) : formatDate(b.preferredDate)} · {b.rescheduledTime ?? b.preferredTime}</div>
-                </div>
-                <div>
-                  <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Agent</div>
-                  <div className="mt-1"><AgentCell agent={(b as any).agent} customerEmail={b.email} customerPhone={b.phone} /></div>
-                </div>
-                <div>
-                  <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Outcome</div>
-                  <div className="mt-1">{b.outcome ? <span className="text-xs px-2 py-1 rounded-full border bg-white">{b.outcome}</span> : <span className="text-[var(--ops-muted)]">-</span>}</div>
-                </div>
-              </div>
-            </Link>
+                </>
+              }
+              rows={[
+                { label: "Property", value: b.location },
+                {
+                  label: "Inspection",
+                  value: `${b.rescheduledDate ? formatDate(b.rescheduledDate) : formatDate(b.preferredDate)} · ${b.rescheduledTime ?? b.preferredTime}`,
+                },
+                {
+                  label: "Agent",
+                  value: <AgentCell agent={(b as any).agent} customerEmail={b.email} customerPhone={b.phone} />,
+                },
+                {
+                  label: "Outcome",
+                  value: b.outcome ? (
+                    <span className="text-xs px-2 py-1 rounded-full border bg-white">{b.outcome}</span>
+                  ) : (
+                    <span className="text-[var(--ops-muted)]">-</span>
+                  ),
+                },
+              ]}
+            />
           ))}
           {bookings.length === 0 && (
             <div className="bg-white border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-8 text-center">

@@ -131,19 +131,19 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.setFont(fontName, "bold");
   doc.setFontSize(10);
   doc.setTextColor(22, 40, 31);
-  doc.text(displayName, margin, y);
-  y += 6;
+  // Wrap to the left column so long names stay on the page (splitTextToSize
+  // breaks unbroken strings by measured width, advancing y per line).
+  const nameLines = doc.splitTextToSize(displayName, leftW - 2);
+  doc.text(nameLines, margin, y);
+  y += 6 + (nameLines.length - 1) * 4;
   doc.setFont(fontName, "normal");
   doc.setFontSize(7);
   doc.setTextColor(80, 80, 80);
   // Only phone/email under Issued To — do NOT render property description here
-  if (data.clientPhone) {
-    doc.text(data.clientPhone, margin, y);
-    y += 3.5;
-  }
-  if (data.clientEmail) {
-    doc.text(data.clientEmail, margin, y);
-    y += 3.5;
+  for (const contact of [data.clientPhone, data.clientEmail].filter(Boolean) as string[]) {
+    const contactLines = doc.splitTextToSize(contact, leftW - 2);
+    doc.text(contactLines, margin, y);
+    y += 3.5 * contactLines.length;
   }
   // Provide small breathing room
   y += 2;
@@ -203,7 +203,10 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
     pvx += propColW[i];
     doc.line(pvx, y, pvx, y + 7);
   }
-  doc.text(data.estateName.substring(0, 32), propTableX + 2, y + 4.5);
+  // Fixed 7mm row: truncate as an explicit last resort, with an ellipsis so
+  // the cut is visible rather than silently clipped by the cell border.
+  const estateCell = data.estateName.length > 32 ? `${data.estateName.substring(0, 31)}…` : data.estateName;
+  doc.text(estateCell, propTableX + 2, y + 4.5);
   doc.text(formatNaira(unitPriceVal), propTableX + propColW[0] + propColW[1] - 2, y + 4.5, { align: "right" });
   doc.text(String(plotQtyVal), propTableX + propColW[0] + propColW[1] + propColW[2] - 2, y + 4.5, { align: "right" });
   doc.text(formatNaira(amountDueVal), propTableX + W - margin * 2 - 2, y + 4.5, { align: "right" });
@@ -241,8 +244,10 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
       doc.setFont(fontName, "bold");
       doc.text(label, margin, y);
       doc.setFont(fontName, "normal");
-      doc.text(val, margin + 38, y);
-      y += 3.5;
+      // Wrap long values (plan names, refs) inside the remaining line width.
+      const valLines = doc.splitTextToSize(val, W - margin * 2 - 38);
+      doc.text(valLines, margin + 38, y);
+      y += 3.5 * valLines.length;
     }
     y += 2;
   }
@@ -284,7 +289,14 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
     }
     doc.text(String(i + 1), tableX + 2, rowY);
     doc.text(r.date, tableX + colW[0] + 2, rowY);
-    doc.text(r.method, tableX + colW[0] + colW[1] + 2, rowY);
+    // Fixed 7mm row: ellipsis-truncate a method string wider than its column
+    // (explicit last resort — measured, never silently clipped).
+    const methodMaxW = colW[2] - 4;
+    const methodCell =
+      doc.getTextWidth(r.method) > methodMaxW
+        ? `${r.method.substring(0, Math.max(0, Math.floor((r.method.length * methodMaxW) / doc.getTextWidth(r.method)) - 1))}…`
+        : r.method;
+    doc.text(methodCell, tableX + colW[0] + colW[1] + 2, rowY);
     doc.text(formatNaira(r.amount), tableX + W - margin * 2 - 2, rowY, { align: "right" });
     y += 7;
   }

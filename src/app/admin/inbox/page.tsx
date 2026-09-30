@@ -72,8 +72,8 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                       <span className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)]">{item.ref}</span>
                       <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">{item.age}</span>
                     </div>
-                    <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-all">{item.title}</div>
-                    <div className="text-[12px] text-[var(--ops-muted)] break-all">{item.subtitle}</div>
+                    <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-words">{item.title}</div>
+                    <div className="text-[12px] text-[var(--ops-muted)] break-words">{item.subtitle}</div>
                   </div>
                   {item.category === "EMAIL_STUCK" && item.outboxId ? (
                     <RetryOutboxButton outboxId={item.outboxId} />

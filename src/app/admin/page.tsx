@@ -188,8 +188,8 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                         </Link>
                         <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">{item.age}</span>
                       </div>
-                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-all">{item.title}</div>
-                      <div className="text-[12px] text-[var(--ops-muted)] break-all">{item.subtitle}</div>
+                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-words">{item.title}</div>
+                      <div className="text-[12px] text-[var(--ops-muted)] break-words">{item.subtitle}</div>
                     </div>
                     <Link href={item.href} className="shrink-0 mono text-[11px] bg-[var(--ops-primary)] text-white rounded-full px-3.5 py-1.5 font-medium hover:bg-[var(--ops-deep)] transition-colors">
                       {item.actionLabel}

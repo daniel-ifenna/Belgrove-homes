@@ -20,12 +20,12 @@ describe("generatePrefixedRef", () => {
 });
 
 describe("reference prefixes", () => {
-  it("mints BKG/TXN/PAY/RCT refs, never BEL for new rows", () => {
-    expect(prefixedRef("BKG")).toMatch(/^BKG-\d{4}-\d{5}$/);
+  it("mints BEL/TXN/PAY/RCT refs for new rows", () => {
+    expect(prefixedRef("BEL")).toMatch(/^BEL-\d{4}-\d{5}$/);
     expect(prefixedRef("TXN")).toMatch(/^TXN-\d{4}-\d{5}$/);
     expect(prefixedRef("PAY")).toMatch(/^PAY-\d{4}-\d{5}$/);
     expect(prefixedRef("RCT")).toMatch(/^RCT-\d{4}-\d{5}$/);
-    expect(prefixedRef("BKG")).not.toBe(prefixedRef("BKG"));
+    expect(prefixedRef("BEL")).not.toBe(prefixedRef("BEL"));
   });
   it("existing BEL refs are untouched (generator never rewrites refs)", () => {
     const refSrc = fs.readFileSync(path.join(SRC, "lib/ref.ts"), "utf8");

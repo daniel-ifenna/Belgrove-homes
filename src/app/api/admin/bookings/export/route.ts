@@ -7,6 +7,7 @@ import type { Prisma, BookingStatus, LeadTemperature } from "@/generated/prisma/
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { drawReportBanner } from "@/lib/documents/brand";
+import { wrapLongWords, TABLE_OVERFLOW_LINEBREAK } from "@/lib/documents/exportTables";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -180,7 +181,7 @@ export async function GET(request: NextRequest) {
     head: summaryHead,
     body: summaryBody,
     theme: "grid",
-    styles: { font: "helvetica", fontSize: 7, cellPadding: 2.5, lineColor: [227, 230, 225], lineWidth: 0.2, textColor: [16, 35, 30] },
+    styles: { font: "helvetica", fontSize: 7, cellPadding: 2.5, lineColor: [227, 230, 225], lineWidth: 0.2, textColor: [16, 35, 30], overflow: TABLE_OVERFLOW_LINEBREAK },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold", halign: "left" },
     columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 30, halign: "center" } },
     alternateRowStyles: { fillColor: [247, 245, 238] },
@@ -233,7 +234,7 @@ export async function GET(request: NextRequest) {
       ["Agents Involved", String(Object.keys(byAgentPerf).length)],
     ],
     theme: "grid",
-    styles: { font: "helvetica", fontSize: 7, cellPadding: 2, lineColor: [227, 230, 225], textColor: [16, 35, 30] },
+    styles: { font: "helvetica", fontSize: 7, cellPadding: 2, lineColor: [227, 230, 225], textColor: [16, 35, 30], overflow: TABLE_OVERFLOW_LINEBREAK },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
     columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 30, halign: "center" } },
     alternateRowStyles: { fillColor: [247, 245, 238] },
@@ -256,7 +257,7 @@ export async function GET(request: NextRequest) {
     head: [["Property / Location", "Bookings", "Share"]],
     body: propertyRows.length ? propertyRows : [["No properties in filtered set", "0", "-"]],
     theme: "grid",
-    styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225] },
+    styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225], overflow: TABLE_OVERFLOW_LINEBREAK },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
     columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 20, halign: "center" }, 2: { cellWidth: 20, halign: "center" } },
     margin: { left: margin, right: margin },
@@ -272,13 +273,13 @@ export async function GET(request: NextRequest) {
   perfY += 4;
   const agentRows = Object.entries(byAgentPerf)
     .sort((a, b) => b[1] - a[1])
-    .map(([name, cnt]) => [name, String(cnt), `${((cnt / (total || 1)) * 100).toFixed(1)}%`]);
+    .map(([name, cnt]) => [wrapLongWords(name), String(cnt), `${((cnt / (total || 1)) * 100).toFixed(1)}%`]);
   autoTable(doc, {
     startY: perfY,
     head: [["Agent", "Bookings Handled", "Share"]],
     body: agentRows.length ? agentRows : [["No agents", "0", "-"]],
     theme: "grid",
-    styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225] },
+    styles: { font: "helvetica", fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225], overflow: TABLE_OVERFLOW_LINEBREAK },
     headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
     columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 30, halign: "center" }, 2: { cellWidth: 20, halign: "center" } },
     margin: { left: margin, right: margin },
@@ -305,13 +306,16 @@ export async function GET(request: NextRequest) {
   doc.rect(0, 22, landscapeW, 0.6, "F");
 
   // Build rows: Agent | Property | Inspection Date | Client | Lead / Closed
+  // Free-text cells go through wrapLongWords so unbroken strings (long
+  // emails, URLs) wrap inside their fixed-width column instead of running
+  // past its border. autotable renders each embedded "\n" as a new line.
   const landscapeRows = bookings.map((b: any) => {
-    const agent = b.agent?.name ?? "Unassigned";
-    const property = b.location ?? "-";
+    const agent = wrapLongWords(b.agent?.name ?? "Unassigned");
+    const property = wrapLongWords(b.location ?? "-");
     const inspDate = b.rescheduledDate ? new Date(b.rescheduledDate).toLocaleDateString("en-GB") : b.preferredDate ? new Date(b.preferredDate).toLocaleDateString("en-GB") : "-";
     const inspTime = b.rescheduledTime ?? b.preferredTime ?? "";
     const dateCell = inspTime ? `${inspDate} · ${inspTime}` : inspDate;
-    const client = `${b.name}\n${b.email}`;
+    const client = `${wrapLongWords(b.name)}\n${wrapLongWords(b.email)}`;
     const lead = b.leadTemperature ? b.leadTemperature.toUpperCase() : "-";
     const closed = b.status === "closed" ? "CLOSED" : b.status === "active" ? "COMPLETED" : b.status.toUpperCase();
     const leadCell = `${lead}  •  ${closed}`;
@@ -367,11 +371,11 @@ export async function GET(request: NextRequest) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(16, 35, 30);
-    doc.text(b.ref, margin, yy);
+    doc.text(wrapLongWords(b.ref, 60), margin, yy, { maxWidth: pageW - margin * 2 });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(101, 115, 110);
-    doc.text(`${b.name}  •  ${b.email}`, margin, yy + 5);
+    doc.text(wrapLongWords(`${b.name}  •  ${b.email}`, 60), margin, yy + 5, { maxWidth: pageW - margin * 2 });
     // Badges (simulate with filled rects)
     const badges = [
       { label: b.status.toUpperCase(), bg: b.status === "closed" ? [26, 26, 26] : b.status === "rescheduled" ? [91, 33, 182] : b.status === "active" ? [13, 51, 40] : [200, 160, 74] },
@@ -407,9 +411,11 @@ export async function GET(request: NextRequest) {
       doc.line(margin, startY + 1, margin + 12, startY + 1);
       autoTable(doc, {
         startY: startY + 4,
-        body: rows,
+        // Wrap the value column so long emails, locations and agent lines
+        // stay inside the table instead of running past its border.
+        body: rows.map(([k, v]) => [k, wrapLongWords(v)]),
         theme: "plain",
-        styles: { font: "helvetica", fontSize: 7, cellPadding: 1.5, textColor: [16, 35, 30] },
+        styles: { font: "helvetica", fontSize: 7, cellPadding: 1.5, textColor: [16, 35, 30], overflow: TABLE_OVERFLOW_LINEBREAK },
         columnStyles: { 0: { cellWidth: 38, fontStyle: "bold", textColor: [101, 115, 110] }, 1: { cellWidth: pageW - margin * 2 - 38 } },
         margin: { left: margin, right: margin },
       });
@@ -457,13 +463,13 @@ export async function GET(request: NextRequest) {
     if (b.rescheduledDate) {
       const hist = b.activities?.filter((a: any) => a.action === "reschedule") ?? [];
       if (hist.length > 0) {
-        const rows = hist.map((h: any) => [new Date(h.createdAt).toLocaleString("en-GB"), h.actorName, h.note ?? "Rescheduled"]);
+        const rows = hist.map((h: any) => [new Date(h.createdAt).toLocaleString("en-GB"), wrapLongWords(h.actorName, 20), wrapLongWords(h.note ?? "Rescheduled")]);
         autoTable(doc, {
           startY: yy,
           head: [["Changed", "By", "Reason"]],
           body: rows,
           theme: "grid",
-          styles: { fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225] },
+          styles: { fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225], overflow: TABLE_OVERFLOW_LINEBREAK },
           headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
           margin: { left: margin, right: margin },
         });
@@ -505,13 +511,13 @@ export async function GET(request: NextRequest) {
       doc.text("No internal notes recorded.", margin, yy);
       yy += 6;
     } else {
-      const noteRows = notes.map((n: any) => [new Date(n.createdAt).toLocaleString("en-GB"), n.authorName, n.body]);
+      const noteRows = notes.map((n: any) => [new Date(n.createdAt).toLocaleString("en-GB"), wrapLongWords(n.authorName, 20), wrapLongWords(n.body)]);
       autoTable(doc, {
         startY: yy,
         head: [["Date", "Author", "Note"]],
         body: noteRows,
         theme: "grid",
-        styles: { fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225] },
+        styles: { fontSize: 6.5, cellPadding: 2, lineColor: [227, 230, 225], overflow: TABLE_OVERFLOW_LINEBREAK },
         headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
         columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 28 }, 2: { cellWidth: pageW - margin * 2 - 56 } },
         margin: { left: margin, right: margin },
@@ -546,13 +552,13 @@ export async function GET(request: NextRequest) {
         const d = e.at.toLocaleString("en-GB");
         if (e.type === "activity") {
           const a: any = e.data;
-          return [d, a.actorName, `${a.action} (${a.fromStatus} → ${a.toStatus})${a.note ? `: ${a.note}` : ""}`];
+          return [d, wrapLongWords(a.actorName, 20), wrapLongWords(`${a.action} (${a.fromStatus} → ${a.toStatus})${a.note ? `: ${a.note}` : ""}`)];
         } else if (e.type === "message") {
           const m: any = e.data;
-          return [d, m.authorName, `Message: ${m.message}`];
+          return [d, wrapLongWords(m.authorName, 20), wrapLongWords(`Message: ${m.message}`)];
         } else {
           const n: any = e.data;
-          return [d, n.authorName, `Note: ${n.body}`];
+          return [d, wrapLongWords(n.authorName, 20), wrapLongWords(`Note: ${n.body}`)];
         }
       });
       autoTable(doc, {
@@ -560,7 +566,7 @@ export async function GET(request: NextRequest) {
         head: [["Date", "Actor", "Event"]],
         body: histRows,
         theme: "grid",
-        styles: { fontSize: 6, cellPadding: 1.8, lineColor: [227, 230, 225] },
+        styles: { fontSize: 6, cellPadding: 1.8, lineColor: [227, 230, 225], overflow: TABLE_OVERFLOW_LINEBREAK },
         headStyles: { fillColor: [13, 51, 40], textColor: [255, 255, 255], fontStyle: "bold" },
         columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 28 }, 2: { cellWidth: pageW - margin * 2 - 58 } },
         margin: { left: margin, right: margin },

@@ -6,13 +6,13 @@ import Link from "next/link";
 import NotificationBell from "./NotificationBell";
 import { useState, useEffect } from "react";
 
-export default function AdminTopBar() {
+export default function AdminTopBar({ onOpenNav }: { onOpenNav?: () => void }) {
   const pathname = usePathname();
   if (pathname === "/admin/login") return null;
-  return <TopBarInner />;
+  return <TopBarInner onOpenNav={onOpenNav} />;
 }
 
-function TopBarInner() {
+function TopBarInner({ onOpenNav }: { onOpenNav?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -32,9 +32,18 @@ function TopBarInner() {
   }
 
   return (
-    <header className="h-[64px] bg-[var(--ops-surface)] border-b border-[var(--ops-border)] flex items-center gap-4 px-6 sticky top-0 z-20">
+    <header className="h-[64px] bg-[var(--ops-surface)] border-b border-[var(--ops-border)] flex items-center gap-2 sm:gap-4 px-4 sm:px-6 sticky top-0 z-20 min-w-0">
+      {/* Hamburger — opens the off-canvas nav below lg */}
+      <button
+        type="button"
+        onClick={onOpenNav}
+        aria-label="Open navigation"
+        className="lg:hidden shrink-0 h-10 w-10 grid place-items-center rounded-full border border-[var(--ops-border)] bg-white text-[var(--ops-text)] hover:bg-[var(--ops-bg)] transition-colors"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
+      </button>
       {/* Global Search */}
-      <form onSubmit={onSearch} className="flex-1 max-w-[640px] relative">
+      <form onSubmit={onSearch} className="flex-1 min-w-0 max-w-[640px] relative">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         </span>
@@ -49,7 +58,7 @@ function TopBarInner() {
         </span>
       </form>
 
-      <div className="flex items-center gap-3 ml-auto">
+      <div className="flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
         {/* Quick action — one consistent create location, contextual primary */}
         <QuickActionSplit pathname={pathname} />
 
@@ -137,12 +146,22 @@ function NotificationBellLight() {
   );
 }
 
-export function AdminSidebar() {
-  return <SidebarInner />;
+export function AdminSidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
+  return <SidebarInner open={open} onClose={onClose} />;
 }
 
-function SidebarInner() {
+function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
+
+  // Close on Escape while the drawer is open (desktop sidebar ignores this).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + "/");
   const [badges, setBadges] = useState<{ total: number; pendingPayments: number; bookingsNewUnassigned: number } | null>(null);
 
@@ -201,7 +220,18 @@ function SidebarInner() {
   ];
 
   return (
-    <aside className="w-[252px] shrink-0 bg-[var(--ops-deep)] text-white flex flex-col h-screen sticky top-0 border-r border-white/[0.06]">
+    <>
+      {/* Backdrop for the off-canvas drawer below lg */}
+      {open && (
+        <div
+          aria-hidden="true"
+          onClick={onClose}
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+        />
+      )}
+      <aside
+        className={`w-[252px] shrink-0 bg-[var(--ops-deep)] text-white flex flex-col h-screen border-r border-white/[0.06] fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:sticky lg:top-0 ${open ? "translate-x-0" : ""}`}
+      >
       <div className="px-6 pt-7 pb-6">
         <Link href="/admin" className="block">
           <div className="flex items-baseline gap-1">
@@ -229,6 +259,7 @@ function SidebarInner() {
                   <Link
                     key={item.label}
                     href={item.href}
+                    onClick={onClose}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[13px] transition-colors min-h-[44px] ${active ? "bg-white text-[var(--ops-primary)] font-medium shadow-sm" : "text-white/65 hover:bg-white/[0.06] hover:text-white"}`}
                   >
                     <span className={`h-8 w-8 rounded-[9px] grid place-items-center shrink-0 border ${active ? "bg-[var(--ops-primary)] text-white border-transparent" : "bg-white/[0.06] border-white/5 text-white/70"}`}>
@@ -247,7 +278,8 @@ function SidebarInner() {
           </div>
         ))}
       </nav>
-    </aside>
+      </aside>
+    </>
   );
 }
 
