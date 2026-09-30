@@ -132,7 +132,17 @@ type OutboxRow = {
   payload: unknown;
   attempts: number;
   status: string;
+  lastError: string | null;
 };
+
+// Hard cap for starting new sends in one invocation: never start a send
+// that could outlive maxDuration. Rows not started stay PENDING for the
+// next drain.
+export const SEND_BUDGET_MS = 20_000;
+// Max concurrent sends when delivering an explicit id set: one slow send
+// must not starve the others. Claims stay per-row atomic, so concurrent
+// workers can never double-send.
+export const IDS_CONCURRENCY = 2;
 
 export type ProcessDb = {
   emailOutbox: {
@@ -206,14 +216,30 @@ export type SleepFn = (ms: number) => Promise<unknown>;
 
 const defaultSleep: SleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export type OutboxMode = "inline" | "drain";
+
 export async function processOutbox(
-  opts: { sender?: OutboxSender; now?: Date; batchSize?: number; db?: ProcessDb; ids?: string[]; sleep?: SleepFn } = {}
+  opts: {
+    sender?: OutboxSender;
+    now?: Date;
+    batchSize?: number;
+    db?: ProcessDb;
+    ids?: string[];
+    sleep?: SleepFn;
+    // "inline": rows sent right after a request — a single attempt per row,
+    // no in-process retries. "drain" (default): retries stay here.
+    mode?: OutboxMode;
+    // Invocation start (ms epoch) for the send budget; injectable in tests.
+    startTime?: number;
+  } = {}
 ): Promise<{ sent: number; failed: number; deferred: number }> {
   const db = opts.db ?? realDb;
   const sender = opts.sender ?? defaultSender;
   const now = opts.now ?? new Date();
   const batchSize = opts.batchSize ?? BATCH_SIZE;
   const sleep = opts.sleep ?? defaultSleep;
+  const mode = opts.mode ?? "drain";
+  const startTime = opts.startTime ?? Date.now();
   const result = { sent: 0, failed: 0, deferred: 0 };
   // Environment safety: never send outside production unless explicitly
   // allowed. A local dev server or script sharing the production DATABASE_URL
@@ -231,14 +257,25 @@ export async function processOutbox(
   if (!onlyIds) {
     // Reap rows orphaned by a dead worker before selecting work, so a crash
     // between claim and outcome can never wedge a row in SENDING forever.
+    // The previous lastError (usually the "sending started" death trail) is
+    // kept and timestamped, so a killed function always leaves evidence in
+    // the row and in the admin Stuck emails view.
     // (The inline ids path skips this: it only touches its own fresh rows.)
-    await db.emailOutbox.updateMany({
+    const stale = await db.emailOutbox.findMany({
       where: {
         status: "SENDING",
         updatedAt: { lt: new Date(now.getTime() - STALE_SENDING_MINUTES * 60_000) },
       },
-      data: { status: "PENDING" },
     });
+    for (const s of stale) {
+      await db.emailOutbox.updateMany({
+        where: { id: s.id, status: "SENDING" },
+        data: {
+          status: "PENDING",
+          lastError: `reaped ${now.toISOString()}: ${s.lastError ?? "no outcome recorded"}`.slice(0, 1000),
+        },
+      });
+    }
   }
 
   const due = await db.emailOutbox.findMany({
@@ -252,20 +289,33 @@ export async function processOutbox(
     take: batchSize,
   });
 
-  for (const row of due) {
+  async function processRow(row: OutboxRow): Promise<void> {
     // Atomic claim (PENDING -> SENDING guarded on still-PENDING): a single
-    // conditional update, so the inline send, the pinger, and the cron can
-    // race on a row and exactly one of them sends it.
+    // conditional update, so concurrent workers racing on a row send it
+    // exactly once — only the claim winner proceeds past this point.
     const claimed = await db.emailOutbox.updateMany({
       where: { id: row.id, status: "PENDING" },
       data: { status: "SENDING" },
     });
-    if (claimed.count === 0) continue;
-    // In-process retries: a transient SMTP stall fails fast and succeeds on
-    // an immediate retry far more often than after minutes of backoff. The
-    // terminal attempt (this run would reach MAX_ATTEMPTS) gets a single try
-    // — backoff already gave it its chances; this run just records the verdict.
-    const rapidRetries = row.attempts + 1 >= MAX_ATTEMPTS ? 0 : INLINE_RETRY_WAITS_MS.length;
+    if (claimed.count === 0) return;
+    const attempts = row.attempts + 1;
+    // Trail on death: attempts increment and lastError are written NOW, so a
+    // function killed mid-send (past maxDuration, frozen worker) still leaves
+    // evidence. Cleared on success, overwritten by the real error on failure.
+    try {
+      await db.emailOutbox.update({
+        where: { id: row.id },
+        data: { attempts, lastError: "sending started, no outcome recorded" },
+      });
+    } catch (e) {
+      logServerError(`outbox ${row.id}: failed to write send trail`, e);
+    }
+    // Retries live in drain mode only. Inline mode gets exactly one attempt:
+    // it must finish fast inside the request's lifetime; anything unsent is
+    // picked up by a later drain with the full retry treatment. The terminal
+    // attempt (this run would reach MAX_ATTEMPTS) also gets a single try.
+    const rapidRetries =
+      mode === "inline" || row.attempts + 1 >= MAX_ATTEMPTS ? 0 : INLINE_RETRY_WAITS_MS.length;
     let outcome: EmailResult = { sent: false, error: "Outbox sender did not run" };
     for (let rapid = 0; ; rapid++) {
       try {
@@ -283,7 +333,6 @@ export async function processOutbox(
       if (outcome.sent || outcome.permanent || rapid >= rapidRetries) break;
       await sleep(INLINE_RETRY_WAITS_MS[rapid]);
     }
-    const attempts = row.attempts + 1;
     if (outcome.sent) {
       result.sent++;
       await db.emailOutbox.update({
@@ -316,6 +365,29 @@ export async function processOutbox(
       });
     }
   }
+
+  // Time budget: never START a send once SEND_BUDGET_MS has elapsed in this
+  // invocation — it could outlive maxDuration and die mid-row. Rows not
+  // started stay PENDING for the next drain.
+  if (onlyIds) {
+    // Inline delivery: up to IDS_CONCURRENCY rows at once so one slow send
+    // cannot starve the others sharing the same request.
+    const queue = [...due];
+    const workers = Array.from({ length: Math.min(IDS_CONCURRENCY, queue.length) }, async () => {
+      for (;;) {
+        if (Date.now() - startTime > SEND_BUDGET_MS) return;
+        const row = queue.shift();
+        if (!row) return;
+        await processRow(row);
+      }
+    });
+    await Promise.all(workers);
+  } else {
+    for (const row of due) {
+      if (Date.now() - startTime > SEND_BUDGET_MS) break;
+      await processRow(row);
+    }
+  }
   return result;
 }
 
@@ -336,7 +408,7 @@ export function scheduleInlineOutboxSend(
 ): void {
   if (ids.length === 0) return;
   const afterImpl = deps.afterImpl ?? after;
-  const sendIds = deps.sendIds ?? ((runIds) => processOutbox({ ids: runIds }));
+  const sendIds = deps.sendIds ?? ((runIds) => processOutbox({ ids: runIds, mode: "inline" }));
   const drainAll = deps.drainAll ?? (() => processOutbox());
   const unique = [...new Set(ids)];
   const logResult = (tag: string, r: { sent: number; failed: number; deferred: number }) => {

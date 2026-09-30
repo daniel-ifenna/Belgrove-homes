@@ -9,7 +9,7 @@ import { logServerError } from "@/lib/paymentConfirmation";
 // Bearer-less: admin session auth, same as every other /api/admin route.
 // Runs the single row through the standard path (atomic claim + in-process
 // retries) and returns its new status for the UI.
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const session = await auth();

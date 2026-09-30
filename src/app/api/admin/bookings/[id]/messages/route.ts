@@ -5,7 +5,7 @@ import { isInternalRole } from "@/lib/authz";
 
 // The inline outbox send runs after the response; allow headroom for the
 // request's own DB work plus the post-response SMTP send (Hobby max: 300s).
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();

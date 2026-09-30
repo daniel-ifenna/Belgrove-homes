@@ -18,7 +18,7 @@ import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
 // The inline outbox send runs after the response; allow headroom for the
 // request's own DB work plus the post-response SMTP send (Hobby max: 300s).
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function formatDateDMY(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");

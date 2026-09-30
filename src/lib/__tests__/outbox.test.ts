@@ -44,6 +44,7 @@ type FindArgs = {
     id?: { in?: string[] };
     status?: string | { in?: string[] };
     nextAttemptAt?: { lte?: Date };
+    updatedAt?: { lt?: Date };
     attempts?: { lt?: number };
   };
 };
@@ -77,6 +78,7 @@ function mockDb(initial: Partial<Row>[] = []) {
             (!w.id?.in || w.id.in.includes(r.id)) &&
             (!st || (typeof st === "string" ? r.status === st : st.in ? st.in.includes(r.status) : true)) &&
             (!w.nextAttemptAt?.lte || r.nextAttemptAt <= w.nextAttemptAt.lte) &&
+            (!w.updatedAt?.lt || r.updatedAt < w.updatedAt.lt) &&
             (w.attempts?.lt === undefined || r.attempts < w.attempts.lt)
         );
       },
@@ -423,6 +425,110 @@ describe("dedupe", () => {
       relatedId: "b9",
     });
     expect(out.id).toBe("winner");
+  });
+});
+
+describe("inline mode", () => {
+  it("makes a single attempt per row, no in-process retries", async () => {
+    const { db, rows } = mockDb([{ id: "o1" }]);
+    let calls = 0;
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      ids: ["o1"],
+      mode: "inline",
+      sleep: noSleep,
+      sender: async () => {
+        calls++;
+        return { sent: false as const, error: "stall" };
+      },
+    });
+    expect(calls).toBe(1);
+    expect(res).toEqual({ sent: 0, failed: 0, deferred: 1 });
+    expect(rows[0].attempts).toBe(1);
+  });
+
+  it("stops starting new rows once the 20s budget has elapsed", async () => {
+    const { db, rows } = mockDb([{ id: "o1" }, { id: "o2" }]);
+    let calls = 0;
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      // Invocation started 21s ago: budget already spent.
+      startTime: Date.now() - 21_000,
+      sender: async () => {
+        calls++;
+        return { sent: true, error: null };
+      },
+    });
+    expect(calls).toBe(0);
+    expect(res).toEqual({ sent: 0, failed: 0, deferred: 0 });
+    expect(rows.every((r) => r.status === "PENDING" && r.attempts === 0)).toBe(true);
+  });
+
+  it("sends an id set with up to 2 concurrent workers, nothing twice", async () => {
+    const { db, rows } = mockDb([{ id: "o1" }, { id: "o2" }, { id: "o3" }]);
+    let live = 0;
+    let maxLive = 0;
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      ids: ["o1", "o2", "o3"],
+      sender: async () => {
+        live++;
+        maxLive = Math.max(maxLive, live);
+        await new Promise((r) => setTimeout(r, 5));
+        live--;
+        return { sent: true, error: null };
+      },
+    });
+    expect(res).toEqual({ sent: 3, failed: 0, deferred: 0 });
+    expect(maxLive).toBe(2);
+    expect(rows.every((r) => r.status === "SENT" && r.attempts === 1)).toBe(true);
+  });
+});
+
+describe("death trail and reaper", () => {
+  it("reaper keeps the death lastError and adds its timestamp", async () => {
+    const future = new Date("2027-01-01T00:00:00Z");
+    const { db, rows } = mockDb([
+      {
+        id: "o1",
+        status: "SENDING",
+        attempts: 2,
+        updatedAt: new Date("2026-09-28T11:00:00Z"),
+        nextAttemptAt: future,
+        lastError: "sending started, no outcome recorded",
+      },
+    ]);
+    let sends = 0;
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      sender: async () => {
+        sends++;
+        return { sent: true, error: null };
+      },
+    });
+    // Not due (nextAttemptAt in the future) so it is only reaped, not sent.
+    expect(sends).toBe(0);
+    expect(res).toEqual({ sent: 0, failed: 0, deferred: 0 });
+    expect(rows[0].status).toBe("PENDING");
+    expect(rows[0].attempts).toBe(2);
+    expect(rows[0].lastError).toContain("reaped 2026-09-28T12:00:00.000Z");
+    expect(rows[0].lastError).toContain("sending started, no outcome recorded");
+  });
+
+  it("a killed send leaves attempts+1 and the trail (reaper input)", async () => {
+    const { db, rows } = mockDb([{}]);
+    // Simulate death between claim and outcome: claim, write trail, no outcome.
+    const due = await db.emailOutbox.findMany({ where: { status: "PENDING" } });
+    expect(due).toHaveLength(1);
+    await db.emailOutbox.updateMany({ where: { id: "o1", status: "PENDING" }, data: { status: "SENDING" } });
+    await db.emailOutbox.update({ where: { id: "o1" }, data: { attempts: 1, lastError: "sending started, no outcome recorded" } });
+    expect(rows[0].status).toBe("SENDING");
+    expect(rows[0].attempts).toBe(1);
+    expect(rows[0].lastError).toBe("sending started, no outcome recorded");
   });
 });
 

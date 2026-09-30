@@ -8,7 +8,7 @@ import { scheduleInlineOutboxSend } from "@/lib/email/outbox";
 
 // The inline outbox send runs after the response; allow headroom for the
 // request's own DB work plus the post-response SMTP sends (Hobby max: 300s).
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const session = await auth();

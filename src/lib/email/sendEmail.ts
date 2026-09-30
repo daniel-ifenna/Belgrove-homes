@@ -35,13 +35,14 @@ function getTransporter() {
     // Falls back to generic SMTP_HOST for local dev (MailHog)
     // Short timeouts are load-bearing on serverless: nodemailer's defaults
     // wait minutes on a stalled connection, but the function is killed at
-    // maxDuration (30s) — the outbox row would wedge in SENDING with an empty
+    // maxDuration — a wedged row would sit in SENDING with an empty
     // lastError. Failing fast turns a stall into a normal deferral (PENDING
-    // + lastError + backoff) that the next drain retries.
+    // + lastError + backoff) that the next drain retries. Kept small enough
+    // that even one full send fits the 20s per-invocation start budget.
     const timeouts = {
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 15_000,
+      connectionTimeout: 5_000,
+      greetingTimeout: 5_000,
+      socketTimeout: 10_000,
     };
     if (process.env.ZOHO_APP_PASSWORD) {
       transporter = nodemailer.createTransport({

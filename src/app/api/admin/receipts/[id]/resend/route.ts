@@ -7,7 +7,7 @@ import { enqueueEmail, scheduleInlineOutboxSend } from "@/lib/email/outbox";
 
 // The inline outbox send runs after the response; allow headroom for the
 // request's own DB work plus the post-response SMTP send (Hobby max: 300s).
-export const maxDuration = 30;
+export const maxDuration = 60;
 import { logServerError } from "@/lib/paymentConfirmation";
 import { receiptPdfAbsolute } from "@/lib/receipt-storage";
 import { promises as fsp } from "node:fs";
