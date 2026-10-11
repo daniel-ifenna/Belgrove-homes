@@ -17,6 +17,7 @@ export default async function AdminReceiptRefPage({ params }: { params: Promise<
   const { ref } = await params;
   const receipt = await prisma.receipt.findUnique({
     where: { ref },
+    omit: { pdfData: true },
     include: { payment: { select: { id: true, status: true, amount: true } } },
   });
 

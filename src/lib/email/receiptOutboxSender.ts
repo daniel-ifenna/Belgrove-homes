@@ -1,16 +1,20 @@
-import fs from "node:fs";
 import { prisma } from "@/lib/prisma";
 import { sendReceiptEmail } from "@/lib/receipts/emailReceipt";
-import { receiptPdfAbsolute, receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
 import { renderReceiptPdfBuffer } from "@/lib/receipt-render";
-import { logServerError } from "@/lib/paymentConfirmation";
 import type { EmailResult } from "./sendEmail";
 
 // Outbox sender for receipt emails (type "receipt", payload { receiptId }).
-// Loads the receipt, reuses the stored PDF (regenerating from the snapshot
-// when missing), sends, then records receipt emailStatus + a
-// ReceiptSendAttempt audit row (decision a: attempts stay the audit history).
-export async function sendReceiptForOutbox(receiptId: string, rowId?: string): Promise<EmailResult> {
+// The PDF is generated once at payment confirmation and stored on the
+// receipt row (pdfData). Sends reuse those stored bytes — they never
+// regenerate, so a resend attaches the identical document. Only an explicit
+// "Regenerate & resend" (payload { receiptId, regen: true }) rebuilds the
+// PDF from the snapshot and stores it first. No filesystem anywhere.
+export async function sendReceiptForOutbox(
+  receiptId: string,
+  rowId?: string,
+  opts?: { regen?: boolean; payload?: Record<string, unknown> }
+): Promise<EmailResult> {
+  const regen = opts?.regen === true || (opts?.payload as { regen?: unknown } | undefined)?.regen === true;
   const receipt = await prisma.receipt.findUnique({
     where: { id: receiptId },
     include: {
@@ -20,28 +24,16 @@ export async function sendReceiptForOutbox(receiptId: string, rowId?: string): P
   });
   if (!receipt) return { sent: false, error: "Receipt no longer exists" };
 
-  let pdfBuffer: Buffer | null = null;
-  const stored = receipt.pdfPath ? receiptPdfAbsolute(receipt.pdfPath) : null;
-  try {
-    if (stored && fs.existsSync(stored)) pdfBuffer = fs.readFileSync(stored);
-  } catch (e) {
-    logServerError(`receipt ${receipt.ref}: cached PDF read failed, regenerating`, e);
-  }
+  let pdfBuffer: Buffer | null = receipt.pdfData && !regen ? Buffer.from(receipt.pdfData) : null;
   if (!pdfBuffer) {
     try {
-      pdfBuffer = await renderReceiptPdfBuffer(receipt.id);
-      const pdfPath = receipt.pdfPath ?? receiptPdfPath(receipt.ref);
-      // Best-effort cache refresh (serverless /tmp — writable, ephemeral).
-      // A cache-write failure must never fail the email: the buffer above
-      // is already in memory and is what gets attached.
-      try {
-        await writeReceiptPdf(pdfPath, pdfBuffer);
-      } catch (e) {
-        logServerError(`receipt ${receipt.ref}: PDF cache write failed, sending anyway`, e);
-      }
+      // force:true rebuilds from the snapshot even when stored bytes exist
+      // (explicit Regenerate & resend only); plain resends never reach here
+      // with bytes present.
+      pdfBuffer = await renderReceiptPdfBuffer(receipt.id, regen ? { force: true } : undefined);
       await prisma.receipt.update({
         where: { id: receipt.id },
-        data: { pdfStatus: "GENERATED", pdfPath, lastError: null },
+        data: { pdfStatus: "GENERATED", pdfData: new Uint8Array(pdfBuffer), lastError: null },
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message.slice(0, 500) : "PDF regenerate failed";
@@ -56,6 +48,8 @@ export async function sendReceiptForOutbox(receiptId: string, rowId?: string): P
   let result: EmailResult;
   try {
     const plotQty = receipt.plotQuantity ?? null;
+    const confirmedTotal = (receipt.transaction?.payments ?? []).reduce((s, p) => s + p.amount, 0);
+    const isFinalPayment = !!receipt.transaction && confirmedTotal >= receipt.transaction.totalPayable;
     result = await sendReceiptEmail({
       to: receipt.recipientEmail,
       clientName: receipt.customerName,
@@ -63,6 +57,7 @@ export async function sendReceiptForOutbox(receiptId: string, rowId?: string): P
       receiptUrl: receipt.receiptUrl,
       pdfBuffer: pdfBuffer!,
       idempotencyKey: rowId,
+      isFinalPayment,
       plotsSummary:
         plotQty != null
           ? receipt.sqm

@@ -30,7 +30,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
       paymentPlan: true,
       installments: { orderBy: { installmentNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
-      receipts: { orderBy: { issuedAt: "desc" }, include: { sendAttempts: true } },
+      receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true }, include: { sendAttempts: true } },
       booking: { select: { id: true, ref: true } },
     },
   });
@@ -45,7 +45,18 @@ export default async function TransactionDetailPage({ params }: { params: Promis
   const progress = summary.progressPct.toFixed(2);
   const totalPaid = summary.confirmedPaid;
   const outstanding = summary.outstanding;
-  const nextDue = summary.installments.find((i) => i.status !== "Paid");
+  // Next-due from the shared helper (carry-forward aware), not a local find.
+  const nextDue = summary.nextInstallment;
+  const nextDueDays =
+    summary.daysOverdue !== null && summary.daysOverdue !== undefined
+      ? `Overdue by ${summary.daysOverdue} day${summary.daysOverdue === 1 ? "" : "s"}`
+      : summary.daysUntilDue === 0
+        ? "due today"
+        : summary.daysUntilDue === 1
+          ? "due tomorrow"
+          : summary.daysUntilDue !== null && summary.daysUntilDue !== undefined
+            ? `in ${summary.daysUntilDue} days`
+            : null;
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -100,7 +111,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
             <div className="mt-3 h-[6px] rounded-full bg-white/15 overflow-hidden">
               <div className="h-full rounded-full bg-[#D4B368]" style={{ width: `${progress}%` }} />
             </div>
-            <div className="mono text-[11px] text-white/70 mt-2">{progress}% paid{nextDue ? ` · Next due: ${nextDue.type === "INITIAL" ? "Initial" : `Month ${nextDue.installmentNumber}`} ${formatNaira(Math.max(0, nextDue.scheduledAmount - nextDue.confirmedPaid))} on ${formatDate(nextDue.dueDate)}` : " · Fully paid"}</div>
+            <div className="mono text-[11px] text-white/70 mt-2">{progress}% paid{nextDue ? ` · Next due: ${nextDue.type === "INITIAL" ? "Initial" : `Month ${nextDue.number}`} ${formatNaira(nextDue.amountDue)} on ${formatDate(nextDue.dueDate)}${nextDueDays ? ` · ${nextDueDays}` : ""}` : " · Fully paid"}</div>
           </div>
         </div>
 

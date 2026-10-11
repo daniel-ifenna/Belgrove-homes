@@ -15,23 +15,21 @@ describe("generateAndStoreReceiptPdf", () => {
       await sleep(300); // stands in for a multi-second PDF render
       return Buffer.from("pdf-bytes");
     });
-    const writeFile = vi.fn(async () => {});
 
     const result = await generateAndStoreReceiptPdf({
       db,
       receiptId: "rcpt-1",
       ref: "BEL-2026-00001",
-      pdfPath: "storage/receipts/BEL-2026-00001.pdf",
       render,
-      writeFile,
     });
 
-    expect(result).toEqual({ ok: true, error: null });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBe(null);
+    expect(result.bytes).toBeInstanceOf(Buffer);
     expect(render).toHaveBeenCalledOnce();
-    expect(writeFile).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledWith({
       where: { id: "rcpt-1" },
-      data: { pdfStatus: "GENERATED", lastError: null },
+      data: { pdfStatus: "GENERATED", lastError: null, pdfData: expect.any(Buffer) },
     });
   });
 
@@ -42,11 +40,9 @@ describe("generateAndStoreReceiptPdf", () => {
       db,
       receiptId: "rcpt-1",
       ref: "BEL-2026-00001",
-      pdfPath: "storage/receipts/BEL-2026-00001.pdf",
       render: async () => {
         throw new Error("font subset missing");
       },
-      writeFile: vi.fn(async () => {}),
     });
 
     expect(result.ok).toBe(false);
@@ -57,7 +53,7 @@ describe("generateAndStoreReceiptPdf", () => {
     });
   });
 
-  it("file-write failure is recorded, not thrown", async () => {
+  it("optional legacy store failure is recorded, not thrown", async () => {
     const { db, update } = mockDb();
 
     const result = await generateAndStoreReceiptPdf({
@@ -85,12 +81,12 @@ describe("generateAndStoreReceiptPdf", () => {
       db,
       receiptId: "rcpt-1",
       ref: "BEL-2026-00001",
-      pdfPath: "storage/receipts/BEL-2026-00001.pdf",
       render: async () => Buffer.from("pdf-bytes"),
-      writeFile: vi.fn(async () => {}),
     });
 
-    expect(result).toEqual({ ok: true, error: null });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBe(null);
+    expect(result.bytes).toBeInstanceOf(Buffer);
   });
 });
 
@@ -101,7 +97,8 @@ describe("deliverReceiptEmail", () => {
 
     const result = await deliverReceiptEmail({ db, receiptId: "rcpt-1", ref: "BEL-2026-00001", send });
 
-    expect(result).toEqual({ sent: true, error: null });
+    expect(result.sent).toBe(true);
+    expect(result.error).toBe(null);
     expect(update).toHaveBeenCalledWith({
       where: { id: "rcpt-1" },
       data: {
@@ -123,7 +120,8 @@ describe("deliverReceiptEmail", () => {
       ref: "BEL-2026-00001",
       send: async () => ({ sent: false as const, error: "SMTP 550 mailbox unavailable" }),
     });
-    expect(failed).toEqual({ sent: false, error: "SMTP 550 mailbox unavailable" });
+    expect(failed.sent).toBe(false);
+    expect(failed.error).toBe("SMTP 550 mailbox unavailable");
 
     const threw = await deliverReceiptEmail({
       db,
@@ -133,7 +131,8 @@ describe("deliverReceiptEmail", () => {
         throw new Error("socket hang up");
       },
     });
-    expect(threw).toEqual({ sent: false, error: "socket hang up" });
+    expect(threw.sent).toBe(false);
+    expect(threw.error).toBe("socket hang up");
 
     expect(update).toHaveBeenCalledWith({
       where: { id: "rcpt-1" },

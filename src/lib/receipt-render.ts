@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
+import { getReceiptAccessUrl } from "@/lib/app-url";
 
 // Single source of truth for rebuilding a receipt PDF from the stored
 // snapshot + linked payment/transaction. Used when the filesystem cache
@@ -9,7 +10,7 @@ import { generateQrDataUrl } from "@/lib/receipts/qr";
 //
 // Never throws for QR issues (QR is best-effort); throws only when the
 // receipt row (or its payment/transaction link) is missing or rendering fails.
-export async function renderReceiptPdfBuffer(receiptId: string): Promise<Buffer> {
+export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?: boolean }): Promise<Buffer> {
   const receipt = await prisma.receipt.findUnique({
     where: { id: receiptId },
     include: {
@@ -32,7 +33,23 @@ export async function renderReceiptPdfBuffer(receiptId: string): Promise<Buffer>
   if (!receipt) throw new Error("Receipt no longer exists");
   if (!receipt.payment) throw new Error("Receipt has no payment link");
 
-  const qr = await generateQrDataUrl(receipt.qrTargetUrl).catch(() => undefined);
+  // Stored bytes win: the PDF was rendered once at confirmation and every
+  // send/download reuses those exact bytes (resends never regenerate).
+  // Only rows predating stored bytes fall through to render-on-demand, and
+  // an explicit force (Regenerate & resend) always rebuilds from the snapshot.
+  if (receipt.pdfData && !opts?.force) return Buffer.from(receipt.pdfData);
+
+  // Canonical QR target: derived from this row's own accessToken, never from
+  // the stored qrTargetUrl (which can predate an APP_URL change and point at
+  // a stale dev origin or another deployment). One receipt → one token → one URL, so
+  // a QR can never open a different document. Pre-migration rows without a
+  // token fall back to the stored URL so they still render (verify script
+  // flags them as BROKEN for backfill).
+  const canonicalUrl = receipt.accessToken
+    ? getReceiptAccessUrl(receipt.accessToken)
+    : (receipt.qrTargetUrl || receipt.receiptUrl);
+  if (!canonicalUrl) throw new Error("Receipt has no QR target URL");
+  const qr = await generateQrDataUrl(canonicalUrl).catch(() => undefined);
   const previouslyPaid = receipt.transaction
     ? receipt.transaction.payments
         .filter(
@@ -67,7 +84,7 @@ export async function renderReceiptPdfBuffer(receiptId: string): Promise<Buffer>
     soldPrice: receipt.amountBeforeDiscount,
     discount: receipt.discount || undefined,
     payments: history,
-    receiptUrl: receipt.receiptUrl,
+    receiptUrl: canonicalUrl,
     qrDataUrl: qr,
     unitPrice: receipt.unitPrice ?? receipt.transaction?.unitPrice ?? undefined,
     plotQuantity: receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? undefined,

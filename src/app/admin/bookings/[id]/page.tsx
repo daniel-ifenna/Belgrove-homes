@@ -48,6 +48,7 @@ export default async function AdminBookingDetailPage({
     prisma.receipt.findFirst({
       where: { bookingId: id },
       orderBy: { issuedAt: "desc" },
+      omit: { pdfData: true },
       include: { sendAttempts: { orderBy: { attemptedAt: "desc" }, take: 3 } },
     }),
     prisma.transaction.findUnique({

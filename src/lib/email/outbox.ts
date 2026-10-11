@@ -53,6 +53,15 @@ export type EnqueueInput = {
   dedupeKey?: string;
   // Explicit user actions (e.g. receipt resend) bypass dedupe entirely.
   force?: boolean;
+  // Priority override. Defaults via priorityForType below (receipts and
+  // payment confirmations first). Higher sends first.
+  priority?: number;
+};
+
+export type PendingOutboxFinder = {
+  emailOutbox: {
+    findFirst(args: unknown): Promise<{ id: string } | null>;
+  };
 };
 
 export type OutboxWriter = {
@@ -61,6 +70,22 @@ export type OutboxWriter = {
     create(args: unknown): Promise<{ id: string }>;
   };
 };
+
+// Cooldown for repeat resends: if a receipt already has a queued or
+// in-flight outbox row, reuse it instead of piling on another one.
+// Impatient double-clicks (the source of 15-attempt pile-ups) collapse to
+// the single in-flight send; a genuinely new resend is still possible once
+// nothing is pending. Reusing a SENDING row is safe: processRow only
+// proceeds on an atomic PENDING→SENDING claim, so a live send is never
+// doubled — and a dead worker's row is reaped back to PENDING anyway.
+export async function findPendingReceiptOutboxRow(
+  db: PendingOutboxFinder,
+  receiptId: string
+): Promise<{ id: string } | null> {
+  return db.emailOutbox.findFirst({
+    where: { type: "receipt", relatedId: receiptId, status: { in: ["PENDING", "SENDING"] } },
+  });
+}
 
 // Pure: deterministic dedupe key for an enqueue. Recipients are lowercased
 // and sorted so ["a","B"] and ["B","a"] key identically.
@@ -71,6 +96,43 @@ const BACKOFF_MINUTES = [0.5, 2, 8, 32, 128];
 export function computeBackoffMinutes(attempts: number): number {
   const idx = Math.min(Math.max(1, attempts), BACKOFF_MINUTES.length) - 1;
   return BACKOFF_MINUTES[idx];
+}
+
+// Priority: receipts and payment confirmations jump the queue ahead of
+// reminders and bulk mail. Stored on the row so ordering survives restarts.
+export const PRIORITY_URGENT = 10;
+export const PRIORITY_NORMAL = 0;
+export function priorityForType(type: OutboxType): number {
+  return type === "receipt" || type === "transaction_confirmation" ? PRIORITY_URGENT : PRIORITY_NORMAL;
+}
+
+// Exponential backoff with jitter: base minutes from the table, ±20%
+// random spread so a fleet of deferred rows never thundering-herds the
+// provider on the same second. Pure except Math.random.
+export function computeNextAttemptAt(now: Date, attempts: number): Date {
+  const base = computeBackoffMinutes(attempts);
+  const jitter = base * (0.8 + Math.random() * 0.4);
+  return new Date(now.getTime() + jitter * 60_000);
+}
+
+// Permanent failures never succeed on retry: missing files (legacy ENOENT
+// from the old disk cache), invalid recipients, and provider 4xx
+// validation. The outbox fails these fast instead of burning 5 attempts.
+export function isPermanentSendError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  if (m.includes("enoent") || m.includes("no such file")) return true;
+  if (m.includes("invalid recipient") || m.includes("no recipients")) return true;
+  // Provider 4xx validation never succeeds on retry — except 429 (rate
+  // limit) and 408 (timeout), which are transient by definition. A bare
+  // "resend error 4" prefix match would wrongly fail 429s fast.
+  const code = m.match(/resend error (\d{3})/)?.[1];
+  if (code) {
+    const n = Number(code);
+    if (n === 429 || n === 408) return false;
+    return n >= 400 && n < 500;
+  }
+  return false;
 }
 
 export function computeDedupeKey(input: {
@@ -112,6 +174,7 @@ export async function enqueueEmail(db: OutboxWriter, input: EnqueueInput): Promi
         relatedType: input.relatedType ?? null,
         relatedId: input.relatedId ?? null,
         dedupeKey,
+        priority: input.priority ?? priorityForType(input.type),
       },
     });
   } catch (e) {
@@ -140,6 +203,10 @@ type OutboxRow = {
   attempts: number;
   status: string;
   lastError: string | null;
+  priority?: number;
+  createdAt?: Date;
+  startedAt?: Date | null;
+  sentAt?: Date | null;
 };
 
 // Hard cap for starting new sends in one invocation: never start a send
@@ -212,7 +279,10 @@ async function defaultSender(
       return sendTransactionConfirmation(to as string, asParams(p.params), key);
     case "receipt": {
       const { sendReceiptForOutbox } = await import("./receiptOutboxSender");
-      return sendReceiptForOutbox(p.receiptId as string, rowId);
+      // Explicit "Regenerate & resend" rides the payload; ordinary sends
+      // reuse the stored bytes and never rebuild the PDF.
+      const regen = (p as { regen?: unknown }).regen === true;
+      return sendReceiptForOutbox(p.receiptId as string, rowId, regen ? { regen: true } : undefined);
     }
     default:
       return { sent: false, error: `Unknown outbox type: ${type}` };
@@ -285,16 +355,50 @@ export async function processOutbox(
     }
   }
 
-  const due = await db.emailOutbox.findMany({
-    where: {
-      ...(onlyIds ? { id: { in: onlyIds } } : {}),
-      status: "PENDING",
-      nextAttemptAt: { lte: now },
-      attempts: { lt: MAX_ATTEMPTS },
-    },
-    orderBy: { createdAt: "asc" },
-    take: batchSize,
-  });
+  // Priority first (receipts 10 before bulk 0), then oldest first. The
+  // (status, nextAttemptAt) index serves this scan; claims below use
+  // SELECT … FOR UPDATE SKIP LOCKED on the real DB so concurrent workers
+  // never block each other.
+  let due: OutboxRow[];
+  const rawDb = db as unknown as { $queryRaw?: unknown };
+  if (!onlyIds && typeof rawDb.$queryRaw === "function") {
+    try {
+      const ids = (await (prisma.$queryRaw as unknown as (q: TemplateStringsArray, ...v: unknown[]) => Promise<{ id: string }[]>)
+        `SELECT id FROM "EmailOutbox" WHERE status = 'PENDING' AND "nextAttemptAt" <= ${now} AND attempts < ${MAX_ATTEMPTS} ORDER BY priority DESC, "createdAt" ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`) as { id: string }[];
+      const idSet = new Set(ids.map((r) => r.id));
+      const fetched = await db.emailOutbox.findMany({
+        where: { id: { in: [...idSet] }, status: "PENDING", nextAttemptAt: { lte: now }, attempts: { lt: MAX_ATTEMPTS } },
+        orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+        take: batchSize,
+      });
+      due = fetched.sort((a, b) => {
+        const pa = (a as unknown as { priority?: number }).priority ?? 0;
+        const pb = (b as unknown as { priority?: number }).priority ?? 0;
+        return pb - pa;
+      });
+    } catch {
+      due = await db.emailOutbox.findMany({
+        where: {
+          status: "PENDING",
+          nextAttemptAt: { lte: now },
+          attempts: { lt: MAX_ATTEMPTS },
+        },
+        orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+        take: batchSize,
+      });
+    }
+  } else {
+    due = await db.emailOutbox.findMany({
+      where: {
+        ...(onlyIds ? { id: { in: onlyIds } } : {}),
+        status: "PENDING",
+        nextAttemptAt: { lte: now },
+        attempts: { lt: MAX_ATTEMPTS },
+      },
+      orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+      take: batchSize,
+    });
+  }
 
   async function processRow(row: OutboxRow): Promise<void> {
     // Atomic claim (PENDING -> SENDING guarded on still-PENDING): a single
@@ -306,6 +410,17 @@ export async function processOutbox(
     });
     if (claimed.count === 0) return;
     const attempts = row.attempts + 1;
+    // startedAt is set once (first send start) and never overwritten, so
+    // queue wait (startedAt - createdAt) and send duration (sentAt -
+    // startedAt) stay truthful across retries.
+    try {
+      await db.emailOutbox.updateMany({
+        where: { id: row.id, startedAt: null },
+        data: { startedAt: now },
+      });
+    } catch (e) {
+      logServerError(`outbox ${row.id}: failed to write startedAt`, e);
+    }
     // Trail on death: attempts increment and lastError are written NOW, so a
     // function killed mid-send (past maxDuration, frozen worker) still leaves
     // evidence. Cleared on success, overwritten by the real error on failure.
@@ -340,6 +455,7 @@ export async function processOutbox(
       if (outcome.sent || outcome.permanent || rapid >= rapidRetries) break;
       await sleep(INLINE_RETRY_WAITS_MS[rapid]);
     }
+    const permanent = outcome.permanent || isPermanentSendError(outcome.error);
     if (outcome.sent) {
       result.sent++;
       await db.emailOutbox.update({
@@ -353,7 +469,7 @@ export async function processOutbox(
           providerMessageId: outcome.providerMessageId ?? null,
         },
       });
-    } else if (outcome.permanent || attempts >= MAX_ATTEMPTS) {
+    } else if (permanent || attempts >= MAX_ATTEMPTS) {
       result.failed++;
       await db.emailOutbox.update({
         where: { id: row.id },
@@ -366,7 +482,7 @@ export async function processOutbox(
         data: {
           status: "PENDING",
           attempts,
-          nextAttemptAt: new Date(now.getTime() + computeBackoffMinutes(attempts) * 60_000),
+          nextAttemptAt: computeNextAttemptAt(now, attempts),
           lastError: (outcome.error ?? "failed").slice(0, 1000),
         },
       });

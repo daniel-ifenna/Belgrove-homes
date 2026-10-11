@@ -71,6 +71,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
       orderBy: { issuedAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
+      omit: { pdfData: true },
       include: { booking: { select: { id: true, ref: true, status: true } }, transaction: { select: { id: true, ref: true } }, sendAttempts: { orderBy: { attemptedAt: "desc" }, take: 1 } },
     }),
     prisma.receipt.count({ where }),

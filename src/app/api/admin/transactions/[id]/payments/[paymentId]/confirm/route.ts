@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { generateUniqueReceiptRef } from "@/lib/ref";
 import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/lib/app-url";
-import { receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
 import {
@@ -71,7 +70,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   }
   const accessToken = generateReceiptAccessToken();
   const receiptUrl = getReceiptAccessUrl(accessToken);
-  const pdfPath = receiptPdfPath(receiptRef);
 
   // DB-ONLY transaction: claim payment → installment → totals → receipt row
   // (delivery PENDING). No PDF, no fs, no email in here.
@@ -88,7 +86,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           receiptRef,
           receiptUrl,
           qrTargetUrl: receiptUrl,
-          pdfPath,
+          pdfPath: null,
           accessToken,
         }),
       { maxWait: 5000, timeout: 10000 }
@@ -114,11 +112,13 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return undefined;
   });
 
+  // Generate the PDF once here and store the bytes on the receipt row.
+  // Sends and downloads reuse these stored bytes; only an explicit
+  // "Regenerate & resend" rebuilds them.
   const pdfOutcome = await generateAndStoreReceiptPdf({
     db: prisma,
     receiptId: confirmed.receiptId,
     ref: receiptRef,
-    pdfPath,
     render: () =>
       generateReceiptPdf({
         ref: receiptRef,
@@ -157,7 +157,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
             : `Month ${confirmed.installment.installmentNumber} payment`
           : undefined,
       }),
-    writeFile: (filePath, buf) => writeReceiptPdf(filePath, buf),
   });
 
   if (!pdfOutcome.ok) {

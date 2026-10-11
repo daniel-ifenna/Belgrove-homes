@@ -37,6 +37,17 @@ export function htmlToText(html: string): string {
 
 export const RESEND_TIMEOUT_MS = 10_000;
 
+// Explicit, bounded, and overridable without a redeploy of the logic:
+// RESEND_TIMEOUT_MS (ms) clamps to 5s..60s so a stuck provider call can
+// neither hang a serverless function past maxDuration nor abort
+// prematurely on a slow-but-healthy API. Timeouts stay retryable
+// (never `permanent`) — the outbox backoff handles them.
+export function resendTimeoutMs(): number {
+  const raw = Number(process.env.RESEND_TIMEOUT_MS ?? RESEND_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return RESEND_TIMEOUT_MS;
+  return Math.min(60_000, Math.max(5_000, Math.floor(raw)));
+}
+
 export async function sendViaResend(opts: {
   to: string | string[];
   subject: string;
@@ -58,8 +69,10 @@ export async function sendViaResend(opts: {
   if (recipients.length === 0) {
     return { sent: false, error: "No recipients" };
   }
+  const timeoutMs = opts.timeoutMs ?? resendTimeoutMs();
+  const startedAt = Date.now();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? RESEND_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await (opts.fetchImpl ?? fetch)("https://api.resend.com/emails", {
       method: "POST",
@@ -108,7 +121,10 @@ export async function sendViaResend(opts: {
     return { sent: false, error, permanent: true };
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";
-    return { sent: false, error: aborted ? "Resend request timed out" : e instanceof Error ? e.message : "Unknown Resend error" };
+    const elapsed = Date.now() - startedAt;
+    // Name the elapsed time: "timed out after 10012ms" tells a slow API
+    // apart from an instant refusal at a glance in Send History.
+    return { sent: false, error: aborted ? `Resend request timed out after ${elapsed}ms` : e instanceof Error ? e.message : "Unknown Resend error" };
   } finally {
     clearTimeout(timeout);
   }

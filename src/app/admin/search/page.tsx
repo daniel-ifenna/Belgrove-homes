@@ -111,6 +111,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           },
           take: 8,
           orderBy: { issuedAt: "desc" },
+          omit: { pdfData: true },
         }),
         prisma.customer.findMany({
           where: {

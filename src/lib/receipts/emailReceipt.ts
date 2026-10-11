@@ -45,6 +45,9 @@ export async function sendReceiptEmail(opts: {
   pdfBuffer: Buffer;
   idempotencyKey?: string;
   plotsSummary?: string | null;
+  // Set when this payment clears the transaction: the email doubles as the
+  // completion notice (no separate completion email exists).
+  isFinalPayment?: boolean;
 }) {
   // Use system email template styling — same as bookingReceivedTemplate etc.
   // Prevent mail clients (iOS data detectors, Gmail, Outlook) from auto-linking
@@ -56,6 +59,7 @@ export async function sendReceiptEmail(opts: {
       <p>Your receipt for <strong>${opts.ref}</strong> is attached as PDF.${opts.plotsSummary ? ` (${opts.plotsSummary})` : ""} You can also view or re-download it anytime at:</p>
       <p style="overflow-wrap:anywhere;"><a href="${opts.receiptUrl}" style="color:#1E3A2E; font-weight:bold; overflow-wrap:anywhere; word-break:normal;">${opts.receiptUrl}</a></p>
       <p>Scan the QR code on the receipt to verify it instantly. It points to the same link above.</p>
+      ${opts.isFinalPayment ? `<p><strong>This was your final payment — your transaction is now fully paid.</strong> No further payments are due. Our team will be in touch about allocation and documentation.</p>` : ""}
       <p>Thank you. It is a pleasure doing business with you.</p>
       <div style="margin-top:20px; padding:12px 14px; background:#fdfbf7; border:1px solid #efe8dc; font-size:12px; color:#6b6055; line-height:1.5;">
         <span style="color:#6b6055; text-decoration:none;">Belgrove Homes and Properties Limited<br/>

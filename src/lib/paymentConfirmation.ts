@@ -96,8 +96,9 @@ export function toUserFacingError(error: unknown, action: "confirm" | "record" |
   }
   if (error instanceof OverScheduleError) {
     return (
-      `This would exceed the installment's scheduled amount of ₦${error.scheduledAmount.toLocaleString("en-NG")} ` +
-      `(₦${error.paidAmount.toLocaleString("en-NG")} already recorded). Record one installment at a time.`
+      `This would exceed the remaining scheduled amount of ₦${error.scheduledAmount.toLocaleString("en-NG")} ` +
+      `(₦${error.paidAmount.toLocaleString("en-NG")} already recorded on the schedule from this installment onward). ` +
+      `Split the payment or record a smaller amount.`
     );
   }
   if (error instanceof PaymentCorruptStateError) {
@@ -128,7 +129,10 @@ export type ConfirmDbInput = {
   receiptRef: string; // pre-generated BEFORE the transaction (DB uniqueness rechecked by constraint)
   receiptUrl: string; // tokenized client URL ({APP_URL}/r/{accessToken})
   qrTargetUrl: string;
-  pdfPath: string; // private storage path (storage/receipts/{ref}.pdf), never public/
+  // Legacy disk path (pre-pdfData rows). New rows store the PDF bytes on
+  // the receipt row itself (pdfData) — no filesystem. Optional so request
+  // paths never need receipt-storage.
+  pdfPath?: string | null;
   accessToken: string; // random 32-byte URL-safe token backing receiptUrl
 };
 
@@ -202,23 +206,49 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   }
 
   if (installment) {
-    // Re-read inside the tx, then enforce the scheduled cap.
-    const fresh = await tx.installment.findUnique({ where: { id: installment.id } });
-    if (!fresh) throw new PaymentCorruptStateError("Installment row disappeared mid-transaction");
-    const already = fresh.paidAmount ?? 0;
-    if (already + payment.amount > fresh.scheduledAmount) {
-      throw new OverScheduleError(already, payment.amount, fresh.scheduledAmount);
+    // Waterfall allocation: confirmed money fills the targeted installment,
+    // and any excess rolls forward into successive installments (never
+    // backward). Validation runs as a read-only first pass so an
+    // over-schedule payment throws before anything is written — the whole
+    // unit rolls back either way in production.
+    const ordered = [...transaction.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    const startIdx = ordered.findIndex((i) => i.id === installment.id);
+    const suffix = startIdx >= 0 ? ordered.slice(startIdx) : ordered;
+    const freshRows = [];
+    for (const inst of suffix) {
+      const fresh = await tx.installment.findUnique({ where: { id: inst.id } });
+      if (!fresh) throw new PaymentCorruptStateError("Installment row disappeared mid-transaction");
+      freshRows.push(fresh);
     }
-    const newPaid = already + payment.amount;
-    await tx.installment.update({
-      where: { id: fresh.id },
-      data: {
-        paidAmount: newPaid,
-        status: deriveInstallmentStatus(newPaid, fresh.scheduledAmount, new Date(fresh.dueDate), now),
-        updatedAt: now,
-      },
-    });
-    installment = { ...fresh, paidAmount: newPaid };
+    const plan: { id: string; newPaid: number; scheduledAmount: number; dueDate: Date }[] = [];
+    let remaining = payment.amount;
+    for (const fresh of freshRows) {
+      if (remaining <= 0) break;
+      const capacity = fresh.scheduledAmount - (fresh.paidAmount ?? 0);
+      if (capacity <= 0) continue;
+      const alloc = Math.min(remaining, capacity);
+      plan.push({ id: fresh.id, newPaid: (fresh.paidAmount ?? 0) + alloc, scheduledAmount: fresh.scheduledAmount, dueDate: new Date(fresh.dueDate) });
+      remaining -= alloc;
+    }
+    if (remaining > 0) {
+      // Excess past the final installment is still rejected (nothing was
+      // written yet, so the unit aborts cleanly).
+      throw new OverScheduleError(
+        freshRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
+        payment.amount,
+        freshRows.reduce((s, r) => s + r.scheduledAmount, 0)
+      );
+    }
+    for (const step of plan) {
+      await tx.installment.update({
+        where: { id: step.id },
+        data: {
+          paidAmount: step.newPaid,
+          status: deriveInstallmentStatus(step.newPaid, step.scheduledAmount, step.dueDate, now),
+          updatedAt: now,
+        },
+      });
+    }
   }
 
   // Totals derive from CONFIRMED payments only — recomputed, never incremented.
@@ -284,7 +314,7 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       emailStatus: "PENDING",
       receiptUrl: input.receiptUrl,
       qrTargetUrl: input.qrTargetUrl,
-      pdfPath: input.pdfPath,
+      pdfPath: input.pdfPath ?? null,
       accessToken: input.accessToken,
       createdById: input.confirmedById ?? undefined,
     },
@@ -384,22 +414,39 @@ export async function reverseConfirmedPaymentDbUnit(
   });
   if (!transaction) throw new PaymentCorruptStateError("Transaction row disappeared mid-transaction");
 
-  if (payment.installmentId) {
-    const installment = await tx.installment.findUnique({ where: { id: payment.installmentId } });
-    if (installment) {
-      const newPaid = (installment.paidAmount ?? 0) - payment.amount;
-      if (newPaid < 0) {
-        throw new PaymentCorruptStateError("Reversal would drive the installment balance negative");
-      }
-      await tx.installment.update({
-        where: { id: installment.id },
-        data: {
-          paidAmount: newPaid,
-          status: deriveInstallmentStatus(newPaid, installment.scheduledAmount, new Date(installment.dueDate), now),
-          updatedAt: now,
-        },
-      });
-    }
+  // Money is fungible across the schedule: remove this payment's amount
+  // starting from its targeted installment and rolling forward (the mirror
+  // of waterfall allocation), wrapping to the earliest rows if needed so
+  // interleaved confirms/reversals always remove exactly this amount.
+  // Per-installment attribution can drift in exotic interleave orders, but
+  // totals and derived statuses stay exact — and paidAmount never goes
+  // negative (a shortfall throws loudly instead of corrupting the books).
+  const ordered = [...(transaction.installments ?? [])].sort((a, b) => a.installmentNumber - b.installmentNumber);
+  const startIdx = Math.max(
+    0,
+    ordered.findIndex((i) => i.id === payment.installmentId)
+  );
+  const rotation = [...ordered.slice(startIdx), ...ordered.slice(0, startIdx)];
+  let toRemove = payment.amount;
+  for (const inst of rotation) {
+    if (toRemove <= 0) break;
+    const fresh = await tx.installment.findUnique({ where: { id: inst.id } });
+    if (!fresh) throw new PaymentCorruptStateError("Installment row disappeared mid-transaction");
+    const take = Math.min(toRemove, fresh.paidAmount ?? 0);
+    if (take <= 0) continue;
+    const newPaid = (fresh.paidAmount ?? 0) - take;
+    await tx.installment.update({
+      where: { id: fresh.id },
+      data: {
+        paidAmount: newPaid,
+        status: deriveInstallmentStatus(newPaid, fresh.scheduledAmount, new Date(fresh.dueDate), now),
+        updatedAt: now,
+      },
+    });
+    toRemove -= take;
+  }
+  if (toRemove > 0) {
+    throw new PaymentCorruptStateError("Reversal would drive installment balances negative");
   }
 
   const confirmed = await tx.payment.findMany({
@@ -413,8 +460,9 @@ export async function reverseConfirmedPaymentDbUnit(
     data: {
       totalPaid: newTotalPaid,
       outstandingBalance: newOutstanding,
-      // A paid-in-full transaction that loses a payment becomes active again.
-      status: newOutstanding === 0 ? "PAID_IN_FULL" : "ACTIVE",
+      // A paid-in-full transaction that loses a payment becomes active
+      // again. DRAFT is preserved — nothing here promotes a draft.
+      status: newOutstanding === 0 ? "PAID_IN_FULL" : transaction.status === "DRAFT" ? "DRAFT" : "ACTIVE",
       updatedAt: now,
     },
   });

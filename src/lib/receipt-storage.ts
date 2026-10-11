@@ -2,17 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Private receipt PDF storage. Never under public/ — PDFs are served only
-// through the admin PDF route (session) or the token route (/r/{token}).
+// Private receipt PDF storage helpers — LOCAL DEV AND ONE-OFF SCRIPTS ONLY
+// (scripts/regenerate-receipts.ts, scripts/migrate-receipt-storage.ts).
 //
-// Serverless note: Vercel functions have a read-only filesystem except
-// os.tmpdir() (/tmp). Writing to "storage/receipts" resolves to
-// /var/task/storage/receipts and crashes with
-// ENOENT: no such file or directory, mkdir '/var/task/storage/receipts'.
-// So on Vercel / production the cache lives under /tmp (ephemeral), and
-// every reader treats the file as a best-effort cache — the durable truth
-// is the receipt row, and PDFs are regenerated from the snapshot when the
-// cached file is missing. Override with RECEIPT_STORAGE_DIR when needed.
+// Server request paths (confirm, resend, outbox sender, PDF downloads)
+// NEVER touch the filesystem: they render the PDF in memory from the
+// receipt snapshot on every send/download. The receipt row is the durable
+// truth. This module survives only so dev scripts keep working; nothing in
+// src/app or the email pipeline may import writeReceiptPdf.
 export function getReceiptStorageDir(): string {
   const override = process.env.RECEIPT_STORAGE_DIR?.trim();
   if (override) return override;

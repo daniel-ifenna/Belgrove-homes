@@ -366,13 +366,17 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.setFontSize(6);
   const disclaimer =
     "This receipt acknowledges payment as received and reconciled by Belgrove Homes accounts. Property allocation is subject to completion of the agreed payment plan and verification of funds. Keep this receipt safely; present it for allocation and documentation.";
-  const discLines = doc.splitTextToSize(disclaimer, W - margin * 2 - 30);
+  const qrSize = 24;
+  const discLines = doc.splitTextToSize(disclaimer, W - margin * 2 - (qrSize + 8));
   doc.text(discLines, margin, y);
   if (data.qrDataUrl) {
     try {
-      const qrSize = 22;
       const qrX = W - margin - qrSize;
       const qrY = y - 6;
+      // Solid white backing so the QR quiet zone survives printing on the
+      // cream footer area and scanners see full contrast.
+      doc.setFillColor(255, 255, 255);
+      doc.rect(qrX - 1.5, qrY - 1.5, qrSize + 3, qrSize + 3, "F");
       doc.addImage(data.qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize);
       doc.setFontSize(5);
       doc.setTextColor(107, 102, 86);

@@ -8,7 +8,49 @@ import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import AdminListCard from "@/components/admin/AdminListCard";
 import { getTransactionOverviews } from "@/lib/finance";
+import type { TransactionOverview } from "@/lib/finance";
+import { formatDate } from "@/lib/booking-ui";
 export const dynamic = "force-dynamic";
+
+// Colour rules (single place for this list): a paid installment never leaves
+// a red figure. Red is reserved for genuinely overdue dues; amber means due
+// within 7 days; anything on schedule is neutral; zero is green.
+function outstandingClass(ov: TransactionOverview): string {
+  if (ov.isFullyPaid) return "text-[#065F46]";
+  if (ov.isOverdue) return "text-[#9F1239]";
+  if (ov.daysUntilDue !== null && ov.daysUntilDue <= 7) return "text-[#92400E]";
+  return "text-[var(--ops-text)]";
+}
+
+function daysPhrase(ov: TransactionOverview): string | null {
+  if (ov.daysOverdue !== null && ov.daysOverdue !== undefined) {
+    return `Overdue by ${ov.daysOverdue} day${ov.daysOverdue === 1 ? "" : "s"}`;
+  }
+  if (ov.daysUntilDue === null || ov.daysUntilDue === undefined) return null;
+  if (ov.daysUntilDue === 0) return "due today";
+  if (ov.daysUntilDue === 1) return "due tomorrow";
+  return `in ${ov.daysUntilDue} days`;
+}
+
+// "Next payment due" line beneath Outstanding: amount + due date from the
+// shared helper (first unpaid installment after carry-forward), or
+// "Fully paid" once cleared. Outright plans have a single installment, so
+// this degrades to the full-balance due date / "Paid" naturally.
+function nextDueLine(ov: TransactionOverview) {
+  if (ov.isFullyPaid || !ov.nextInstallment) {
+    return <div className="mono text-[10px] text-[#065F46]">Fully paid</div>;
+  }
+  const n = ov.nextInstallment;
+  const head = `${formatNaira(n.amountDue)} due ${formatDate(n.dueDate)}`;
+  const tail = daysPhrase(ov);
+  if (ov.isOverdue) {
+    return <div className="mono text-[10px] text-[#9F1239]">{head}{tail ? ` · ${tail}` : ""}</div>;
+  }
+  if (ov.daysUntilDue !== null && ov.daysUntilDue <= 7) {
+    return <div className="mono text-[10px] text-[#92400E]">{head}{tail ? ` · ${tail}` : ""}</div>;
+  }
+  return <div className="mono text-[10px] text-[var(--ops-muted)]">{head}{tail ? ` · ${tail}` : ""}</div>;
+}
 
 type SearchParams = { q?: string; status?: string; plan?: string; page?: string; showTest?: string };
 
@@ -138,7 +180,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 {transactions.map((t) => {
                   const ov = overviews.get(t.id);
                   if (!ov) return null;
-                  const overdue = ov.overdueCount;
                   const outstanding = ov.outstanding;
                   return (
                     <tr key={t.id} className="hover:bg-[var(--ops-bg)]/50">
@@ -157,8 +198,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                       <td className="px-4 py-3 mono text-[11px]">{t.paymentPlan.name}</td>
                       <td className="px-4 py-3 mono text-[12px] font-medium price">{formatNaira(t.totalPayable)}</td>
                       <td className="px-4 py-3">
-                        <div className={`mono text-[12px] font-bold price ${outstanding === 0 ? "text-[#065F46]" : overdue > 0 ? "text-[#9F1239]" : "text-[#92400E]"}`}>{formatNaira(outstanding)}</div>
-                        {overdue > 0 && <div className="mono text-[10px] text-[#9F1239]">{overdue} overdue</div>}
+                        <div className={`mono text-[12px] font-bold price ${outstandingClass(ov)}`}>{formatNaira(outstanding)}</div>
+                        {nextDueLine(ov)}
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={t.status} />
@@ -196,7 +237,15 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 badges={<StatusBadge status={t.status} />}
                 rows={[
                   { label: "Property", value: t.estate },
-                  { label: "Outstanding", value: <span className="mono text-[12px] font-bold price">{formatNaira(ov.outstanding)}</span> },
+                  {
+                    label: "Outstanding",
+                    value: (
+                      <span>
+                        <span className={`mono text-[12px] font-bold price ${outstandingClass(ov)}`}>{formatNaira(ov.outstanding)}</span>
+                        {nextDueLine(ov)}
+                      </span>
+                    ),
+                  },
                   { label: "Total", value: <span className="mono text-[11px] price">{formatNaira(t.totalPayable)}</span> },
                   { label: "Plan", value: <span className="mono text-[11px]">{t.paymentPlan.name}</span> },
                 ]}

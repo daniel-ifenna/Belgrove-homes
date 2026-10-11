@@ -7,6 +7,11 @@ import { isTokenUsable } from "@/lib/receipt-access";
 
 export const dynamic = "force-dynamic";
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 function formatDateDMY(d: Date): string {
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -20,6 +25,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
   const { token } = await params;
   const receipt = await prisma.receipt.findUnique({
     where: { accessToken: token },
+    omit: { pdfData: true },
     include: {
       payment: { include: { installment: { select: { type: true, installmentNumber: true } } } },
       transaction: {
@@ -62,38 +68,38 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
   const plotQty = receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? null;
 
   return (
-    <div className="min-h-screen bg-[#F7F2E7] py-8 px-6">
-      <div className="max-w-[800px] mx-auto bg-white border border-[#E4DCC7] rounded-xl overflow-hidden shadow-[0_8px_24px_rgba(22,40,31,0.08)]">
-        <div className="px-8 pt-8 pb-6 border-b border-[#E4DCC7] flex justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <img src="/belgrove-icon.png" alt="Belgrove Homes" width={40} height={32} />
-            <div>
-              <div className="fraunces text-[13px] font-bold tracking-wide text-[#16281F]">BELGROVE HOMES AND PROPERTIES LIMITED</div>
-              <div className="mono text-[11px] text-[#6B6656] mt-1">Suite 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory</div>
+    <div className="min-h-screen bg-[#F7F2E7] py-6 sm:py-8 px-3 sm:px-6">
+      <div className="w-full max-w-[800px] mx-auto bg-white border border-[#E4DCC7] rounded-xl overflow-hidden shadow-[0_8px_24px_rgba(22,40,31,0.08)]">
+        <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-6 border-b border-[#E4DCC7] flex flex-col sm:flex-row sm:justify-between gap-4 sm:gap-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/belgrove-icon.png" alt="Belgrove Homes" width={40} height={32} className="shrink-0" />
+            <div className="min-w-0">
+              <div className="fraunces text-[13px] font-bold tracking-wide text-[#16281F] break-words">BELGROVE HOMES AND PROPERTIES LIMITED</div>
+              <div className="mono text-[11px] text-[#6B6656] mt-1 break-words">Suite 25, Lebrex Plaza, 47 Ajose Adeogun St, Utako, Abuja 900108, Federal Capital Territory</div>
             </div>
           </div>
-          <div className="mono text-[11px] text-[#16281F] text-right leading-[1.6]">
+          <div className="mono text-[11px] text-[#16281F] text-left sm:text-right leading-[1.6] shrink-0 break-words">
             <div>www.belgrovehomes.com</div>
-            <div>info@belgrovehomes.com</div>
+            <div className="break-all">info@belgrovehomes.com</div>
             <div>+234 8103760063</div>
           </div>
         </div>
 
-        <div className="px-8 py-6">
-          <div className="flex justify-between items-start pt-2">
-            <h1 className="fraunces text-[28px] font-bold text-[#16281F]">RECEIPT</h1>
-            <div className="text-right mono text-[11px] text-[#6B6656]">
-              <div>RECEIPT: {receipt.ref}</div>
+        <div className="px-4 sm:px-8 py-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pt-2">
+            <h1 className="fraunces text-[24px] sm:text-[28px] font-bold text-[#16281F]">RECEIPT</h1>
+            <div className="text-left sm:text-right mono text-[11px] text-[#6B6656] break-words">
+              <div className="break-all">RECEIPT: {receipt.ref}</div>
               <div>ISSUED DATE: {formatDateDMY(receipt.issuedAt)}</div>
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-[1.4fr_0.9fr] gap-6">
-            <div>
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-[1.4fr_0.9fr] gap-4 sm:gap-6">
+            <div className="min-w-0">
               <div className="mono text-[10px] tracking-[0.12em] uppercase text-[#8B6B4E]">Issued to</div>
-              <div className="public text-[14px] font-semibold text-[#16281F] mt-2">{formatDisplayName(receipt.customerName)}</div>
-              {receipt.customerPhone && <div className="mono text-[12px] text-[#6B6656] mt-2">{receipt.customerPhone}</div>}
-              <div className="mono text-[12px] text-[#6B6656]">{receipt.customerEmail}</div>
+              <div className="public text-[14px] font-semibold text-[#16281F] mt-2 break-words">{formatDisplayName(receipt.customerName)}</div>
+              {receipt.customerPhone && <div className="mono text-[12px] text-[#6B6656] mt-2 break-words">{receipt.customerPhone}</div>}
+              <div className="mono text-[12px] text-[#6B6656] break-all">{receipt.customerEmail}</div>
             </div>
             <div className="bg-[#C79A46] rounded-lg p-4 text-white">
               {receiptAmountsRows({
@@ -116,7 +122,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          <div className="mono text-[11px] font-bold text-[#16281F] mt-6">{receipt.property}</div>
+          <div className="mono text-[11px] font-bold text-[#16281F] mt-6 break-words">{receipt.property}</div>
           {installmentLabel && <div className="mono text-[11px] text-[#6B6656] mt-1">{installmentLabel}</div>}
           {plotQty != null && (
             <div className="mono text-[11px] text-[#6B6656] mt-1">
@@ -124,29 +130,31 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
             </div>
           )}
 
-          <div className="mt-4 border border-[#E4DCC7] rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[11px] font-medium">
-              <div className="px-3 py-2">#</div>
-              <div className="px-3 py-2">Payment Date</div>
-              <div className="px-3 py-2">Payment Method</div>
-              <div className="px-3 py-2 text-right">Amount (₦)</div>
-            </div>
-            {payments.map((p, i: number) => (
-              <div key={i} className={`grid grid-cols-[40px_1fr_1fr_1fr] mono text-[12px] ${i % 2 === 1 ? "bg-[#F7F2E7]" : "bg-white"} border-t border-[#E4DCC7]`}>
-                <div className="px-3 py-2">{i + 1}</div>
-                <div className="px-3 py-2">{typeof p.date === "string" ? p.date : formatDateDMY(new Date(p.date))}</div>
-                <div className="px-3 py-2">{p.method}</div>
-                <div className="px-3 py-2 text-right">{formatNaira(p.amount)}</div>
+          <div className="mt-4 border border-[#E4DCC7] rounded-lg overflow-x-auto">
+            <div className="min-w-[560px]">
+              <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[11px] font-medium">
+                <div className="px-3 py-2">#</div>
+                <div className="px-3 py-2">Payment Date</div>
+                <div className="px-3 py-2">Payment Method</div>
+                <div className="px-3 py-2 text-right">Amount (₦)</div>
               </div>
-            ))}
-            <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[12px] font-bold border-t border-[#E4DCC7]">
-              <div className="px-3 py-2 col-span-3">Total Paid</div>
-              <div className="px-3 py-2 text-right">{formatNaira(receipt.finalAmount)}</div>
+              {payments.map((p, i: number) => (
+                <div key={i} className={`grid grid-cols-[40px_1fr_1fr_1fr] mono text-[12px] ${i % 2 === 1 ? "bg-[#F7F2E7]" : "bg-white"} border-t border-[#E4DCC7]`}>
+                  <div className="px-3 py-2">{i + 1}</div>
+                  <div className="px-3 py-2 break-words">{typeof p.date === "string" ? p.date : formatDateDMY(new Date(p.date))}</div>
+                  <div className="px-3 py-2 break-words">{p.method}</div>
+                  <div className="px-3 py-2 text-right break-words">{formatNaira(p.amount)}</div>
+                </div>
+              ))}
+              <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[12px] font-bold border-t border-[#E4DCC7]">
+                <div className="px-3 py-2 col-span-3">Total Paid</div>
+                <div className="px-3 py-2 text-right break-words">{formatNaira(receipt.finalAmount)}</div>
+              </div>
             </div>
           </div>
 
           <div className="mono text-[11px] text-[#6B6656] mt-4">Amount in words:</div>
-          <div className="fraunces text-[13px] font-semibold text-[#16281F]">{receipt.amountInWords}</div>
+          <div className="fraunces text-[13px] font-semibold text-[#16281F] break-words">{receipt.amountInWords}</div>
 
           <p className="public text-[11px] leading-[1.5] text-[#8B6B4E] mt-4 border-t border-[#E4DCC7] pt-4">
             This receipt acknowledges payment as received and reconciled by Belgrove Homes accounts. Property allocation is subject to completion of the agreed payment plan and verification of funds. Keep this receipt safely; present it for allocation and documentation.

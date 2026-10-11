@@ -446,6 +446,146 @@ describe("reverseConfirmedPaymentDbUnit", () => {
   });
 });
 
+function seedSplit(): MockState {
+  const future = new Date("2027-01-01T00:00:00Z");
+  const i0: MockInstallment = {
+    id: "inst-0",
+    transactionId: "txn-1",
+    installmentNumber: 0,
+    type: "INITIAL",
+    dueDate: new Date("2026-01-01T00:00:00Z"),
+    scheduledAmount: 4_000_000,
+    paidAmount: 0,
+    status: "DUE",
+  };
+  const i1: MockInstallment = {
+    id: "inst-1",
+    transactionId: "txn-1",
+    installmentNumber: 1,
+    type: "MONTHLY",
+    dueDate: future,
+    scheduledAmount: 6_000_000,
+    paidAmount: 0,
+    status: "PENDING",
+  };
+  const transaction: MockTransaction = {
+    id: "txn-1",
+    ref: "TXN-2026-00002",
+    bookingId: null,
+    customerName: "Test Client",
+    customerEmail: "test@example.com",
+    customerPhone: null,
+    estate: "Test Estate",
+    unitType: "Plot",
+    plotCode: "TST-200",
+    sqm: 200,
+    baseAmount: 10_000_000,
+    unitPrice: 10_000_000,
+    plotQuantity: 1,
+    interestAmount: 0,
+    totalPayable: 10_000_000,
+    totalPaid: 0,
+    outstandingBalance: 10_000_000,
+    status: "ACTIVE",
+    paymentPlan: { code: "3M", name: "0-3 Months" },
+    installments: [i0, i1],
+  };
+  return { payments: [], installments: [i0, i1], transactions: [transaction], receipts: [], outbox: [], audits: [], bookings: [], activities: [] };
+}
+
+describe("waterfall allocation", () => {
+  it("excess over the targeted installment rolls into the next one", async () => {
+    const state = seedSplit();
+    state.payments.push({ ...pendingPayment("pay-1"), amount: 7_000_000 });
+    const tx = makeMockTx(state);
+
+    const result = await applyConfirmationDbUnit(tx, {
+      paymentId: "pay-1",
+      transactionId: "txn-1",
+      ...REF_BASE,
+    });
+
+    expect(result.newTotalPaid).toBe(7_000_000);
+    expect(result.newOutstanding).toBe(3_000_000);
+    expect(result.isPaidInFull).toBe(false);
+    expect(state.installments[0].paidAmount).toBe(4_000_000);
+    expect(state.installments[0].status).toBe("PAID");
+    expect(state.installments[1].paidAmount).toBe(3_000_000);
+    expect(state.installments[1].status).toBe("PARTIALLY_PAID");
+    // Receipt still references the targeted installment.
+    expect(result.installment?.id).toBe("inst-0");
+    expect(state.transactions[0].status).toBe("ACTIVE");
+    expect(state.receipts).toHaveLength(1);
+  });
+
+  it("a payment filling two installments to the naira flips the transaction to Paid Full", async () => {
+    const state = seedSplit();
+    state.payments.push({ ...pendingPayment("pay-1"), amount: 10_000_000 });
+    const tx = makeMockTx(state);
+
+    const result = await applyConfirmationDbUnit(tx, {
+      paymentId: "pay-1",
+      transactionId: "txn-1",
+      ...REF_BASE,
+    });
+
+    expect(result.isPaidInFull).toBe(true);
+    expect(state.installments[0].status).toBe("PAID");
+    expect(state.installments[1].status).toBe("PAID");
+    expect(state.transactions[0].status).toBe("PAID_IN_FULL");
+  });
+
+  it("excess past the final installment still throws with nothing written", async () => {
+    const state = seedSplit();
+    state.payments.push({ ...pendingPayment("pay-1"), amount: 11_000_000 });
+    const tx = makeMockTx(state);
+
+    await expect(
+      applyConfirmationDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1", ...REF_BASE })
+    ).rejects.toBeInstanceOf(OverScheduleError);
+
+    expect(state.installments[0].paidAmount).toBe(0);
+    expect(state.installments[1].paidAmount).toBe(0);
+    expect(state.transactions[0].totalPaid).toBe(0);
+    expect(state.receipts).toHaveLength(0);
+  });
+
+  it("reversing a waterfall payment restores both buckets and Active status", async () => {
+    const state = seedSplit();
+    state.payments.push({ ...pendingPayment("pay-1"), status: "CONFIRMED", amount: 7_000_000 });
+    state.installments[0].paidAmount = 4_000_000;
+    state.installments[0].status = "PAID";
+    state.installments[1].paidAmount = 3_000_000;
+    state.installments[1].status = "PARTIALLY_PAID";
+    state.transactions[0].totalPaid = 7_000_000;
+    state.transactions[0].outstandingBalance = 3_000_000;
+    const tx = makeMockTx(state);
+
+    const result = await reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1" });
+
+    expect(result.newTotalPaid).toBe(0);
+    expect(result.newOutstanding).toBe(10_000_000);
+    expect(state.installments[0].paidAmount).toBe(0);
+    expect(state.installments[1].paidAmount).toBe(0);
+    expect(state.transactions[0].status).toBe("ACTIVE");
+  });
+
+  it("reversal preserves DRAFT instead of promoting to Active", async () => {
+    const state = seedSplit();
+    state.payments.push({ ...pendingPayment("pay-1"), status: "CONFIRMED", amount: 4_000_000 });
+    state.installments[0].paidAmount = 4_000_000;
+    state.installments[0].status = "PAID";
+    state.transactions[0].totalPaid = 4_000_000;
+    state.transactions[0].outstandingBalance = 6_000_000;
+    state.transactions[0].status = "DRAFT";
+    const tx = makeMockTx(state);
+
+    await reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1" });
+
+    expect(state.transactions[0].status).toBe("DRAFT");
+  });
+});
+
 describe("toUserFacingError", () => {
   it("maps the expired-transaction Prisma error to a friendly message with no internals", () => {
     const raw = new Error(

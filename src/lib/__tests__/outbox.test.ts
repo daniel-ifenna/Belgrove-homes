@@ -2,12 +2,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   computeBackoffMinutes,
   computeDedupeKey,
+  computeNextAttemptAt,
   enqueueEmail,
+  isPermanentSendError,
+  priorityForType,
   processOutbox,
   scheduleInlineOutboxSend,
   drainOutboxOnAdminInboxLoad,
   MAX_ATTEMPTS,
   STALE_SENDING_MINUTES,
+  PRIORITY_URGENT,
+  PRIORITY_NORMAL,
   type ProcessDb,
   type OutboxWriter,
 } from "../email/outbox";
@@ -37,6 +42,9 @@ type Row = {
   updatedAt: Date;
   lastError: string | null;
   sentAt: Date | null;
+  priority?: number;
+  startedAt?: Date | null;
+  createdAt?: Date;
 };
 
 type FindArgs = {
@@ -47,9 +55,10 @@ type FindArgs = {
     updatedAt?: { lt?: Date };
     attempts?: { lt?: number };
   };
+  take?: number;
 };
 type UpdateManyArgs = {
-  where: { id?: string; status?: string | { in?: string[] }; updatedAt?: { lt?: Date } };
+  where: { id?: string; status?: string | { in?: string[] }; updatedAt?: { lt?: Date }; startedAt?: null };
   data: Partial<Row>;
 };
 type UpdateArgs = { where: { id: string }; data: Partial<Row> };
@@ -67,13 +76,16 @@ function mockDb(initial: Partial<Row>[] = []) {
     dedupeKey: r.dedupeKey ?? null,
     lastError: r.lastError ?? null,
     sentAt: r.sentAt ?? null,
+    priority: r.priority ?? 0,
+    startedAt: r.startedAt ?? null,
+    createdAt: r.createdAt ?? new Date(0),
   }));
   const db: ProcessDb & OutboxWriter = {
     emailOutbox: {
       findMany: async (args: FindArgs) => {
         const w = args.where;
         const st = w.status;
-        return rows.filter(
+        const out = rows.filter(
           (r) =>
             (!w.id?.in || w.id.in.includes(r.id)) &&
             (!st || (typeof st === "string" ? r.status === st : st.in ? st.in.includes(r.status) : true)) &&
@@ -81,6 +93,9 @@ function mockDb(initial: Partial<Row>[] = []) {
             (!w.updatedAt?.lt || r.updatedAt < w.updatedAt.lt) &&
             (w.attempts?.lt === undefined || r.attempts < w.attempts.lt)
         );
+        // Faithful to ORDER BY priority DESC, createdAt ASC + LIMIT on the DB.
+        out.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+        return args.take === undefined ? out : out.slice(0, args.take);
       },
       findFirst: async (args: { where: { dedupeKey?: string } }) => {
         if (!args.where?.dedupeKey) return null;
@@ -107,6 +122,9 @@ function mockDb(initial: Partial<Row>[] = []) {
           updatedAt: new Date(0),
           lastError: null,
           sentAt: null,
+          priority: (args.data.priority as number) ?? 0,
+          startedAt: null,
+          createdAt: new Date(),
         };
         rows.push(row);
         return { id: row.id };
@@ -118,6 +136,7 @@ function mockDb(initial: Partial<Row>[] = []) {
           const st = args.where.status;
           if (typeof st === "string" ? r.status !== st : st?.in && !st.in.includes(r.status)) continue;
           if (args.where.updatedAt?.lt && !(r.updatedAt < args.where.updatedAt.lt)) continue;
+          if (args.where.startedAt === null && r.startedAt !== null) continue;
           Object.assign(r, args.data);
           n++;
         }
@@ -138,6 +157,116 @@ describe("outbox backoff", () => {
     expect([1, 2, 3, 4, 5].map(computeBackoffMinutes)).toEqual([0.5, 2, 8, 32, 128]);
     expect(computeBackoffMinutes(0)).toBe(0.5);
     expect(computeBackoffMinutes(99)).toBe(128);
+  });
+
+  it("jitters the backoff ±20% so deferred rows do not stampede", () => {
+    const now = new Date("2026-09-28T12:00:00Z");
+    for (let i = 0; i < 20; i++) {
+      const t = computeNextAttemptAt(now, 1).getTime() - now.getTime();
+      expect(t).toBeGreaterThanOrEqual(0.5 * 0.8 * 60_000);
+      expect(t).toBeLessThanOrEqual(0.5 * 1.2 * 60_000);
+    }
+    const later = computeNextAttemptAt(now, 5).getTime() - now.getTime();
+    expect(later).toBeGreaterThanOrEqual(128 * 0.8 * 60_000);
+    expect(later).toBeLessThanOrEqual(128 * 1.2 * 60_000);
+  });
+
+  it("classifies permanent errors (ENOENT, bad recipient, 4xx) to fail fast", () => {
+    expect(isPermanentSendError("ENOENT: no such file or directory")).toBe(true);
+    expect(isPermanentSendError("Resend error 422: invalid from")).toBe(true);
+    expect(isPermanentSendError("Resend error 400: validation failed")).toBe(true);
+    expect(isPermanentSendError("No recipients")).toBe(true);
+    expect(isPermanentSendError("Resend request timed out after 10012ms")).toBe(false);
+    expect(isPermanentSendError("Resend error 500: boom")).toBe(false);
+    expect(isPermanentSendError("Resend error 429: slow down")).toBe(false);
+    expect(isPermanentSendError(null)).toBe(false);
+  });
+});
+
+describe("outbox priority", () => {
+  it("receipts and confirmations outrank bulk mail", () => {
+    expect(priorityForType("receipt")).toBe(PRIORITY_URGENT);
+    expect(priorityForType("transaction_confirmation")).toBe(PRIORITY_URGENT);
+    expect(priorityForType("agent_followup")).toBe(PRIORITY_NORMAL);
+    expect(PRIORITY_URGENT).toBeGreaterThan(PRIORITY_NORMAL);
+  });
+
+  it("enqueue stores priority 10 on receipt rows", async () => {
+    const { db, rows } = mockDb([]);
+    await enqueueEmail(db, {
+      type: "receipt",
+      to: "client@x.com",
+      payload: { receiptId: "r1" },
+      relatedType: "receipt",
+      relatedId: "r1",
+    });
+    expect(rows[0].priority).toBe(PRIORITY_URGENT);
+  });
+
+  it("drain sends the urgent row before an older bulk row", async () => {
+    const { db, rows } = mockDb([
+      { id: "bulk", type: "agent_followup", createdAt: new Date("2026-09-28T11:00:00Z") },
+      { id: "rcpt", type: "receipt", priority: PRIORITY_URGENT, createdAt: new Date("2026-09-28T11:59:00Z") },
+    ]);
+    const order: string[] = [];
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      batchSize: 1,
+      sender: async (_t, _to, _p, id) => {
+        order.push(id as string);
+        return { sent: true, error: null };
+      },
+    });
+    expect(res.sent).toBe(1);
+    expect(order).toEqual(["rcpt"]);
+    expect(rows.find((r) => r.id === "bulk")!.status).toBe("PENDING");
+  });
+});
+
+describe("outbox timing trail", () => {
+  it("sets startedAt on first send and never overwrites it on retry", async () => {
+    const t0 = new Date("2026-09-28T12:00:00Z");
+    const { db, rows } = mockDb([{ startedAt: null }]);
+    await processOutbox({
+      db,
+      now: t0,
+      sleep: noSleep,
+      sender: async () => ({ sent: false as const, error: "SMTP down" }),
+    });
+    expect(rows[0].startedAt).toEqual(t0);
+    // Retry an hour later: attempts advance but startedAt is untouched, so
+    // queue wait (startedAt - createdAt) stays truthful.
+    await processOutbox({
+      db,
+      now: new Date(rows[0].nextAttemptAt),
+      sleep: noSleep,
+      sender: async () => ({ sent: true, error: null }),
+    });
+    expect(rows[0].startedAt).toEqual(t0);
+    expect(rows[0].status).toBe("SENT");
+  });
+});
+
+describe("outbox timeout retries", () => {
+  it("a Resend timeout defers with backoff and reuses the same idempotency key", async () => {
+    const { db, rows } = mockDb([{ id: "row-7" }]);
+    const seenIds: unknown[] = [];
+    const res = await processOutbox({
+      db,
+      now: new Date("2026-09-28T12:00:00Z"),
+      sleep: noSleep,
+      sender: async (_t, _to, _p, id) => {
+        seenIds.push(id);
+        return { sent: false as const, error: "Resend request timed out after 10012ms" };
+      },
+    });
+    // Drain mode retries in-process (same row id → provider dedupes), then
+    // defers with backoff instead of failing.
+    expect(seenIds.length).toBeGreaterThan(1);
+    expect(new Set(seenIds).size).toBe(1);
+    expect(res).toEqual({ sent: 0, failed: 0, deferred: 1 });
+    expect(rows[0].status).toBe("PENDING");
   });
 });
 

@@ -346,6 +346,12 @@ model Receipt {
   // never the receipt ref. Revoking hides the receipt without deleting it.
   accessToken String? @unique
   accessTokenRevokedAt DateTime?
+  // Stored PDF bytes: rendered once at payment confirmation, reused for
+  // every send and download. Resends never regenerate — only an explicit
+  // "Regenerate & resend" rebuilds. Null for rows predating this column
+  // (render-on-demand fallback). Never selected except by the sender and
+  // the PDF download routes (omit everywhere else — ~800KB per row).
+  pdfData Bytes?
 
   createdById String?
   createdBy User? @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
@@ -535,6 +541,13 @@ model EmailOutbox {
   type          String
   to            Json // string | string[]
   subject       String?
+  // Priority: receipts and payment confirmations (10) send before reminders
+  // and bulk mail (0). Higher sends first.
+  priority      Int               @default(0)
+  // Timing trail: createdAt is enqueued_at; startedAt is set on claim;
+  // sentAt on success. Queue wait = startedAt - createdAt, send duration =
+  // sentAt - startedAt, shown on the receipt page.
+  startedAt     DateTime?
   payload       Json
   // Deterministic dedupe key (relatedType:relatedId:type:recipients, or a
   // caller override). Nullable so legacy rows are untouched; new rows always

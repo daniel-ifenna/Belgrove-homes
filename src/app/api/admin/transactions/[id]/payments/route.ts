@@ -33,33 +33,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       if (next) installmentIdToUse = next.id;
     }
 
-    // Scheduled-amount guard: pending + confirmed money already on the
-    // installment plus this amount must not exceed what the schedule says.
-    // This is what stops several identical pending payments over-crediting
-    // one installment — each extra submission is rejected with a clear error.
-    if (installmentIdToUse) {
-      const target = transaction.installments.find((i: any) => i.id === installmentIdToUse);
-      if (target) {
-        const pendingSum = await prisma.payment.aggregate({
-          where: { transactionId: id, installmentId: installmentIdToUse, status: "PENDING_VERIFICATION" },
-          _sum: { amount: true },
-        });
-        const { wouldExceedSchedule } = await import("@/lib/paymentConfirmation");
-        if (
-          wouldExceedSchedule(target.paidAmount ?? 0, pendingSum._sum.amount ?? 0, amt, target.scheduledAmount)
-        ) {
-          const recorded = (target.paidAmount ?? 0) + (pendingSum._sum.amount ?? 0);
-          return NextResponse.json(
-            {
-              error:
-                `This would exceed the installment's scheduled amount of ₦${target.scheduledAmount.toLocaleString("en-NG")} ` +
-                `(₦${recorded.toLocaleString("en-NG")} already recorded or pending). Record one installment at a time.`,
-            },
-            { status: 400 }
-          );
-        }
-      }
-    }
+    // The chosen installment is the waterfall START: confirmation fills it
+    // and rolls any excess into later installments, so no per-installment
+    // cap is enforced here. Over-crediting is prevented by the outstanding
+    // check above, the 60-second duplicate guard below, and the
+    // in-transaction recheck at confirm time.
 
     // Duplicate-submission guard (§3.3): an identical *pending* payment
     // recorded in the last 60s (double-click / retry) returns the existing
@@ -127,7 +105,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     include: {
       installments: { orderBy: { installmentNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
-      receipts: { orderBy: { issuedAt: "desc" }, include: { sendAttempts: true } },
+      receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true }, include: { sendAttempts: true } },
       paymentPlan: true,
     },
   });

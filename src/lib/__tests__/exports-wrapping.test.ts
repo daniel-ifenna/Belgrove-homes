@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { PDFParse } from "pdf-parse";
-import { wrapLongWords, TABLE_OVERFLOW_LINEBREAK } from "../documents/exportTables";
+import { wrapLongWords, cleanExportText, TABLE_OVERFLOW_LINEBREAK } from "../documents/exportTables";
 import { generateReceiptPdf } from "../receipts/generateReceiptPdf";
 import {
   bookingReceivedTemplate,
@@ -50,6 +50,14 @@ describe("wrapLongWords", () => {
 
   it("the shared autotable overflow is linebreak", () => {
     expect(TABLE_OVERFLOW_LINEBREAK).toBe("linebreak");
+  });
+
+  it("normalizes pasted Windows line endings and tabs without losing text", () => {
+    expect(cleanExportText("a\r\nb\rc\td")).toBe("a\nb\nc d");
+    expect(cleanExportText(null)).toBe("");
+    // wrapLongWords on cleaned text still chunks unbroken runs.
+    const out = wrapLongWords(cleanExportText(`x\r\n${"W".repeat(100)}`));
+    expect(out.replaceAll("\n", "")).toBe(`x${"W".repeat(100)}`);
   });
 });
 
@@ -177,9 +185,34 @@ const PATHO_BOOKING: Record<string, unknown> = {
   isTest: false,
   createdAt: new Date("2026-12-01T09:00:00Z"),
   updatedAt: new Date("2026-12-01T09:00:00Z"),
-  activities: [],
-  internalNotes: [],
-  messages: [],
+  activities: [
+    {
+      id: "act-1",
+      actorName: "Admin User",
+      action: "approve",
+      fromStatus: "new",
+      toStatus: "under_review",
+      note: "Looks good, moving forward",
+      createdAt: new Date("2026-12-02T09:00:00Z"),
+    },
+  ],
+  internalNotes: [
+    {
+      id: "note-1",
+      authorName: "Admin User",
+      // Pasted-from-Windows body: CRLF, tabs, and a 120-char unbroken run.
+      body: `windows clipboard note\r\nsecond line\twith tab ${UNBROKEN_120} end`,
+      createdAt: new Date("2026-12-03T09:00:00Z"),
+    },
+  ],
+  messages: [
+    {
+      id: "msg-1",
+      authorName: "Staff Member",
+      message: `Client confirmed by phone ${UNBROKEN_200} done`,
+      createdAt: new Date("2026-12-04T09:00:00Z"),
+    },
+  ],
 };
 
 vi.mock("@/lib/prisma", () => ({
@@ -227,13 +260,29 @@ describe("bookings export PDF", () => {
     const res = await exportBookings(new NextRequest("http://localhost/api/admin/bookings/export"));
     expect(res.status).toBe(200);
     const text = pdfText(Buffer.from(await res.arrayBuffer()));
-    // Wrapped: 40-char chunks present as separate lines…
-    expect(text).toContain("Z".repeat(40));
+    // Wrapped: pre-split chunks present as separate lines (limit 20)…
+    expect(text).toContain("Z".repeat(20));
     // …but the full unbroken run never appears on one line (no overflow).
     expect(text).not.toContain(UNBROKEN_120);
     expect(text).not.toContain("e".repeat(150));
     // Nothing silently dropped: ref and markers survive.
     expect(text).toContain("BKG-2026-00001");
+  }, 30000);
+
+  it("activity history holds admin-written notes + messages only, wrapped inside cells", async () => {
+    const res = await exportBookings(new NextRequest("http://localhost/api/admin/bookings/export"));
+    expect(res.status).toBe(200);
+    const text = pdfText(Buffer.from(await res.arrayBuffer()));
+    // Admin-written content survives: note words and message words render…
+    expect(text).toContain("windows clipboard note");
+    expect(text).toContain("second line");
+    expect(text).toContain("Client confirmed by phone");
+    // …wrapped: neither unbroken run appears on one line (no overflow)…
+    expect(text).not.toContain(UNBROKEN_120);
+    expect(text).not.toContain(UNBROKEN_200);
+    // …and the auto system event is gone from the history table.
+    expect(text).not.toContain("approve (new");
+    expect(text).not.toContain("Looks good, moving forward");
   }, 30000);
 });
 
@@ -242,8 +291,13 @@ describe("ledger export PDF", () => {
     const res = await exportLedger(new NextRequest("http://localhost/api/admin/transactions/ledger"));
     expect(res.status).toBe(200);
     const text = pdfText(Buffer.from(await res.arrayBuffer()));
-    expect(text).toContain("Z".repeat(40));
+    // No unbroken run survives on one line (autotable wraps the pre-chunked
+    // pieces again at the narrower company-ledger column widths)…
     expect(text).not.toContain(UNBROKEN_120);
+    expect(text).not.toContain("e".repeat(150));
+    // …but nothing is dropped: refs, names and plot codes survive.
     expect(text).toContain("TXN-2026-00001");
+    expect(text).toContain("Client");
+    expect(text).toContain("TST-200");
   }, 30000);
 });

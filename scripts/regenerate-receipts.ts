@@ -94,6 +94,7 @@ async function main() {
         qrTargetUrl: receiptUrl,
         pdfPath,
         pdfStatus: "GENERATED",
+        pdfData: new Uint8Array(pdfBuffer),
         lastError: null,
         paymentDescription,
       },

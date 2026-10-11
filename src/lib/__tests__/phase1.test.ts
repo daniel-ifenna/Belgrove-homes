@@ -108,8 +108,8 @@ describe("metrics exclude isTest", () => {
   });
 });
 
-describe("overpayment is rejected at record and confirm", () => {
-  it("record: pending + confirmed must not exceed scheduled", () => {
+describe("schedule guard (pure function; record caps at outstanding, confirm waterfalls)", () => {
+  it("wouldExceedSchedule still flags pending + confirmed over a single schedule", () => {
     // Installment fully paid by confirmed money: any new pending is rejected.
     expect(wouldExceedSchedule(2_900_000, 0, 2_900_000, 2_900_000)).toBe(true);
     // Two identical cheques against an unpaid installment: second rejected.

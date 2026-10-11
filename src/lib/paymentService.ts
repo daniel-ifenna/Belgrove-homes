@@ -1,15 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { generateUniquePaymentRef, generateUniqueReceiptRef } from "@/lib/ref";
 import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/lib/app-url";
-import { receiptPdfPath, writeReceiptPdf } from "@/lib/receipt-storage";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
-import {
-  applyConfirmationDbUnit,
-  wouldExceedSchedule,
-  OverScheduleError,
-  logServerError,
-} from "@/lib/paymentConfirmation";
+import { applyConfirmationDbUnit, logServerError } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
 function formatDateDMY(d: Date): string {
@@ -52,16 +46,16 @@ export async function recordPaymentAndGenerateReceipt(params: {
       ? transaction.installments.find((i) => i.id === params.installmentId) ?? null
       : (transaction.installments.find((i) => i.status !== "PAID" && i.status !== "WAIVED") ?? null);
   if (!installment) throw new Error("No unpaid installment available for this transaction");
-  if (wouldExceedSchedule(installment.paidAmount ?? 0, 0, params.amount, installment.scheduledAmount)) {
-    throw new OverScheduleError(installment.paidAmount ?? 0, params.amount, installment.scheduledAmount);
-  }
+  // No installment-level cap here: a payment may legitimately span several
+  // installments — confirmation waterfalls any excess forward. The
+  // transaction-outstanding check above plus the in-transaction recheck at
+  // confirm time are what prevent over-crediting.
 
   const receiptRef = await generateUniqueReceiptRef();
   const paymentRef = await generateUniquePaymentRef();
   getAppUrl(); // throws in production when APP_URL is missing — fail before any write
   const accessToken = generateReceiptAccessToken();
   const receiptUrl = getReceiptAccessUrl(accessToken);
-  const pdfPath = receiptPdfPath(receiptRef);
 
   // DB-ONLY transaction: payment row → confirm claim → installment → totals → receipt row.
   const confirmed = await prisma.$transaction(
@@ -86,7 +80,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
         receiptRef,
         receiptUrl,
         qrTargetUrl: receiptUrl,
-        pdfPath,
+        pdfPath: null,
         accessToken,
       });
     },
@@ -106,7 +100,6 @@ export async function recordPaymentAndGenerateReceipt(params: {
     db: prisma,
     receiptId: confirmed.receiptId,
     ref: receiptRef,
-    pdfPath,
     render: () =>
       generateReceiptPdf({
         ref: receiptRef,
@@ -139,7 +132,6 @@ export async function recordPaymentAndGenerateReceipt(params: {
             : `Month ${confirmed.installment.installmentNumber} payment`
           : undefined,
       }),
-    writeFile: (filePath, buf) => writeReceiptPdf(filePath, buf),
   });
 
   if (!pdfOutcome.ok) {
@@ -153,7 +145,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
     }
   }
 
-  const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId } });
+  const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId }, omit: { pdfData: true } });
   const payment = await prisma.payment.findUnique({ where: { id: confirmed.payment.id } });
   // The receipt outbox row was queued inside the confirmation transaction
   // (committed above); the caller schedules the inline send post-response.

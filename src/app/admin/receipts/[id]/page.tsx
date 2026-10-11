@@ -20,6 +20,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const receipt = await prisma.receipt.findUnique({
     where: { id },
+    omit: { pdfData: true },
     include: {
       booking: { select: { id: true, ref: true, status: true, location: true } },
       payment: { select: { id: true, paymentReference: true, amount: true, paymentDate: true, installment: { select: { type: true, installmentNumber: true } } } },
@@ -66,8 +67,22 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
     where: { type: "receipt", relatedId: receipt.id },
     orderBy: { createdAt: "desc" },
     take: 5,
-    select: { id: true, status: true, attempts: true, lastError: true, createdAt: true, provider: true, providerMessageId: true },
+    select: {
+      id: true,
+      status: true,
+      attempts: true,
+      lastError: true,
+      createdAt: true,
+      startedAt: true,
+      sentAt: true,
+      nextAttemptAt: true,
+      priority: true,
+      provider: true,
+      providerMessageId: true,
+    },
   });
+  const fmtWait = (ms: number) =>
+    ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${(ms / 60_000).toFixed(1)}m`;
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -165,17 +180,29 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 {outbox.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-[var(--ops-border)]">
                     <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Delivery queue</div>
-                    {outbox.map((o) => (
-                      <div key={o.id} className="mono text-[11px] text-[var(--ops-muted)] mt-1 flex justify-between gap-2">
-                        <StatusBadge status={o.status} className="px-2 py-0.5 text-[10px]" />
-                        <span className="text-right break-words">
-                          {o.attempts} attempt{o.attempts === 1 ? "" : "s"}
-                          {o.provider ? ` · via ${o.provider}` : ""}
-                          {o.providerMessageId ? ` · id ${o.providerMessageId}` : ""}
-                          {o.lastError ? ` · ${o.lastError.slice(0, 60)}` : ""}
-                        </span>
-                      </div>
-                    ))}
+                    {outbox.map((o) => {
+                      const wait = o.startedAt ? o.startedAt.getTime() - o.createdAt.getTime() : null;
+                      const dur = o.startedAt && o.sentAt ? o.sentAt.getTime() - o.startedAt.getTime() : null;
+                      const permanent =
+                        o.status === "FAILED" &&
+                        o.lastError &&
+                        /enoent|no such file|invalid recipient|resend error 4/i.test(o.lastError);
+                      return (
+                        <div key={o.id} className="mono text-[11px] text-[var(--ops-muted)] mt-1 flex justify-between gap-2">
+                          <StatusBadge status={o.status} className="px-2 py-0.5 text-[10px]" />
+                          <span className="text-right break-words">
+                            {o.attempts} attempt{o.attempts === 1 ? "" : "s"}
+                            {` · prio ${o.priority}`}
+                            {wait != null && wait >= 0 ? ` · wait ${fmtWait(wait)}` : ""}
+                            {dur != null && dur >= 0 ? ` · send ${fmtWait(dur)}` : ""}
+                            {o.provider ? ` · via ${o.provider}` : ""}
+                            {o.providerMessageId ? ` · id ${o.providerMessageId}` : ""}
+                            {o.lastError ? ` · ${o.lastError.slice(0, 60)}` : ""}
+                            {permanent ? " · permanent, will not retry" : ""}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
