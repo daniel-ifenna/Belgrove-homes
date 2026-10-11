@@ -19,7 +19,10 @@ type MockPayment = {
   amount: number;
   paymentDate: Date;
   paymentMethod: string | null;
+  bankReference?: string | null;
   installmentId: string | null;
+  isCredit?: boolean;
+  creditAmount?: number | null;
   confirmedAt?: Date | null;
   confirmedById?: string | null;
   verificationNotes?: string | null;
@@ -101,6 +104,17 @@ function makeMockTx(state: MockState): TxClient {
       findMany: async (args: unknown) => {
         const { where } = args as { where: { transactionId: string; status: string } };
         return state.payments.filter((p) => p.transactionId === where.transactionId && p.status === where.status);
+      },
+      findFirst: async (args: unknown) => {
+        const { where } = args as { where: { transactionId: string; status: string; isCredit?: boolean } };
+        return (
+          state.payments.find(
+            (p) =>
+              p.transactionId === where.transactionId &&
+              p.status === where.status &&
+              (where.isCredit === undefined || !!p.isCredit === where.isCredit)
+          ) ?? null
+        );
       },
       update: async (args: unknown) => {
         const { where, data } = args as { where: { id: string }; data: Record<string, unknown> };
@@ -367,8 +381,7 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.receipts).toHaveLength(1); // no second receipt
   });
 
-  it("rejects confirmation beyond the scheduled amount without moving anything", async () => {
-    const state = seed2900();
+  it("rejects confirmation beyond the scheduled amount without moving anything", async () => {    const state = seed2900();
     state.installments[0].paidAmount = 2_000_000;
     state.installments[0].status = "PARTIALLY_PAID";
     state.payments.push({ ...pendingPayment("pay-2"), amount: 1_500_000 });
@@ -385,6 +398,36 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.transactions[0].totalPaid).toBe(0);
     expect(state.installments[0].paidAmount).toBe(2_000_000);
     expect(state.receipts).toHaveLength(0);
+  });
+
+  it("explicit credit confirms: capped allocation, parked remainder, negative balance allowed", async () => {
+    const state = seed2900();
+    state.payments.push({ ...pendingPayment("pay-9"), amount: 3_400_000, isCredit: true });
+    const tx = makeMockTx(state);
+
+    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE });
+
+    expect(result.newTotalPaid).toBe(3_400_000);
+    expect(result.newOutstanding).toBe(-500_000);
+    expect(result.isPaidInFull).toBe(true);
+    expect(state.transactions[0].status).toBe("PAID_IN_FULL");
+    expect(state.payments.find((p) => p.id === "pay-9")?.creditAmount).toBe(500_000);
+    // Allocations cover the schedulable 2.9M only; the entry holds the full amount.
+    const allocSum = state.allocs.reduce((s, a) => s + ((a as { amount: number }).amount), 0);
+    expect(allocSum).toBe(2_900_000);
+    expect(state.ledger).toHaveLength(1);
+    expect(state.ledger[0]).toMatchObject({ type: "PAYMENT", amount: 3_400_000 });
+  });
+
+  it("non-credit overpayment is rejected at the transaction gate", async () => {
+    const state = seed2900();
+    state.payments.push({ ...pendingPayment("pay-9"), amount: 3_400_000, isCredit: false });
+    const tx = makeMockTx(state);
+
+    await expect(
+      applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE })
+    ).rejects.toBeInstanceOf(OverScheduleError);
+    expect(state.ledger).toHaveLength(0);
   });
 });
 

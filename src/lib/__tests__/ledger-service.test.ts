@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   planAllocation,
+  planAllocationCapped,
+  previewAllocation,
   postLedgerEntry,
   postPaymentEntry,
   postAllocations,
@@ -63,6 +65,12 @@ describe("planAllocation (waterfall)", () => {
     expect(plan.reduce((s, p) => s + p.amount, 0)).toBe(18_500_000);
     expect(plan[plan.length - 1]).toEqual({ installmentId: "i3", amount: 3_083_334 });
   });
+
+  it("capped variant parks the excess as remainder instead of throwing", () => {
+    const { plan, remainder } = planAllocationCapped(schedule, "i0", 20_000_000);
+    expect(plan.reduce((s, p) => s + p.amount, 0)).toBe(15_416_666);
+    expect(remainder).toBe(4_583_334);
+  });
 });
 
 function memDb() {
@@ -100,8 +108,32 @@ function memDb() {
   return { tx, state };
 }
 
-describe("postLedgerEntry validation", () => {
-  it("rejects unknown types and non-positive amounts before touching the db", async () => {
+describe("previewAllocation (record-form preview)", () => {
+  const labeled = [
+    { ...INST("i0", 0, 9_250_000), label: "Initial payment" },
+    { ...INST("i1", 1, 3_083_333), label: "Month 1" },
+    { ...INST("i2", 2, 3_083_333), label: "Month 2" },
+  ];
+
+  it("describes clears / part-pays lines and the balance after", () => {
+    const p = previewAllocation(labeled, 12_000_000, 15_416_666, 0);
+    expect(p.lines).toEqual([
+      { installmentId: "i0", label: "Initial payment", clears: true, applied: 9_250_000, scheduled: 9_250_000 },
+      { installmentId: "i1", label: "Month 1", clears: false, applied: 2_750_000, scheduled: 3_083_333 },
+    ]);
+    expect(p.remainder).toBe(0);
+    expect(p.balanceAfter).toBe(3_416_666);
+  });
+
+  it("reports excess as remainder (credit) with a negative balance after", () => {
+    const p = previewAllocation(labeled, 20_000_000, 15_416_666, 0);
+    expect(p.lines).toHaveLength(3);
+    expect(p.remainder).toBe(4_583_334);
+    expect(p.balanceAfter).toBe(-4_583_334);
+  });
+});
+
+describe("postLedgerEntry validation", () => {  it("rejects unknown types and non-positive amounts before touching the db", async () => {
     const { tx } = memDb();
     const create = vi.spyOn(tx.ledgerEntry, "create");
     await expect(
@@ -203,5 +235,32 @@ describe("verifyTransactionLedger", () => {
     expect(check.ok).toBe(false);
     expect(check.problems.join("\n")).toMatch(/totalPayable/);
     expect(check.problems.join("\n")).toMatch(/no PAYMENT ledger entry/);
+  });
+
+  it("credit payments verify as allocated + credit == amount", async () => {
+    const { tx, state } = memDb();
+    const d = new Date("2026-01-01");
+    await postLedgerEntry(tx, { transactionId: "t1", type: "CHARGE_BASE", amount: 10_000_000, direction: "DEBIT", effectiveDate: d, idempotencyKey: "c1" });
+    await postPaymentEntry(tx, { transactionId: "t1", paymentId: "p9", amount: 11_000_000, effectiveDate: d });
+    await postAllocations(tx, "p9", [{ installmentId: "i0", amount: 10_000_000 }]);
+    const db = {
+      ...tx,
+      transaction: {
+        findUnique: async () => ({
+          id: "t1", ref: "TXN-9", totalPayable: 10_000_000, totalPaid: 11_000_000, outstandingBalance: -1_000_000,
+          installments: [{ id: "i0", installmentNumber: 0, paidAmount: 10_000_000 }],
+        }),
+      },
+      payment: {
+        findMany: async () => [{ id: "p9", paymentReference: "PAY-9", amount: 11_000_000, isCredit: true, creditAmount: 1_000_000 }],
+      },
+      paymentAllocation: {
+        ...tx.paymentAllocation,
+        findMany: async () => state.allocs,
+      },
+    } as unknown as TxClient;
+    const check = await verifyTransactionLedger(db, "t1");
+    expect(check.ok).toBe(true);
+    expect(check.problems).toEqual([]);
   });
 });

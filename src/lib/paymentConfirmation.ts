@@ -2,6 +2,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { amountToWords } from "./receipts/amountToWords";
 import {
   planAllocation,
+  planAllocationCapped,
   postPaymentEntry,
   postAllocations,
   postLedgerEntry,
@@ -182,8 +183,11 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   if (!payment) throw new PaymentCorruptStateError("Confirmed payment row disappeared mid-transaction");
 
   const transaction = payment.transaction;
-  if (transaction.outstandingBalance < payment.amount) {
+  const isCredit = payment.isCredit === true;
+  if (!isCredit && transaction.outstandingBalance < payment.amount) {
     // Genuinely over-paid at the transaction level (totals moved under us).
+    // Explicit credit payments skip this gate — the excess becomes a visible
+    // credit balance (capped allocation below), never truncated.
     throw new OverScheduleError(
       transaction.totalPaid,
       payment.amount,
@@ -223,8 +227,35 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       freshRows.push(fresh);
     }
     let plan: { installmentId: string; amount: number }[];
-    try {
-      plan = planAllocation(
+    let creditAmount = 0;
+    if (!isCredit) {
+      try {
+        plan = planAllocation(
+          freshRows.map((f) => ({
+            id: f.id,
+            installmentNumber: f.installmentNumber,
+            scheduledAmount: f.scheduledAmount,
+            paidAmount: f.paidAmount ?? 0,
+          })),
+          installment.id,
+          payment.amount
+        );
+      } catch (e) {
+        if (e instanceof LedgerError) {
+          const startIdx = ordered.findIndex((i) => i.id === installment.id);
+          const suffixRows = startIdx >= 0 ? freshRows.slice(startIdx) : freshRows;
+          throw new OverScheduleError(
+            suffixRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
+            payment.amount,
+            suffixRows.reduce((s, r) => s + r.scheduledAmount, 0)
+          );
+        }
+        throw e;
+      }
+    } else {
+      // Explicit overpayment: allocate what fits, park the remainder as the
+      // visible credit balance (recorded on the payment row below).
+      const capped = planAllocationCapped(
         freshRows.map((f) => ({
           id: f.id,
           installmentNumber: f.installmentNumber,
@@ -234,17 +265,11 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
         installment.id,
         payment.amount
       );
-    } catch (e) {
-      if (e instanceof LedgerError) {
-        const startIdx = ordered.findIndex((i) => i.id === installment.id);
-        const suffixRows = startIdx >= 0 ? freshRows.slice(startIdx) : freshRows;
-        throw new OverScheduleError(
-          suffixRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
-          payment.amount,
-          suffixRows.reduce((s, r) => s + r.scheduledAmount, 0)
-        );
+      plan = capped.plan;
+      creditAmount = capped.remainder;
+      if (creditAmount > 0) {
+        await tx.payment.update({ where: { id: payment.id }, data: { creditAmount } });
       }
-      throw e;
     }
     for (const step of plan) {
       const fresh = freshRows.find((r) => r.id === step.installmentId)!;
@@ -280,9 +305,16 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   const newTotalPaid = confirmed.reduce((sum, p) => sum + p.amount, 0);
   const newOutstanding = transaction.totalPayable - newTotalPaid;
   if (newOutstanding < 0) {
-    throw new PaymentCorruptStateError("Confirmed payments exceed the transaction total");
+    // Negative outstanding is legitimate only with an explicitly recorded
+    // credit on this transaction (this payment or an earlier one) — it is
+    // the visible credit balance. Anything else is corruption.
+    const hasCredit =
+      isCredit || (await tx.payment.findFirst({ where: { transactionId: transaction.id, status: "CONFIRMED", isCredit: true }, select: { id: true } })) !== null;
+    if (!hasCredit) {
+      throw new PaymentCorruptStateError("Confirmed payments exceed the transaction total");
+    }
   }
-  const isPaidInFull = newOutstanding === 0;
+  const isPaidInFull = newOutstanding <= 0;
 
   await tx.transaction.update({
     where: { id: transaction.id },
@@ -469,8 +501,9 @@ export async function reverseConfirmedPaymentDbUnit(
       totalPaid: newTotalPaid,
       outstandingBalance: newOutstanding,
       // A paid-in-full transaction that loses a payment becomes active
-      // again. DRAFT is preserved — nothing here promotes a draft.
-      status: newOutstanding === 0 ? "PAID_IN_FULL" : transaction.status === "DRAFT" ? "DRAFT" : "ACTIVE",
+      // again — unless a credit balance remains (outstanding still <= 0).
+      // DRAFT is preserved — nothing here promotes a draft.
+      status: newOutstanding <= 0 ? "PAID_IN_FULL" : transaction.status === "DRAFT" ? "DRAFT" : "ACTIVE",
       updatedAt: now,
     },
   });

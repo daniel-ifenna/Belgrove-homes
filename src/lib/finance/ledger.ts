@@ -67,6 +67,23 @@ export function planAllocation(
   startInstallmentId: string | null,
   paymentAmount: number
 ): AllocationStep[] {
+  const { plan, remainder } = planAllocationCapped(ordered, startInstallmentId, paymentAmount);
+  if (remainder > 0) {
+    throw new LedgerError(
+      `Payment of ${paymentAmount} exceeds the remaining scheduled ${paymentAmount - remainder} from the targeted installment onward`
+    );
+  }
+  return plan;
+}
+
+// Non-throwing variant: allocates what fits and reports the unallocated
+// remainder. Used for explicit credit/overpayment (the remainder becomes the
+// visible credit balance — never silently truncated or absorbed).
+export function planAllocationCapped(
+  ordered: AllocationInput[],
+  startInstallmentId: string | null,
+  paymentAmount: number
+): { plan: AllocationStep[]; remainder: number } {
   assertWholeNaira(paymentAmount, "payment amount");
   const sorted = [...ordered].sort((a, b) => a.installmentNumber - b.installmentNumber);
   const startIdx = startInstallmentId ? sorted.findIndex((i) => i.id === startInstallmentId) : 0;
@@ -81,12 +98,46 @@ export function planAllocation(
     plan.push({ installmentId: inst.id, amount: alloc });
     remaining -= alloc;
   }
-  if (remaining > 0) {
-    throw new LedgerError(
-      `Payment of ${paymentAmount} exceeds the remaining scheduled ${paymentAmount - remaining} from the targeted installment onward`
-    );
+  return { plan, remainder: remaining };
+}
+
+// Human preview of what a payment will do ("Clears Initial (…). Part-pays
+// Month 1 (… of …). Balance after: …"). Pure — shared by the record form and
+// tests. Throws LedgerError only for invalid amounts, never for overpayment
+// (excess is reported as credit).
+export type AllocationPreviewLine = {
+  installmentId: string;
+  label: string;
+  clears: boolean;
+  applied: number;
+  scheduled: number;
+};
+
+export function previewAllocation(
+  ordered: (AllocationInput & { label: string })[],
+  paymentAmount: number,
+  totalPayable: number,
+  totalPaidBefore: number
+): { lines: AllocationPreviewLine[]; remainder: number; balanceAfter: number } {
+  assertWholeNaira(paymentAmount, "payment amount");
+  const firstUnpaid = [...ordered]
+    .sort((a, b) => a.installmentNumber - b.installmentNumber)
+    .find((i) => i.scheduledAmount - i.paidAmount > 0);
+  const { plan, remainder } = planAllocationCapped(ordered, firstUnpaid?.id ?? null, paymentAmount);
+  const byId = new Map(plan.map((p) => [p.installmentId, p.amount]));
+  const lines: AllocationPreviewLine[] = [];
+  for (const inst of [...ordered].sort((a, b) => a.installmentNumber - b.installmentNumber)) {
+    const applied = byId.get(inst.id) ?? 0;
+    if (applied <= 0) continue;
+    lines.push({
+      installmentId: inst.id,
+      label: inst.label,
+      clears: applied >= inst.scheduledAmount - inst.paidAmount,
+      applied,
+      scheduled: inst.scheduledAmount,
+    });
   }
-  return plan;
+  return { lines, remainder, balanceAfter: totalPayable - totalPaidBefore - paymentAmount };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +330,9 @@ export async function verifyTransactionLedger(
     }
   }
   // Invariant: every confirmed payment has exactly one PAYMENT entry, and
-  // allocation sums equal payment amounts.
+  // allocation sums equal payment amounts — except explicit credit payments,
+  // where allocated + creditAmount == amount (the remainder is the visible
+  // credit balance, never silently dropped).
   const payments = await tx.payment.findMany({ where: { transactionId, status: "CONFIRMED" } });
   const entries = await tx.ledgerEntry.findMany({ where: { transactionId, type: "PAYMENT" } });
   const entryByPayment = new Map(entries.map((e) => [e.paymentId, e]));
@@ -293,8 +346,9 @@ export async function verifyTransactionLedger(
       problems.push(`payment ${p.paymentReference}: entry ${entry.amount} != payment ${p.amount}`);
     }
     const allocSum = allocs.filter((a) => a.paymentId === p.id).reduce((s, a) => s + a.amount, 0);
-    if (allocSum !== p.amount) {
-      problems.push(`payment ${p.paymentReference}: allocated ${allocSum} != payment ${p.amount}`);
+    const credit = p.isCredit ? (p.creditAmount ?? 0) : 0;
+    if (allocSum + credit !== p.amount) {
+      problems.push(`payment ${p.paymentReference}: allocated ${allocSum} + credit ${credit} != payment ${p.amount}`);
     }
   }
   return {

@@ -494,6 +494,11 @@ model Payment {
   // submission with the same key returns the existing row instead of
   // minting a duplicate. Replaces the old 60-second time-window dedupe.
   idempotencyKey String? @unique
+  // Explicit overpayment: amount above the outstanding balance, recorded as a
+  // visible credit balance (never silently truncated). Allocations cover only
+  // the schedulable portion; creditAmount is the remainder.
+  isCredit Boolean @default(false)
+  creditAmount Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   receipt Receipt?

@@ -106,10 +106,10 @@ export default async function TransactionDetailPage({ params }: { params: Promis
             <div className="grid sm:grid-cols-3 gap-4">
               <div><div className="mono text-[10px] uppercase text-[#D4B368]">Total price</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(transaction.totalPayable)}</div></div>
               <div><div className="mono text-[10px] uppercase text-[#D4B368]">Paid</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(totalPaid)}</div></div>
-              <div><div className="mono text-[10px] uppercase text-white">Outstanding</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(outstanding)}</div></div>
+              <div><div className="mono text-[10px] uppercase text-white">Outstanding</div><div className="price fraunces text-[18px] font-bold mt-1">{outstanding < 0 ? `Credit ${formatNaira(-outstanding)}` : formatNaira(outstanding)}</div></div>
             </div>
             <div className="mt-3 h-[6px] rounded-full bg-white/15 overflow-hidden">
-              <div className="h-full rounded-full bg-[#D4B368]" style={{ width: `${progress}%` }} />
+              <div className="h-full rounded-full bg-[#D4B368]" style={{ width: `${Math.min(100, Number(progress))}%` }} />
             </div>
             <div className="mono text-[11px] text-white/70 mt-2">{progress}% paid{nextDue ? ` · Next due: ${nextDue.type === "INITIAL" ? "Initial" : `Month ${nextDue.number}`} ${formatNaira(nextDue.amountDue)} on ${formatDate(nextDue.dueDate)}${nextDueDays ? ` · ${nextDueDays}` : ""}` : " · Fully paid"}</div>
           </div>
@@ -140,6 +140,8 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                 bankReference: p.bankReference,
                 notes: p.notes,
                 status: p.status,
+                isCredit: p.isCredit ?? false,
+                creditAmount: p.creditAmount ?? null,
               }))}
               receipts={transaction.receipts.map((r: any) => ({ id: r.id, paymentId: r.paymentId }))}
               outstanding={outstanding}
@@ -166,7 +168,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                             <span className="text-[13px] font-medium price">{formatNaira(p.amount)}</span>
                             <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(p.paymentDate)}</span>
                           </div>
-                          <div className="mono text-[11px] text-[var(--ops-muted)]">{instLabel} · {p.paymentMethod ?? "-"}{p.bankReference ? ` · bank: ${p.bankReference}` : ""}{p.notes ? ` · ${p.notes}` : ""}</div>
+                          <div className="mono text-[11px] text-[var(--ops-muted)]">{instLabel} · {p.paymentMethod ?? "-"}{p.bankReference ? ` · bank: ${p.bankReference}` : ""}{p.notes ? ` · ${p.notes}` : ""}{p.isCredit ? ` · credit${p.creditAmount ? ` ${formatNaira(p.creditAmount)}` : ""}` : ""}</div>
                           <div className="mono text-[10px] text-[var(--ops-muted)] font-mono">{p.paymentReference}</div>
                           <div className="mt-1.5">
                             <StatusBadge status={p.status} className="px-2 py-0.5 text-[10px]" />
@@ -177,7 +179,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                               transactionId={transaction.id}
                               paymentId={p.id}
                               allowConfirm={false}
-                              payment={{ amount: p.amount, installmentLabel: instLabel }}
+                              payment={{ amount: p.amount, installmentLabel: instLabel, isCredit: p.isCredit, creditAmount: p.creditAmount }}
                               totals={{ totalPaid, totalPayable: transaction.totalPayable }}
                             />
                           )}

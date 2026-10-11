@@ -1,34 +1,42 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { formatNaira } from "@/lib/currency";
+import { previewAllocation } from "@/lib/finance/ledger";
 
 type Installment = { id: string; installmentNumber: number; type: string; dueDate: string; scheduledAmount: number; paidAmount: number; status: string };
 
 const LAST_METHOD_KEY = "belgrove-last-payment-method";
 
+const labelOf = (inst: Installment) => (inst.type === "INITIAL" ? "Initial payment" : `Month ${inst.installmentNumber}`);
+
+// Free-amount record form: the schedule is a guide, never a gate. The admin
+// types whatever the client actually paid; the suggested next amount is a
+// hint only, and a live preview shows exactly what confirming will do.
 export default function RecordPaymentForm({
   transactionId,
   installments,
   outstanding,
-  initialInstallmentId,
-  lockInstallment = false,
+  totalPaid,
+  totalPayable,
   onDone,
 }: {
   transactionId: string;
   installments: Installment[];
   outstanding: number;
-  initialInstallmentId?: string;
-  lockInstallment?: boolean;
+  totalPaid: number;
+  totalPayable: number;
   onDone?: () => void;
 }) {
   const router = useRouter();
-  const firstUnpaid = installments.find((i) => i.id === initialInstallmentId) ?? installments.find((i) => i.status !== "Paid") ?? installments[0];
-  const dueOf = (inst: Installment | undefined) => (inst ? Math.max(0, inst.scheduledAmount - (inst.paidAmount ?? 0)) : 0);
-  const [installmentId, setInstallmentId] = useState(firstUnpaid?.id ?? "");
-  // Amount is pre-filled from the schedule — the admin confirms date/method,
-  // and may reduce it for a partial payment, but never types it blind.
-  const [amount, setAmount] = useState(() => String(dueOf(firstUnpaid) || ""));
+  const ordered = useMemo(() => [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber), [installments]);
+  const suggested = ordered.find((i) => i.scheduledAmount - (i.paidAmount ?? 0) > 0);
+  const suggestedDue = suggested ? Math.max(0, suggested.scheduledAmount - (suggested.paidAmount ?? 0)) : 0;
+
+  // One UUID per form open: double-clicks and retries replay the same key and
+  // can never mint a second payment. Rotated after each recorded payment.
+  const [idemKey, setIdemKey] = useState(() => crypto.randomUUID());
+  const [amount, setAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState(() => {
     try {
@@ -39,32 +47,37 @@ export default function RecordPaymentForm({
   });
   const [bankReference, setBankReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [asCredit, setAsCredit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const selected = installments.find((i) => i.id === installmentId);
-  const due = dueOf(selected);
   const amountNum = parseInt(amount.replace(/[^0-9]/g, ""), 10) || 0;
+  const overBy = amountNum - outstanding;
+  const isOver = amountNum > 0 && overBy > 0;
 
-  function onInstallmentChange(id: string) {
-    setInstallmentId(id);
-    const inst = installments.find((i) => i.id === id);
-    if (inst) setAmount(String(dueOf(inst)));
-  }
+  const preview = useMemo(() => {
+    if (amountNum <= 0) return null;
+    try {
+      return previewAllocation(
+        ordered.map((i) => ({ id: i.id, installmentNumber: i.installmentNumber, scheduledAmount: i.scheduledAmount, paidAmount: i.paidAmount ?? 0, label: labelOf(i) })),
+        amountNum,
+        totalPayable,
+        totalPaid
+      );
+    } catch {
+      return null;
+    }
+  }, [amountNum, ordered, totalPayable, totalPaid]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!installmentId) {
-      setError("Select an installment");
-      return;
-    }
     if (amountNum <= 0) {
       setError("Enter a valid amount");
       return;
     }
-    if (amountNum > outstanding) {
-      setError(`Amount exceeds outstanding balance of ${formatNaira(outstanding)}`);
+    if (isOver && !asCredit) {
+      setError(`Amount exceeds the outstanding balance by ${formatNaira(overBy)}. Tick "record excess as credit" to proceed.`);
       return;
     }
     setBusy(true);
@@ -74,7 +87,7 @@ export default function RecordPaymentForm({
       const res = await fetch(`/api/admin/transactions/${transactionId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ installmentId, amount: amountNum, paymentDate, paymentMethod, bankReference: bankReference.trim() || undefined, notes }),
+        body: JSON.stringify({ amount: amountNum, paymentDate, paymentMethod, bankReference: bankReference.trim() || undefined, notes, idempotencyKey: idemKey, asCredit: isOver }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to record payment");
@@ -85,17 +98,19 @@ export default function RecordPaymentForm({
       }
       setSuccess(
         data.deduped
-          ? "Identical payment was just recorded; showing the existing entry instead of a duplicate."
+          ? "This form was already submitted; showing the existing entry instead of a duplicate."
           : "Payment recorded as pending verification. Confirm it in Payment History below to issue the receipt and update totals."
       );
       setAmount("");
       setNotes("");
       setBankReference("");
+      setAsCredit(false);
+      setIdemKey(crypto.randomUUID());
       router.refresh();
       if (onDone) setTimeout(onDone, 1200);
       setTimeout(() => setSuccess(null), 4000);
-    } catch (e: any) {
-      setError(e.message ?? "Failed");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed");
     } finally {
       setBusy(false);
     }
@@ -105,41 +120,44 @@ export default function RecordPaymentForm({
     <div className="mt-6 border-t border-[var(--ops-border)] pt-6">
       <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Record Payment</h3>
       <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Two steps: record here (pending), then confirm in Payment History. Confirming issues the receipt, emails the client, and updates totals atomically.</p>
+      {suggested && (
+        <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Suggested next: {formatNaira(suggestedDue)} ({labelOf(suggested)}) · Outstanding {formatNaira(outstanding)}</p>
+      )}
       {error && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">{error}</div>}
       {success && <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl px-3 py-2">{success}</div>}
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-        <div>
-          <label className="mono text-[11px] text-[var(--ops-muted)]">Installment *</label>
-          {lockInstallment && selected ? (
-            <div className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-[var(--ops-bg)] text-[var(--ops-text)] font-medium">
-              {selected.type === "INITIAL" ? "Initial payment" : `Month ${selected.installmentNumber} payment`}
-            </div>
-          ) : (
-            <select
-              value={installmentId}
-              onChange={(e) => onInstallmentChange(e.target.value)}
-              className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm bg-white"
-            >
-              {installments.map((inst) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.type === "INITIAL" ? "Initial" : `Month ${inst.installmentNumber}`}: due {new Date(inst.dueDate).toLocaleDateString("en-GB")}, scheduled {formatNaira(inst.scheduledAmount)}, paid {formatNaira(inst.paidAmount)}, {inst.status} {inst.scheduledAmount - inst.paidAmount > 0 ? `· Due ${formatNaira(inst.scheduledAmount - inst.paidAmount)}` : ""}
-                </option>
-              ))}
-            </select>
-          )}
-          {selected && <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">Selected due: {formatNaira(due)} · Outstanding transaction: {formatNaira(outstanding)}</div>}
-        </div>
         <div className="grid md:grid-cols-2 gap-3">
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Amount received (₦) *</label>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={due ? String(due) : "2905000"} inputMode="numeric" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
-            {selected && amountNum > 0 && amountNum !== due && <div className="mono text-[10px] text-amber-700 mt-1">{amountNum < due ? `Partial: remaining ${formatNaira(due - amountNum)} for this installment` : amountNum > due ? `Over scheduled by ${formatNaira(amountNum - due)}; will still be applied` : ""}</div>}
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={suggestedDue ? String(suggestedDue) : "e.g. 2905000"} inputMode="numeric" className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Payment date *</label>
             <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="mt-1 w-full border border-[var(--ops-border)] rounded-xl px-3 py-2 text-sm" />
           </div>
         </div>
+        {preview && preview.lines.length > 0 && (
+          <div className="rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)]/50 px-3 py-2.5">
+            <div className="mono text-[10px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Confirming will</div>
+            <ul className="mt-1 space-y-0.5 text-[12px] text-[var(--ops-text)]">
+              {preview.lines.map((l) => (
+                <li key={l.installmentId}>
+                  {l.clears ? "Clears" : "Part-pays"} {l.label} ({formatNaira(l.applied)}{l.clears ? "" : ` of ${formatNaira(l.scheduled)}`}).
+                </li>
+              ))}
+            </ul>
+            <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">Balance after: {formatNaira(preview.balanceAfter)}</div>
+          </div>
+        )}
+        {isOver && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+            <div className="text-[12px] text-amber-900">Exceeds outstanding by {formatNaira(overBy)}. The excess is only recorded as an explicit, visible credit balance.</div>
+            <label className="mt-1.5 flex items-center gap-2 text-[12px] text-amber-900">
+              <input type="checkbox" checked={asCredit} onChange={(e) => setAsCredit(e.target.checked)} className="rounded" />
+              Record excess of {formatNaira(overBy)} as credit
+            </label>
+          </div>
+        )}
         <div className="grid md:grid-cols-2 gap-3">
           <div>
             <label className="mono text-[11px] text-[var(--ops-muted)]">Payment method</label>
@@ -155,7 +173,7 @@ export default function RecordPaymentForm({
           </div>
         </div>
         <div className="flex justify-end">
-          <button type="submit" disabled={busy || amountNum <= 0 || amountNum > outstanding} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-6 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">{busy ? "Recording…" : "Record Payment for Verification"}</button>
+          <button type="submit" disabled={busy || amountNum <= 0 || (isOver && !asCredit)} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-6 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">{busy ? "Recording…" : "Record Payment for Verification"}</button>
         </div>
       </form>
     </div>

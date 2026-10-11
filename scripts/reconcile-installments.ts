@@ -71,7 +71,7 @@ async function main() {
           data: {
             totalPaid: truth,
             outstandingBalance: truthOut,
-            status: truthOut === 0 ? "PAID_IN_FULL" : t.status === "PAID_IN_FULL" ? "ACTIVE" : t.status,
+            status: truthOut <= 0 ? "PAID_IN_FULL" : t.status === "PAID_IN_FULL" ? "ACTIVE" : t.status,
             updatedAt: now,
           },
         });

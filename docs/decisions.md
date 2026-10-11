@@ -70,3 +70,20 @@ Conservative option chosen wherever the owner was silent. Updated as answers arr
   legacy stored columns in the same transaction. Reads unchanged (stored +
   finance service). `verify-ledger.ts` proves agreement; nightly reconciliation
   (Step 6) takes over thereafter.
+
+## Step 3 recording deviations from target (conservative)
+
+- **Installment picker removed entirely** (not even as a start hint): confirm
+  always waterfalls from the oldest unpaid installment. The form suggests the
+  next due amount as a hint and previews the exact allocation pre-save.
+- **Credit model**: `Payment.isCredit + creditAmount`; allocation capped at
+  schedule capacity, `PAYMENT` entry holds the full amount, negative
+  outstanding displayed as "Credit ₦X". No separate credit table, no
+  refund/reassignment flow yet (needs Step 4+ receipt/statement work).
+- **Idempotency**: client UUID per form open, server requires it (400 if
+  missing), unique constraint enforces; 60s window deleted. Same-key replay
+  returns the existing row even across restarts.
+- **Backdating**: allowed, flagged in the `payment.record` audit
+  (`backdated` + paymentDate); no date floor (per decision 9).
+- **Void flow unchanged** (status flip + REVERSAL entry from Step 2); no delete
+  path exists anywhere — verified, not just asserted.

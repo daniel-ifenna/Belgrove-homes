@@ -19,7 +19,7 @@ export default function PaymentVerificationButtons({
   transactionId: string;
   paymentId: string;
   allowConfirm?: boolean;
-  payment?: { amount: number; installmentLabel: string };
+  payment?: { amount: number; installmentLabel: string; isCredit?: boolean; creditAmount?: number | null };
   totals?: { totalPaid: number; totalPayable: number };
 }) {
   const router = useRouter();
@@ -110,6 +110,7 @@ export default function PaymentVerificationButtons({
           {payment && (
             <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">
               {formatNaira(payment.amount)} · {payment.installmentLabel}
+              {payment.isCredit ? ` · includes credit (parked excess)` : ""}
               {afterConfirm !== null && afterOutstanding !== null && totals && (
                 <> · Total paid {formatNaira(totals.totalPaid)} → {formatNaira(afterConfirm)}, outstanding {formatNaira(totals.totalPayable - totals.totalPaid)} → {formatNaira(afterOutstanding)}</>
               )}

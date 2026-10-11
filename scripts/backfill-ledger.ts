@@ -63,6 +63,9 @@ async function main() {
     }[] = [];
     for (const p of t.payments) {
       if (p.status === "CONFIRMED") {
+        // Credit payments allocate only the schedulable portion (the live
+        // confirm capped them); the remainder is the recorded creditAmount.
+        const allocatable = p.isCredit ? p.amount - (p.creditAmount ?? 0) : p.amount;
         const allocs = planAllocation(
           t.installments.map((i) => ({
             id: i.id,
@@ -71,7 +74,7 @@ async function main() {
             paidAmount: paidMap.get(i.id) ?? 0,
           })),
           p.installmentId,
-          p.amount
+          allocatable
         );
         for (const a of allocs) paidMap.set(a.installmentId, (paidMap.get(a.installmentId) ?? 0) + a.amount);
         paymentOps.push({ payment: p, allocs, voided: false });
