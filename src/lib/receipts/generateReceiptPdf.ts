@@ -330,7 +330,10 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.text(wordLines, margin, y);
   y += wordLines.length * 4 + 6;
 
-  // Signature block — electronic receipt: ONLY authorized, customer acknowledgement removed per spec 11
+  // Authorization block: the real company stamp + signature in one image
+  // (the owner's asset — the one allowed stamp; no code-drawn stamp or
+  // watermark anywhere). The stamp carries its own Sign/Date lines, so no
+  // separate signature line or caption. ~40mm wide, aspect preserved.
   const sigTop = y;
   const sigCenterX = W / 2 - 30;
 
@@ -338,27 +341,22 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.setFontSize(7);
   doc.setTextColor(22, 40, 31);
   doc.text("AUTHORIZED BY BELGROVE", sigCenterX, sigTop + 4);
-  // Verified signature only: a missing/unreadable asset throws (loud,
-  // recoverable PDF failure) — an unsigned receipt must never go out.
+  // Verified stamp only: a missing/unreadable asset throws (loud,
+  // recoverable PDF failure) — an unstamped receipt must never go out.
   const sigB64 = loadSignatureBase64();
+  const stampW = 40;
+  const stampH = (stampW * 1149) / 1088;
   try {
-    doc.addImage(sigB64, "PNG", sigCenterX + 2, sigTop + 6, 28, 14);
+    doc.addImage(sigB64, "PNG", sigCenterX, sigTop + 6, stampW, stampH);
   } catch (e) {
-    throw new Error(`Receipt signature embed failed: ${e instanceof Error ? e.message : e}`);
+    throw new Error(`Receipt stamp embed failed: ${e instanceof Error ? e.message : e}`);
   }
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.3);
-  doc.line(sigCenterX, sigTop + 24, sigCenterX + 60, sigTop + 24);
   doc.setFont(fontName, "normal");
   doc.setFontSize(6);
   doc.setTextColor(107, 102, 86);
-  doc.text("Authorized Signature", sigCenterX, sigTop + 28);
-  doc.text(`Date: ${data.issuedDate}`, sigCenterX, sigTop + 32);
+  doc.text(`Date: ${data.issuedDate}`, sigCenterX, sigTop + 6 + stampH + 4);
 
-  // Watermark/stamp REMOVED — previously drew BELGROVE HOMES OFFICIAL STAMP circle
-  // Intentionally left empty to satisfy P5-17 without leaving placeholder
-
-  y = sigTop + 38;
+  y = sigTop + 6 + stampH + 10;
 
   // Footer
   doc.setFont(fontName, "bold");

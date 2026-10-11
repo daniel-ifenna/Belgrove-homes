@@ -25,9 +25,11 @@ function assetPath(...parts: string[]): string {
   throw new Error(`PDF asset missing: ${parts.join("/")} (checked module-relative and cwd paths)`);
 }
 
-// Verified cashier signature: server-side asset only, never a public URL.
+// Company stamp + authorized signature (single image supplied by the owner):
+// server-side asset only, never a public URL. This is the one allowed stamp
+// — the code-drawn gold stamp stays removed; draw no other stamp/watermark.
 export function loadSignatureBase64(): string {
-  const buf = fs.readFileSync(assetPath("belgrove-cashier-signature.png"));
+  const buf = fs.readFileSync(assetPath("belgrove-stamp-and-signature.png"));
   return `data:image/png;base64,${buf.toString("base64")}`;
 }
 
