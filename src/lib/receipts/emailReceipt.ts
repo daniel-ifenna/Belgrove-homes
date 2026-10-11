@@ -45,6 +45,7 @@ export async function sendReceiptEmail(opts: {
   pdfBuffer: Buffer;
   idempotencyKey?: string;
   plotsSummary?: string | null;
+  accountRef?: string | null;
   // Set when this payment clears the transaction: the email doubles as the
   // completion notice (no separate completion email exists).
   isFinalPayment?: boolean;
@@ -56,7 +57,7 @@ export async function sendReceiptEmail(opts: {
   // what carries Gmail/Outlook.
   const body = `
       <p>Hi ${formatDisplayName(opts.clientName)},</p>
-      <p>Your receipt for <strong>${opts.ref}</strong> is attached as PDF.${opts.plotsSummary ? ` (${opts.plotsSummary})` : ""} You can also view or re-download it anytime at:</p>
+      <p>Your receipt for <strong>${opts.ref}</strong>${opts.accountRef ? ` (account ${opts.accountRef})` : ""} is attached as PDF.${opts.plotsSummary ? ` (${opts.plotsSummary})` : ""} You can also view or re-download it anytime at:</p>
       <p style="overflow-wrap:anywhere;"><a href="${opts.receiptUrl}" style="color:#1E3A2E; font-weight:bold; overflow-wrap:anywhere; word-break:normal;">${opts.receiptUrl}</a></p>
       <p>Scan the QR code on the receipt to verify it instantly. It points to the same link above.</p>
       ${opts.isFinalPayment ? `<p><strong>This was your final payment — your transaction is now fully paid.</strong> No further payments are due. Our team will be in touch about allocation and documentation.</p>` : ""}

@@ -87,3 +87,18 @@ Conservative option chosen wherever the owner was silent. Updated as answers arr
   (`backdated` + paymentDate); no date floor (per decision 9).
 - **Void flow unchanged** (status flip + REVERSAL entry from Step 2); no delete
   path exists anywhere — verified, not just asserted.
+
+## Step 4 receipt/statement deviations from target (conservative)
+
+- **No QR graphic on the Statement of Account**: there is no public statement
+  page to point it at, and a QR to an unrelated URL would mislead. Branding,
+  letterhead, footer and generation date match receipts; every payment row
+  carries its verifiable receipt ref instead. Revisit if a public statement
+  page is ever built.
+- **Helvetica fallback removed by making Noto mandatory**: missing fonts or
+  signature now throw (loud, recoverable PDF failure) instead of silently
+  rendering ₦ as ¦ or an unsigned receipt. Assets resolve module-relative so
+  serverless file tracing bundles them.
+- **No schema changes in Step 4**: all new content (history, labels, refs)
+  derives from already-stored rows. Bank reference renders from the Payment
+  row (never copied onto the receipt snapshot).

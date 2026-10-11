@@ -35,7 +35,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       payment: { include: { installment: true } },
       transaction: {
         select: {
+          ref: true,
           totalPayable: true,
+          booking: { select: { ref: true } },
           payments: { where: { status: "CONFIRMED" }, select: { amount: true } },
         },
       },
@@ -72,6 +74,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const confirmedTotal = (receipt.transaction?.payments ?? []).reduce((s, p) => s + p.amount, 0);
   const isFinalPayment = !!receipt.transaction && confirmedTotal >= receipt.transaction.totalPayable;
+  const { buildAccountRef } = await import("@/lib/receipt-amounts");
+  const accountRef = receipt.transaction
+    ? buildAccountRef(receipt.transaction.ref, receipt.transaction.booking?.ref ?? null)
+    : null;
   let result: { sent: boolean; error: string | null; providerMessageId?: string | null };
   try {
     result = await sendReceiptEmail({
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       pdfBuffer,
       idempotencyKey: key,
       isFinalPayment,
+      accountRef,
       plotsSummary:
         receipt.plotQuantity != null
           ? receipt.sqm

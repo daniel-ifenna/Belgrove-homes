@@ -19,10 +19,11 @@ import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 // Resend call, no queue). maxDuration covers DB work + PDF render + one send.
 export const maxDuration = 60;
 
-function formatDateDMY(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
+function formatDateDMY(d: Date | string): string {
+  const x = new Date(d);
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const yyyy = x.getFullYear();
   return `${dd}-${mm}-${yyyy}`;
 }
 
@@ -112,6 +113,30 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     return undefined;
   });
 
+  // Full receipt content: every confirmed payment with receipt refs and
+  // running balances, the account reference line, and the settlement label.
+  const { buildReceiptHistory, buildAccountRef, settlementLabel } = await import("@/lib/receipt-amounts");
+  const [allConfirmed, allReceipts, bookingRow] = await Promise.all([
+    prisma.payment.findMany({
+      where: { transactionId: txn.id, status: "CONFIRMED" },
+      select: { id: true, amount: true, paymentDate: true, paymentMethod: true },
+    }),
+    prisma.receipt.findMany({ where: { transactionId: txn.id }, select: { paymentId: true, ref: true } }),
+    txn.bookingId
+      ? prisma.inspectionBooking.findUnique({ where: { id: txn.bookingId }, select: { ref: true } })
+      : null,
+  ]);
+  const refByPayment = new Map(allReceipts.map((r) => [r.paymentId as string, r.ref]));
+  // The just-confirmed receipt exists in the DB now (created in the unit).
+  refByPayment.set(confirmed.payment.id, receiptRef);
+  const history = buildReceiptHistory(
+    allConfirmed.map((p) => ({ id: p.id, date: p.paymentDate, method: p.paymentMethod ?? "Bank Transfer", amount: p.amount })),
+    refByPayment,
+    confirmed.payment.id,
+    txn.totalPayable,
+    formatDateDMY
+  );
+
   // Generate the PDF once here and store the bytes on the receipt row.
   // Sends and downloads reuse these stored bytes; only an explicit
   // "Regenerate & resend" rebuilds them.
@@ -140,6 +165,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
             amount: confirmed.payment.amount,
           },
         ],
+        history: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount, receiptRef: h.receiptRef, runningBalance: h.runningBalance, isCurrent: h.isCurrent })),
+        accountRef: buildAccountRef(txn.ref, bookingRow?.ref ?? null),
+        label: settlementLabel(confirmed.newOutstanding),
+        paymentDate: issuedDateStr,
+        paymentMethodLabel: confirmed.payment.paymentMethod ?? "Bank Transfer",
+        bankReference: preview.bankReference ?? null,
         receiptUrl,
         qrDataUrl,
         unitPrice: txn.unitPrice,
@@ -189,6 +220,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       idempotencyKey: `receipt:${confirmed.receiptId}`,
       plotsSummary,
       isFinalPayment: confirmed.isPaidInFull,
+      accountRef: buildAccountRef(txn.ref, bookingRow?.ref ?? null),
     });
     email = { sent: sent.sent, error: sent.error, resendEmailId: sent.providerMessageId ?? null };
   } catch (e) {

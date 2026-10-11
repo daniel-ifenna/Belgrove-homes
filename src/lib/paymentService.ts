@@ -6,10 +6,11 @@ import { generateQrDataUrl } from "@/lib/receipts/qr";
 import { applyConfirmationDbUnit, logServerError } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
-function formatDateDMY(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
+function formatDateDMY(d: Date | string): string {
+  const x = new Date(d);
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const yyyy = x.getFullYear();
   return `${dd}-${mm}-${yyyy}`;
 }
 
@@ -100,8 +101,33 @@ export async function recordPaymentAndGenerateReceipt(params: {
     db: prisma,
     receiptId: confirmed.receiptId,
     ref: receiptRef,
-    render: () =>
-      generateReceiptPdf({
+    render: async () => {
+      const { buildReceiptHistory, buildAccountRef, settlementLabel } = await import("@/lib/receipt-amounts");
+      const fullTxn = await prisma.transaction.findUnique({
+        where: { id: transaction.id },
+        select: { bookingId: true },
+      });
+      const [allConfirmed, allReceipts, bookingRow] = await Promise.all([
+        prisma.payment.findMany({
+          where: { transactionId: transaction.id, status: "CONFIRMED" },
+          select: { id: true, amount: true, paymentDate: true, paymentMethod: true },
+        }),
+        prisma.receipt.findMany({ where: { transactionId: transaction.id }, select: { paymentId: true, ref: true } }),
+        fullTxn?.bookingId
+          ? prisma.inspectionBooking.findUnique({ where: { id: fullTxn.bookingId }, select: { ref: true } })
+          : null,
+      ]);
+      const refByPayment = new Map(allReceipts.map((r) => [r.paymentId as string, r.ref]));
+      refByPayment.set(confirmed.payment.id, receiptRef);
+      const history = buildReceiptHistory(
+        allConfirmed.map((p) => ({ id: p.id, date: p.paymentDate, method: p.paymentMethod ?? "Bank Transfer", amount: p.amount })),
+        refByPayment,
+        confirmed.payment.id,
+        transaction.totalPayable,
+        formatDateDMY
+      );
+      const saved = await prisma.payment.findUnique({ where: { id: confirmed.payment.id }, select: { bankReference: true } });
+      return generateReceiptPdf({
         ref: receiptRef,
         issuedDate: issuedDateStr,
         clientName: transaction.customerName,
@@ -115,6 +141,12 @@ export async function recordPaymentAndGenerateReceipt(params: {
         soldPrice: transaction.baseAmount,
         discount: 0,
         payments: [{ date: issuedDateStr, method: params.paymentMethod ?? "Bank Transfer", amount: params.amount }],
+        history: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount, receiptRef: h.receiptRef, runningBalance: h.runningBalance, isCurrent: h.isCurrent })),
+        accountRef: buildAccountRef(transaction.ref, bookingRow?.ref ?? null),
+        label: settlementLabel(confirmed.newOutstanding),
+        paymentDate: issuedDateStr,
+        paymentMethodLabel: params.paymentMethod ?? "Bank Transfer",
+        bankReference: saved?.bankReference ?? null,
         receiptUrl,
         qrDataUrl,
         unitPrice: transaction.unitPrice,
@@ -131,7 +163,8 @@ export async function recordPaymentAndGenerateReceipt(params: {
             ? "Initial payment"
             : `Month ${confirmed.installment.installmentNumber} payment`
           : undefined,
-      }),
+      });
+    },
   });
 
   if (!pdfOutcome.ok) {
@@ -143,6 +176,11 @@ export async function recordPaymentAndGenerateReceipt(params: {
   // Direct Resend send (no queue). Stable key per receipt — safe replay.
   const { sendReceiptEmail } = await import("@/lib/receipts/emailReceipt");
   const { persistReceiptEmailSent } = await import("@/lib/receiptDelivery");
+  const { buildAccountRef } = await import("@/lib/receipt-amounts");
+  const bookingRefRow = await prisma.transaction.findUnique({
+    where: { id: transaction.id },
+    select: { booking: { select: { ref: true } } },
+  });
   let email: { sent: boolean; error: string | null; resendEmailId?: string | null };
   try {
     const sent = await sendReceiptEmail({
@@ -153,6 +191,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
       pdfBuffer: pdfOutcome.bytes!,
       idempotencyKey: `receipt:${confirmed.receiptId}`,
       isFinalPayment: confirmed.isPaidInFull,
+      accountRef: buildAccountRef(transaction.ref, bookingRefRow?.booking?.ref ?? null),
     });
     email = { sent: sent.sent, error: sent.error, resendEmailId: sent.providerMessageId ?? null };
   } catch (e) {

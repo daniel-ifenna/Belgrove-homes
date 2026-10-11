@@ -18,10 +18,11 @@ import { sendReceiptEmail } from "../src/lib/receipts/emailReceipt.js";
 const APPLY = process.argv.includes("--apply");
 const RESEND = process.argv.includes("--resend");
 
-function formatDateDMY(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
+function formatDateDMY(d: Date | string): string {
+  const x = new Date(d);
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const yyyy = x.getFullYear();
   return `${dd}-${mm}-${yyyy}`;
 }
 
@@ -58,6 +59,21 @@ async function main() {
     const inst = r.payment.installment;
     const installmentLabel = !inst || inst.type === "INITIAL" ? "Initial payment" : `Month ${inst.installmentNumber} payment`;
     const paymentDescription = `${installmentLabel} — ${txn.estate}${txn.unitType ? `, ${txn.unitType}` : ""}${txn.plotCode ? ` (${txn.plotCode})` : ""}`;
+    const { buildReceiptHistory, buildAccountRef, settlementLabel } = await import("../src/lib/receipt-amounts.js");
+    const allReceipts = await prisma.receipt.findMany({ where: { transactionId: txn.id }, select: { paymentId: true, ref: true } });
+    const refByPayment = new Map(allReceipts.map((x) => [x.paymentId as string, x.ref]));
+    refByPayment.set(r.payment.id, r.ref);
+    const bookingRow = txn.bookingId
+      ? await prisma.inspectionBooking.findUnique({ where: { id: txn.bookingId }, select: { ref: true } })
+      : null;
+    const history = buildReceiptHistory(
+      txn.payments.map((p) => ({ id: p.id, date: p.paymentDate, method: p.paymentMethod ?? "Bank Transfer", amount: p.amount })),
+      refByPayment,
+      r.payment.id,
+      txn.totalPayable,
+      formatDateDMY
+    );
+    const balanceAfter = txn.totalPayable - previouslyPaid - r.payment.amount;
     const pdfBuffer = generateReceiptPdf({
       ref: r.ref,
       issuedDate: issuedDateStr,
@@ -72,6 +88,12 @@ async function main() {
       soldPrice: txn.baseAmount,
       discount: 0,
       payments: [{ date: issuedDateStr, method: r.payment.paymentMethod ?? "Bank Transfer", amount: r.payment.amount }],
+      history: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount, receiptRef: h.receiptRef, runningBalance: h.runningBalance, isCurrent: h.isCurrent })),
+      accountRef: buildAccountRef(txn.ref, bookingRow?.ref ?? null),
+      label: settlementLabel(balanceAfter),
+      paymentDate: issuedDateStr,
+      paymentMethodLabel: r.payment.paymentMethod ?? "Bank Transfer",
+      bankReference: r.payment.bankReference ?? null,
       receiptUrl,
       qrDataUrl,
       unitPrice: txn.unitPrice,

@@ -2,6 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
 import { getReceiptAccessUrl } from "@/lib/app-url";
+import { buildReceiptHistory, buildAccountRef, settlementLabel } from "@/lib/receipt-amounts";
+
+function formatDateDMY(d: Date | string): string {
+  const x = new Date(d);
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${x.getFullYear()}`;
+}
 
 // Single source of truth for rebuilding a receipt PDF from the stored
 // snapshot + linked payment/transaction. Used when the filesystem cache
@@ -14,18 +22,21 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
   const receipt = await prisma.receipt.findUnique({
     where: { id: receiptId },
     include: {
-      payment: { include: { installment: true } },
+      payment: { include: { installment: { select: { type: true, installmentNumber: true } } } },
       transaction: {
         select: {
+          ref: true,
           totalPayable: true,
           unitPrice: true,
           plotQuantity: true,
           interestAmount: true,
           paymentPlan: { select: { name: true } },
+          booking: { select: { ref: true } },
           payments: {
             where: { status: "CONFIRMED" },
-            select: { id: true, amount: true, paymentDate: true },
+            select: { id: true, amount: true, paymentDate: true, paymentMethod: true },
           },
+          receipts: { select: { paymentId: true, ref: true } },
         },
       },
     },
@@ -50,29 +61,38 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
     : (receipt.qrTargetUrl || receipt.receiptUrl);
   if (!canonicalUrl) throw new Error("Receipt has no QR target URL");
   const qr = await generateQrDataUrl(canonicalUrl).catch(() => undefined);
-  const previouslyPaid = receipt.transaction
-    ? receipt.transaction.payments
-        .filter(
-          (p) =>
-            p.paymentDate < receipt.payment!.paymentDate ||
-            (p.paymentDate.getTime() === receipt.payment!.paymentDate.getTime() &&
-              p.id < receipt.paymentId)
-        )
-        .reduce((s, p) => s + p.amount, 0)
-    : 0;
   const totalPayable = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
-  const history =
-    (receipt.paymentHistory as unknown as { date: string; method: string; amount: number }[] | null) ?? [
-      {
-        date: receipt.issuedAt.toLocaleDateString("en-GB").split("/").join("-"),
-        method: receipt.paymentMethod ?? "Bank Transfer",
-        amount: receipt.finalAmount,
-      },
-    ];
+  // Voided payments leave CONFIRMED scope but their receipt stays renderable:
+  // include the receipt's own payment so history still stops at this payment.
+  const confirmedList = [...(receipt.transaction?.payments ?? [])];
+  if (receipt.payment && !confirmedList.some((p) => p.id === receipt.payment!.id)) {
+    confirmedList.push({
+      id: receipt.payment.id,
+      paymentDate: receipt.payment.paymentDate,
+      paymentMethod: receipt.payment.paymentMethod,
+      amount: receipt.payment.amount,
+    });
+  }
+  const history = buildReceiptHistory(
+    confirmedList.map((p) => ({
+      id: p.id,
+      date: p.paymentDate,
+      method: p.paymentMethod ?? "Bank Transfer",
+      amount: p.amount,
+    })),
+    new Map((receipt.transaction?.receipts ?? []).map((r) => [r.paymentId as string, r.ref])),
+    receipt.paymentId,
+    totalPayable,
+    formatDateDMY
+  );
+  const previouslyPaid = history
+    .filter((h) => !h.isCurrent)
+    .reduce((s, h) => s + h.amount, 0);
+  const balanceAfter = totalPayable - previouslyPaid - receipt.finalAmount;
 
   return generateReceiptPdf({
     ref: receipt.ref,
-    issuedDate: receipt.issuedAt.toLocaleDateString("en-GB").split("/").join("-"),
+    issuedDate: formatDateDMY(receipt.issuedAt),
     clientName: receipt.customerName,
     clientAddress: receipt.property,
     clientPhone: receipt.customerPhone ?? "",
@@ -83,7 +103,13 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
     amountPaid: receipt.finalAmount,
     soldPrice: receipt.amountBeforeDiscount,
     discount: receipt.discount || undefined,
-    payments: history,
+    payments: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount })),
+    history: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount, receiptRef: h.receiptRef, runningBalance: h.runningBalance, isCurrent: h.isCurrent })),
+    accountRef: receipt.transaction ? buildAccountRef(receipt.transaction.ref, receipt.transaction.booking?.ref ?? null) : undefined,
+    label: settlementLabel(balanceAfter),
+    paymentDate: formatDateDMY(receipt.payment?.paymentDate ?? receipt.issuedAt),
+    paymentMethodLabel: receipt.paymentMethod ?? receipt.payment?.paymentMethod ?? "Bank Transfer",
+    bankReference: receipt.payment?.bankReference ?? null,
     receiptUrl: canonicalUrl,
     qrDataUrl: qr,
     unitPrice: receipt.unitPrice ?? receipt.transaction?.unitPrice ?? undefined,
@@ -93,7 +119,7 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
     totalPayable,
     previouslyPaid,
     totalPaidAfter: previouslyPaid + receipt.finalAmount,
-    outstandingBalance: totalPayable - previouslyPaid - receipt.finalAmount,
+    outstandingBalance: balanceAfter,
     installmentLabel: receipt.payment?.installment
       ? receipt.payment.installment.type === "INITIAL"
         ? "Initial payment"

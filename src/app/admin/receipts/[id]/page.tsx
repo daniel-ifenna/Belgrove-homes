@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
 import { formatDateTime } from "@/lib/booking-ui";
-import { receiptAmountsRows } from "@/lib/receipt-amounts";
+import { receiptAmountsRows, buildReceiptHistory, buildAccountRef, settlementLabel } from "@/lib/receipt-amounts";
 import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
 import ReceiptActions from "./ReceiptActions";
@@ -23,13 +23,14 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
     omit: { pdfData: true },
     include: {
       booking: { select: { id: true, ref: true, status: true, location: true } },
-      payment: { select: { id: true, paymentReference: true, amount: true, paymentDate: true, installment: { select: { type: true, installmentNumber: true } } } },
+      payment: { select: { id: true, paymentReference: true, amount: true, paymentDate: true, paymentMethod: true, bankReference: true, installment: { select: { type: true, installmentNumber: true } } } },
       transaction: {
         select: {
           id: true, ref: true, bookingId: true, manualReason: true, totalPayable: true,
           unitPrice: true, plotQuantity: true,
           booking: { select: { id: true, ref: true } },
-          payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } },
+          payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true, paymentMethod: true } },
+          receipts: { select: { paymentId: true, ref: true } },
         },
       },
       agent: { select: { name: true, email: true } },
@@ -44,17 +45,23 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
 
   // As-of-issue figures: confirmed payments strictly before this one.
   const receiptPayment = receipt.payment;
-  const previouslyPaid = receipt.transaction && receiptPayment
-    ? receipt.transaction.payments
-        .filter(
-          (p) =>
-            p.paymentDate < receiptPayment.paymentDate ||
-            (p.paymentDate.getTime() === receiptPayment.paymentDate.getTime() && p.id < receiptPayment.id)
-        )
-        .reduce((s, p) => s + p.amount, 0)
-    : 0;
+  const confirmedList = [...(receipt.transaction?.payments ?? [])];
+  if (receiptPayment && !confirmedList.some((p) => p.id === receiptPayment.id)) {
+    confirmedList.push({ id: receiptPayment.id, amount: receiptPayment.amount, paymentDate: receiptPayment.paymentDate, paymentMethod: receiptPayment.paymentMethod });
+  }
+  const totalPrice = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
+  const history = buildReceiptHistory(
+    confirmedList.map((p) => ({ id: p.id, date: p.paymentDate, method: p.paymentMethod ?? "Bank Transfer", amount: p.amount })),
+    new Map((receipt.transaction?.receipts ?? []).map((r) => [r.paymentId as string, r.ref])),
+    receipt.paymentId,
+    totalPrice,
+    (d) => formatDateTime(new Date(d))
+  );
+  const previouslyPaid = history.filter((h) => !h.isCurrent).reduce((s, h) => s + h.amount, 0);
   const paidToDate = previouslyPaid + receipt.finalAmount;
-  const balanceRemaining = (receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount) - paidToDate;
+  const balanceRemaining = totalPrice - paidToDate;
+  const label = settlementLabel(balanceRemaining);
+  const accountRef = receipt.transaction ? buildAccountRef(receipt.transaction.ref, receipt.transaction.booking?.ref ?? null) : null;
   const installmentLabel = receipt.payment?.installment
     ? receipt.payment.installment.type === "INITIAL"
       ? "Initial payment"
@@ -80,6 +87,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <div className="flex flex-wrap items-baseline gap-3 mt-1">
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{receipt.ref}</h1>
                 <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${emailed ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>{emailed ? "Emailed" : "Not emailed"}</span>
+                <span className="inline-flex px-3 py-1.5 rounded-full text-xs font-medium border bg-white border-[var(--ops-border)] text-[var(--ops-text)]">{label}</span>
               </div>
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Issued {formatDateTime(receipt.issuedAt)}{receipt.sentAt ? ` · Emailed ${formatDateTime(receipt.sentAt)}` : ""}</div>
             </div>
@@ -116,6 +124,33 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Amount in words</span><span className="text-[12px] text-right max-w-[60%]">{receipt.amountInWords}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Description</span><span className="text-[12px] text-right max-w-[60%]">{receipt.paymentDescription}</span></div>
                 {receipt.paymentMethod && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Method</span><span className="font-medium">{receipt.paymentMethod}</span></div>}
+                {receipt.payment?.bankReference && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Bank ref</span><span className="font-mono text-[12px]">{receipt.payment.bankReference}</span></div>}
+                {accountRef && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Account ref</span><span className="font-mono text-[12px]">{accountRef}</span></div>}
+              </div>
+            </div>
+
+            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment history</h2>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
+                  <thead>
+                    <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
+                      <th className="px-3 py-2">#</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Method</th><th className="px-3 py-2">Receipt</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--ops-border)]/60">
+                    {history.map((h) => (
+                      <tr key={h.index} className={h.isCurrent ? "bg-[#FFFBEB]/50 font-medium" : ""}>
+                        <td className="px-3 py-2 mono text-[11px]">{h.index}</td>
+                        <td className="px-3 py-2 mono text-[11px]">{h.date}</td>
+                        <td className="px-3 py-2 mono text-[11px]">{h.method}</td>
+                        <td className="px-3 py-2 font-mono text-[11px]">{h.receiptRef ?? "-"}</td>
+                        <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(h.amount)}</td>
+                        <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(h.runningBalance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 

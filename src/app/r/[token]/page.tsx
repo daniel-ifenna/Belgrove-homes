@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
-import { receiptAmountsRows } from "@/lib/receipt-amounts";
+import { receiptAmountsRows, buildReceiptHistory, buildAccountRef, settlementLabel } from "@/lib/receipt-amounts";
 import { isTokenUsable } from "@/lib/receipt-access";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +12,11 @@ export const viewport = {
   initialScale: 1,
 };
 
-function formatDateDMY(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
+function formatDateDMY(d: Date | string): string {
+  const x = new Date(d);
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const yyyy = x.getFullYear();
   return `${dd}-${mm}-${yyyy}`;
 }
 
@@ -30,10 +31,13 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
       payment: { include: { installment: { select: { type: true, installmentNumber: true } } } },
       transaction: {
         select: {
+          ref: true,
           totalPayable: true,
           unitPrice: true,
           plotQuantity: true,
-          payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true } },
+          booking: { select: { ref: true } },
+          payments: { where: { status: "CONFIRMED" }, select: { id: true, amount: true, paymentDate: true, paymentMethod: true } },
+          receipts: { select: { paymentId: true, ref: true } },
         },
       },
     },
@@ -42,29 +46,29 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const payments = (receipt.paymentHistory as unknown as
-    | { date: string; method: string; amount: number }[]
-    | null) ?? [
-    { date: formatDateDMY(receipt.issuedAt), method: receipt.paymentMethod ?? "Bank Transfer", amount: receipt.finalAmount },
-  ];
   const installmentLabel = receipt.payment?.installment
     ? receipt.payment.installment.type === "INITIAL"
       ? "Initial payment"
       : `Month ${receipt.payment.installment.installmentNumber} payment`
     : null;
   const clientPayment = receipt.payment;
-  const previouslyPaid =
-    receipt.transaction && clientPayment
-      ? receipt.transaction.payments
-          .filter(
-            (p) =>
-              p.paymentDate < clientPayment.paymentDate ||
-              (p.paymentDate.getTime() === clientPayment.paymentDate.getTime() && p.id < clientPayment.id)
-          )
-          .reduce((s, p) => s + p.amount, 0)
-      : 0;
+  const confirmedList = [...(receipt.transaction?.payments ?? [])];
+  if (clientPayment && !confirmedList.some((p) => p.id === clientPayment.id)) {
+    confirmedList.push({ id: clientPayment.id, amount: clientPayment.amount, paymentDate: clientPayment.paymentDate, paymentMethod: clientPayment.paymentMethod });
+  }
   const totalPrice = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
+  const history = buildReceiptHistory(
+    confirmedList.map((p) => ({ id: p.id, date: p.paymentDate, method: p.paymentMethod ?? "Bank Transfer", amount: p.amount })),
+    new Map((receipt.transaction?.receipts ?? []).map((r) => [r.paymentId as string, r.ref])),
+    receipt.paymentId,
+    totalPrice,
+    formatDateDMY
+  );
+  const previouslyPaid = history.filter((h) => !h.isCurrent).reduce((s, h) => s + h.amount, 0);
   const paidToDate = previouslyPaid + receipt.finalAmount;
+  const balanceAfter = totalPrice - paidToDate;
+  const label = settlementLabel(balanceAfter);
+  const accountRef = receipt.transaction ? buildAccountRef(receipt.transaction.ref, receipt.transaction.booking?.ref ?? null) : null;
   const plotQty = receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? null;
 
   return (
@@ -87,10 +91,14 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
 
         <div className="px-4 sm:px-8 py-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pt-2">
-            <h1 className="fraunces text-[24px] sm:text-[28px] font-bold text-[#16281F]">RECEIPT</h1>
+            <div>
+              <h1 className="fraunces text-[24px] sm:text-[28px] font-bold text-[#16281F]">RECEIPT</h1>
+              <div className="mono text-[11px] tracking-[0.12em] text-[#8B6B4E] mt-1">{label}</div>
+            </div>
             <div className="text-left sm:text-right mono text-[11px] text-[#6B6656] break-words">
               <div className="break-all">RECEIPT: {receipt.ref}</div>
               <div>ISSUED DATE: {formatDateDMY(receipt.issuedAt)}</div>
+              {accountRef && <div className="break-all">ACCOUNT: {accountRef}</div>}
             </div>
           </div>
 
@@ -107,7 +115,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
                 installmentLabel,
                 totalPrice,
                 paidToDate,
-                balanceRemaining: totalPrice - paidToDate,
+                balanceRemaining: balanceAfter,
                 discount: receipt.discount,
               }).map((row, i) => (
                 <div key={row.key} className={`mono text-[11px] opacity-90 ${i === 0 ? "" : "mt-2"}`}>
@@ -124,6 +132,11 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
 
           <div className="mono text-[11px] font-bold text-[#16281F] mt-6 break-words">{receipt.property}</div>
           {installmentLabel && <div className="mono text-[11px] text-[#6B6656] mt-1">{installmentLabel}</div>}
+          <div className="mono text-[11px] text-[#6B6656] mt-1">
+            {clientPayment?.paymentMethod ?? receipt.paymentMethod ?? "Bank Transfer"}
+            {clientPayment?.bankReference ? ` · Bank ref: ${clientPayment.bankReference}` : ""}
+            {clientPayment ? ` · ${formatDateDMY(clientPayment.paymentDate)}` : ""}
+          </div>
           {plotQty != null && (
             <div className="mono text-[11px] text-[#6B6656] mt-1">
               Plots: {receipt.sqm ? `${plotQty} × ${receipt.sqm}sqm` : `${plotQty} plot${plotQty === 1 ? "" : "s"}`}
@@ -131,24 +144,28 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
           )}
 
           <div className="mt-4 border border-[#E4DCC7] rounded-lg overflow-x-auto">
-            <div className="min-w-[560px]">
-              <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[11px] font-medium">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-[36px_1fr_1fr_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[11px] font-medium">
                 <div className="px-3 py-2">#</div>
                 <div className="px-3 py-2">Payment Date</div>
-                <div className="px-3 py-2">Payment Method</div>
+                <div className="px-3 py-2">Method</div>
+                <div className="px-3 py-2">Receipt</div>
                 <div className="px-3 py-2 text-right">Amount (₦)</div>
+                <div className="px-3 py-2 text-right">Balance (₦)</div>
               </div>
-              {payments.map((p, i: number) => (
-                <div key={i} className={`grid grid-cols-[40px_1fr_1fr_1fr] mono text-[12px] ${i % 2 === 1 ? "bg-[#F7F2E7]" : "bg-white"} border-t border-[#E4DCC7]`}>
-                  <div className="px-3 py-2">{i + 1}</div>
-                  <div className="px-3 py-2 break-words">{typeof p.date === "string" ? p.date : formatDateDMY(new Date(p.date))}</div>
-                  <div className="px-3 py-2 break-words">{p.method}</div>
-                  <div className="px-3 py-2 text-right break-words">{formatNaira(p.amount)}</div>
+              {history.map((h) => (
+                <div key={h.index} className={`grid grid-cols-[36px_1fr_1fr_1fr_1fr_1fr] mono text-[12px] ${h.index % 2 === 0 ? "bg-[#F7F2E7]" : "bg-white"} border-t border-[#E4DCC7] ${h.isCurrent ? "font-bold" : ""}`}>
+                  <div className="px-3 py-2">{h.index}</div>
+                  <div className="px-3 py-2 break-words">{h.date}</div>
+                  <div className="px-3 py-2 break-words">{h.method}</div>
+                  <div className="px-3 py-2 break-words">{h.receiptRef ?? "-"}</div>
+                  <div className="px-3 py-2 text-right break-words">{formatNaira(h.amount)}</div>
+                  <div className="px-3 py-2 text-right break-words">{formatNaira(h.runningBalance)}</div>
                 </div>
               ))}
-              <div className="grid grid-cols-[40px_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[12px] font-bold border-t border-[#E4DCC7]">
-                <div className="px-3 py-2 col-span-3">Total Paid</div>
-                <div className="px-3 py-2 text-right break-words">{formatNaira(receipt.finalAmount)}</div>
+              <div className="grid grid-cols-[36px_1fr_1fr_1fr_1fr_1fr] bg-[#16281F] text-[#D4B368] mono text-[12px] font-bold border-t border-[#E4DCC7]">
+                <div className="px-3 py-2 col-span-4">Total paid to date</div>
+                <div className="px-3 py-2 text-right break-words col-span-2">{formatNaira(paidToDate)}</div>
               </div>
             </div>
           </div>

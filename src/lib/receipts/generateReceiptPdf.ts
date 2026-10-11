@@ -1,18 +1,23 @@
-import fs from "node:fs";
-import path from "node:path";
 import { jsPDF } from "jspdf";
 import { amountToWords } from "./amountToWords";
 import { formatNaira } from "../currency";
 import { formatDisplayName } from "../formatName";
-import { receiptAmountsRows } from "../receipt-amounts";
+import { receiptAmountsRows, settlementLabel } from "../receipt-amounts";
 import { drawLetterhead } from "../documents/brand";
-
-// Server-only: signature asset stored in private path, never as public URL
-const SIGNATURE_REL = path.join(process.cwd(), "src/lib/receipts/belgrove-cashier-signature.png");
-const FONT_REGULAR_REL = path.join(process.cwd(), "src/lib/receipts/fonts/NotoSans-Regular.ttf");
-const FONT_BOLD_REL = path.join(process.cwd(), "src/lib/receipts/fonts/NotoSans-Bold.ttf");
+import { loadSignatureBase64, embedNotoSans } from "./pdf-assets";
 
 type PaymentRow = { date: string; method: string; amount: number };
+
+// Full-history row: every confirmed payment up to and including this one,
+// with its receipt ref and the running balance after it.
+export type ReceiptHistoryRowInput = {
+  date: string;
+  method: string;
+  amount: number;
+  receiptRef: string | null;
+  runningBalance: number;
+  isCurrent: boolean;
+};
 
 export type ReceiptData = {
   ref: string;
@@ -28,6 +33,19 @@ export type ReceiptData = {
   soldPrice: number;
   discount?: number;
   payments: PaymentRow[];
+  // Full history (preferred): when present, the table shows every payment
+  // with receipt refs and running balances; `payments` is the legacy
+  // single-row fallback.
+  history?: ReceiptHistoryRowInput[];
+  // Account reference line: transaction ref + booking ref (separate from the
+  // receipt number, which stays RCT-…).
+  accountRef?: string;
+  // Settlement label: PART PAYMENT while balance remains, FINAL when settled.
+  label?: "PART PAYMENT" | "FINAL PAYMENT, ACCOUNT SETTLED";
+  // This payment's own channel details.
+  paymentDate?: string;
+  paymentMethodLabel?: string;
+  bankReference?: string | null;
   receiptUrl: string;
   qrDataUrl?: string;
   // Extended for new property table + payment details (spec 13/14)
@@ -42,34 +60,6 @@ export type ReceiptData = {
   transactionRef?: string;
   installmentLabel?: string;
 };
-
-function loadSignatureBase64(): string | null {
-  try {
-    if (!fs.existsSync(SIGNATURE_REL)) return null;
-    const buf = fs.readFileSync(SIGNATURE_REL);
-    return `data:image/png;base64,${buf.toString("base64")}`;
-  } catch {
-    return null;
-  }
-}
-
-function embedNotoSans(doc: jsPDF) {
-  try {
-    if (fs.existsSync(FONT_REGULAR_REL)) {
-      const reg = fs.readFileSync(FONT_REGULAR_REL).toString("base64");
-      (doc as any).addFileToVFS("NotoSans-Regular.ttf", reg);
-      (doc as any).addFont("NotoSans-Regular.ttf", "NotoSans", "normal");
-    }
-    if (fs.existsSync(FONT_BOLD_REL)) {
-      const bold = fs.readFileSync(FONT_BOLD_REL).toString("base64");
-      (doc as any).addFileToVFS("NotoSans-Bold.ttf", bold);
-      (doc as any).addFont("NotoSans-Bold.ttf", "NotoSans", "bold");
-    }
-  } catch (e) {
-    // fallback to helvetica if embedding fails — but Naira may break
-    console.error("Failed to embed NotoSans", e);
-  }
-}
 
 function drawPersonIcon(doc: jsPDF, x: number, y: number, size: number) {
   // PDF-compatible vector person icon — no icon font, no unicode glyph
@@ -92,9 +82,8 @@ function drawPersonIcon(doc: jsPDF, x: number, y: number, size: number) {
 
 export function generateReceiptPdf(data: ReceiptData): Buffer {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-  embedNotoSans(doc);
-  const useNoto = fs.existsSync(FONT_REGULAR_REL);
-  const fontName = useNoto ? "NotoSans" : "helvetica";
+  embedNotoSans(doc); // throws when fonts are unavailable — never helvetica
+  const fontName = "NotoSans";
 
   const W = doc.internal.pageSize.getWidth();
   const margin = 12;
@@ -103,16 +92,23 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   // Returns the y where body content starts — never overlapping the header.
   let y = drawLetterhead(doc, fontName, { margin, top: 14 });
 
-  // Title & receipt number — no hashtag, no overlap with golden border
+  // Title & receipt number — no hashtag, no overlap with golden border.
+  // Plain-text settlement label directly under the title (no stamp graphic).
+  const label = data.label ?? settlementLabel(data.outstandingBalance ?? data.soldPrice - data.amountPaid);
   doc.setFont(fontName, "bold");
   doc.setFontSize(22);
   doc.setTextColor(22, 40, 31);
   doc.text("RECEIPT", margin, y);
+  doc.setFontSize(9);
+  doc.setTextColor(107, 102, 86);
+  doc.text(label, margin, y + 5);
   doc.setFontSize(8);
   doc.setFont(fontName, "normal");
-  doc.setTextColor(107, 102, 86);
   doc.text(`RECEIPT: ${data.ref}`, rightX, y - 6, { align: "right" });
   doc.text(`ISSUED DATE: ${data.issuedDate}`, rightX, y - 1, { align: "right" });
+  if (data.accountRef) {
+    doc.text(`ACCOUNT: ${data.accountRef}`, rightX, y + 4, { align: "right" });
+  }
   y += 10;
 
   // Issued to block + Amount panel
@@ -240,6 +236,9 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
     if (ext.paymentPlanName) details.push(["Payment Plan:", ext.paymentPlanName]);
     if (ext.interestAmount !== undefined) details.push(["Interest:", formatNaira(ext.interestAmount)]);
     if (ext.previouslyPaid !== undefined) details.push(["Previously Paid:", formatNaira(ext.previouslyPaid)]);
+    if (data.paymentDate) details.push(["Payment Date:", data.paymentDate]);
+    if (data.paymentMethodLabel) details.push(["Method:", data.paymentMethodLabel]);
+    if (data.bankReference) details.push(["Bank Ref:", data.bankReference]);
     for (const [label, val] of details) {
       doc.setFont(fontName, "bold");
       doc.text(label, margin, y);
@@ -252,31 +251,38 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
     y += 2;
   }
 
-  // Payment history table (for audit, single row for this receipt)
-  const colW = [(W - margin * 2) * 0.08, (W - margin * 2) * 0.32, (W - margin * 2) * 0.32, (W - margin * 2) * 0.28];
+  // Payment history table: every confirmed payment up to and including this
+  // one, each with its receipt ref and the running balance after it.
+  const hist: { date: string; method: string; amount: number; receipt: string; balance: number; current: boolean }[] =
+    data.history && data.history.length > 0
+      ? data.history.map((h) => ({ date: h.date, method: h.method, amount: h.amount, receipt: h.receiptRef ?? "-", balance: h.runningBalance, current: h.isCurrent }))
+      : data.payments.map((r) => ({ date: r.date, method: r.method, amount: r.amount, receipt: data.ref, balance: data.soldPrice - r.amount, current: true }));
+  const colW = [(W - margin * 2) * 0.07, (W - margin * 2) * 0.20, (W - margin * 2) * 0.20, (W - margin * 2) * 0.19, (W - margin * 2) * 0.17, (W - margin * 2) * 0.17];
   const tableX = margin;
   doc.setFillColor(22, 40, 31);
   doc.rect(tableX, y, W - margin * 2, 7, "F");
   doc.setTextColor(212, 179, 104);
   doc.setFont(fontName, "bold");
   doc.setFontSize(7);
-  const headers = ["#", "Payment Date", "Payment Method", "Amount (\u20A6)"];
-  let cx = tableX + 2;
+  const headers = ["#", "Payment Date", "Method", "Receipt", "Amount (₦)", "Balance (₦)"];
+  const colX = [tableX + 2];
+  for (let i = 1; i < colW.length; i++) colX.push(colX[i - 1] + colW[i - 1]);
   for (let i = 0; i < headers.length; i++) {
-    const align = i === 3 ? "right" : "left";
-    const tx = i === 3 ? tableX + W - margin * 2 - 2 : cx;
-    doc.text(headers[i], tx, y + 4.5, { align: align as any });
-    cx += colW[i];
+    const right = i >= 4;
+    doc.text(headers[i], right ? colX[i] + colW[i] - 2 : colX[i], y + 4.5, { align: right ? "right" : "left" });
   }
   y += 7;
   doc.setTextColor(22, 40, 31);
   doc.setFont(fontName, "normal");
   doc.setFontSize(7);
-  for (let i = 0; i < data.payments.length; i++) {
-    const r = data.payments[i];
+  const cellFit = (text: string, maxW: number) =>
+    doc.getTextWidth(text) > maxW
+      ? `${text.substring(0, Math.max(0, Math.floor((text.length * maxW) / doc.getTextWidth(text)) - 1))}…`
+      : text;
+  for (let i = 0; i < hist.length; i++) {
+    const r = hist[i];
     const rowY = y + 4;
-    const isStripe = i % 2 === 1;
-    if (isStripe) {
+    if (i % 2 === 1) {
       doc.setFillColor(247, 242, 231);
       doc.rect(tableX, y, W - margin * 2, 7, "F");
     }
@@ -287,25 +293,27 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
       vx += colW[c];
       doc.line(vx, y, vx, y + 7);
     }
-    doc.text(String(i + 1), tableX + 2, rowY);
-    doc.text(r.date, tableX + colW[0] + 2, rowY);
-    // Fixed 7mm row: ellipsis-truncate a method string wider than its column
-    // (explicit last resort — measured, never silently clipped).
-    const methodMaxW = colW[2] - 4;
-    const methodCell =
-      doc.getTextWidth(r.method) > methodMaxW
-        ? `${r.method.substring(0, Math.max(0, Math.floor((r.method.length * methodMaxW) / doc.getTextWidth(r.method)) - 1))}…`
-        : r.method;
-    doc.text(methodCell, tableX + colW[0] + colW[1] + 2, rowY);
-    doc.text(formatNaira(r.amount), tableX + W - margin * 2 - 2, rowY, { align: "right" });
+    if (r.current) {
+      doc.setFont(fontName, "bold");
+    }
+    doc.text(String(i + 1), colX[0], rowY);
+    doc.text(r.date, colX[1], rowY);
+    doc.text(cellFit(r.method, colW[2] - 4), colX[2], rowY);
+    doc.setFontSize(6);
+    doc.text(cellFit(r.receipt, colW[3] - 4), colX[3], rowY);
+    doc.setFontSize(7);
+    doc.text(formatNaira(r.amount), colX[4] + colW[4] - 2, rowY, { align: "right" });
+    doc.text(formatNaira(r.balance), colX[5] + colW[5] - 2, rowY, { align: "right" });
+    doc.setFont(fontName, "normal");
     y += 7;
   }
+  const paidToDateVal = hist.length > 0 ? (data as any).totalPaidAfter ?? hist.reduce((s, r) => s + r.amount, 0) : data.amountPaid;
   doc.setFillColor(22, 40, 31);
   doc.rect(tableX, y, W - margin * 2, 7, "F");
   doc.setTextColor(212, 179, 104);
   doc.setFont(fontName, "bold");
-  doc.text("Total Paid (this receipt)", tableX + 2, y + 4.5);
-  doc.text(formatNaira(data.amountPaid), tableX + W - margin * 2 - 2, y + 4.5, { align: "right" });
+  doc.text("Total paid to date", tableX + 2, y + 4.5);
+  doc.text(formatNaira(paidToDateVal), tableX + W - margin * 2 - 2, y + 4.5, { align: "right" });
   y += 10;
 
   // Amount in words
@@ -330,13 +338,13 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.setFontSize(7);
   doc.setTextColor(22, 40, 31);
   doc.text("AUTHORIZED BY BELGROVE", sigCenterX, sigTop + 4);
+  // Verified signature only: a missing/unreadable asset throws (loud,
+  // recoverable PDF failure) — an unsigned receipt must never go out.
   const sigB64 = loadSignatureBase64();
-  if (sigB64) {
-    try {
-      doc.addImage(sigB64, "PNG", sigCenterX + 2, sigTop + 6, 28, 14);
-    } catch (e) {
-      console.error("Receipt PDF: signature image embed failed, continuing without it", e);
-    }
+  try {
+    doc.addImage(sigB64, "PNG", sigCenterX + 2, sigTop + 6, 28, 14);
+  } catch (e) {
+    throw new Error(`Receipt signature embed failed: ${e instanceof Error ? e.message : e}`);
   }
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);

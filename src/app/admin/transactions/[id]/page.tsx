@@ -13,6 +13,8 @@ import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
 import PaymentSchedule from "./PaymentSchedule";
 import PaymentVerificationButtons from "./PaymentVerificationButtons";
+import StatementActions from "./StatementActions";
+import { buildStatementRows } from "@/lib/statement";
 
 // Finance display labels (Paid / Late / Partial / Pending) are rendered
 // directly from getTransactionSummary — no local status mapping.
@@ -32,6 +34,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
       payments: { orderBy: { createdAt: "desc" } },
       receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true } },
       booking: { select: { id: true, ref: true } },
+      ledgerEntries: { orderBy: [{ effectiveDate: "asc" }, { createdAt: "asc" }] },
     },
   });
   if (!transaction) notFound();
@@ -147,6 +150,46 @@ export default async function TransactionDetailPage({ params }: { params: Promis
               outstanding={outstanding}
               totals={{ totalPaid, totalPayable: transaction.totalPayable }}
             />
+
+            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Statement of Account</h2>
+              {transaction.ledgerEntries.length === 0 ? (
+                <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No ledger entries yet.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
+                        <th className="px-3 py-2">Date</th><th className="px-3 py-2">Details</th><th className="px-3 py-2 text-right">Debit</th><th className="px-3 py-2 text-right">Credit</th><th className="px-3 py-2 text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--ops-border)]/60">
+                      {buildStatementRows(transaction.ledgerEntries.map((e) => ({
+                        id: e.id,
+                        type: e.type,
+                        amount: e.amount,
+                        direction: e.direction,
+                        effectiveDate: e.effectiveDate,
+                        createdAt: e.createdAt,
+                        method: e.method,
+                        bankReference: e.bankReference,
+                      }))).rows.map((r, i) => (
+                        <tr key={i} className="hover:bg-[var(--ops-bg)]/30">
+                          <td className="px-3 py-2 mono text-[11px]">{r.date}</td>
+                          <td className="px-3 py-2 text-[13px]">{r.details}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{r.debit != null ? formatNaira(r.debit) : "-"}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{r.credit != null ? formatNaira(r.credit) : "-"}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(r.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="mt-4">
+                <StatementActions transactionId={transaction.id} transactionRef={transaction.ref} />
+              </div>
+            </div>
 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
               <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment History</h2>
