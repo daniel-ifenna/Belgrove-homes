@@ -4,6 +4,44 @@ import { generateUniqueTransactionRef } from "@/lib/ref";
 import { calculateTransactionAmounts, generateInstallmentSchedule } from "@/lib/paymentCalculation";
 import { findOrCreateCustomer } from "@/lib/customer";
 import { normalizeName } from "@/lib/phone";
+import { postLedgerEntry, type TxClient } from "@/lib/finance/ledger";
+
+// Ledger dual-write for new transactions: CHARGE entries for the obligation.
+// Same tx as the transaction row — a new transaction always has matching
+// ledger charges from birth. Legacy stored totals stay the read source.
+async function postCreationCharges(
+  tx: TxClient,
+  opts: {
+    transactionId: string;
+    baseAmount: number;
+    interestAmount: number;
+    now: Date;
+    recordedById?: string | null;
+  }
+) {
+  await postLedgerEntry(tx, {
+    transactionId: opts.transactionId,
+    type: "CHARGE_BASE",
+    amount: opts.baseAmount,
+    direction: "DEBIT",
+    effectiveDate: opts.now,
+    recordedById: opts.recordedById ?? null,
+    note: "Base price at transaction creation",
+    idempotencyKey: `charge:${opts.transactionId}:base`,
+  });
+  if (opts.interestAmount > 0) {
+    await postLedgerEntry(tx, {
+      transactionId: opts.transactionId,
+      type: "CHARGE_INTEREST",
+      amount: opts.interestAmount,
+      direction: "DEBIT",
+      effectiveDate: opts.now,
+      recordedById: opts.recordedById ?? null,
+      note: "One-time interest at transaction creation",
+      idempotencyKey: `charge:${opts.transactionId}:interest`,
+    });
+  }
+}
 
 export async function createTransactionFromBooking(
   bookingId: string,
@@ -72,6 +110,14 @@ export async function createTransactionFromBooking(
         },
       });
     }
+
+    await postCreationCharges(tx, {
+      transactionId: transaction.id,
+      baseAmount,
+      interestAmount,
+      now,
+      recordedById: createdById,
+    });
 
     await tx.auditEvent.create({
       data: {
@@ -210,6 +256,14 @@ export async function createManualTransaction(params: {
         },
       });
     }
+
+    await postCreationCharges(tx, {
+      transactionId: transaction.id,
+      baseAmount,
+      interestAmount,
+      now,
+      recordedById: params.createdById,
+    });
 
     await tx.auditEvent.create({
       data: {

@@ -131,8 +131,12 @@ describe("schedule guard (pure function; record caps at outstanding, confirm wat
 describe("receipt cannot be created without a confirmed payment", () => {
   it("schema requires Receipt.paymentId", () => {
     const schema = fs.readFileSync(path.join(process.cwd(), "prisma/schema.prisma"), "utf8");
-    expect(schema).toMatch(/paymentId String @unique/);
-    expect(schema).not.toMatch(/paymentId String\? @unique/);
+    // Scope to the Receipt model: LedgerEntry legitimately has an optional
+    // paymentId (set on PAYMENT entries only).
+    const block = schema.match(/model Receipt \{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(block).not.toBe("");
+    expect(block).toMatch(/paymentId String @unique/);
+    expect(block).not.toMatch(/paymentId String\? @unique/);
   });
   it("manual receipt paths are removed", () => {
     const gone = [

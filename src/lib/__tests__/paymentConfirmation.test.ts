@@ -65,7 +65,8 @@ type MockState = {
   installments: MockInstallment[];
   transactions: MockTransaction[];
   receipts: Record<string, unknown>[];
-  
+  ledger: Record<string, unknown>[];
+  allocs: Record<string, unknown>[];
   audits: Record<string, unknown>[];
   bookings: { id: string; status: string; outcome: string | null }[];
   activities: Record<string, unknown>[];
@@ -157,6 +158,32 @@ function makeMockTx(state: MockState): TxClient {
         return row;
       },
     },
+    ledgerEntry: {
+      create: async (args: unknown) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const row = { id: `le-${state.ledger.length + 1}`, ...data };
+        state.ledger.push(row);
+        return row;
+      },
+      findUnique: async (args: unknown) => {
+        const { where } = args as { where: { paymentId?: string } };
+        return state.ledger.find((e) => (e as { paymentId?: string }).paymentId === where.paymentId) ?? null;
+      },
+    },
+    paymentAllocation: {
+      create: async (args: unknown) => {
+        const { data } = args as { data: Record<string, unknown> };
+        const row = { id: `pa-${state.allocs.length + 1}`, ...data };
+        state.allocs.push(row);
+        return row;
+      },
+      deleteMany: async (args: unknown) => {
+        const { where } = args as { where: { paymentId: string } };
+        const before = state.allocs.length;
+        state.allocs = state.allocs.filter((a) => (a as { paymentId: string }).paymentId !== where.paymentId);
+        return { count: before - state.allocs.length };
+      },
+    },
     auditEvent: {
       create: async (args: unknown) => {
         const { data } = args as { data: Record<string, unknown> };
@@ -222,7 +249,7 @@ function seed2900(): MockState {
     paymentPlan: { code: "OUTRIGHT", name: "Outright" },
     installments: [installment],
   };
-  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], audits: [], bookings: [], activities: [] };
+  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], ledger: [], allocs: [], audits: [], bookings: [], activities: [] };
 }
 
 function pendingPayment(id: string): MockPayment {
@@ -312,6 +339,18 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.audits).toHaveLength(1);
     expect((state.audits[0] as { action: string }).action).toBe("payment.confirm");
     expect((state.audits[0] as { entityId: string }).entityId).toBe("pay-1");
+    // Ledger dual-write in the same unit: one PAYMENT entry + allocations
+    // summing exactly to the payment amount.
+    expect(state.ledger).toHaveLength(1);
+    expect(state.ledger[0]).toMatchObject({
+      type: "PAYMENT",
+      direction: "CREDIT",
+      amount: 2_900_000,
+      paymentId: "pay-1",
+      idempotencyKey: "payment:pay-1",
+    });
+    expect(state.allocs).toHaveLength(1);
+    expect(state.allocs[0]).toMatchObject({ paymentId: "pay-1", installmentId: "inst-0", amount: 2_900_000 });
   });
 
   it("double-confirm applies only once (idempotent claim)", async () => {
@@ -375,6 +414,46 @@ describe("reverseConfirmedPaymentDbUnit", () => {
     expect(state.payments[0].status).toBe("CANCELLED");
     expect(state.receipts).toHaveLength(1); // audit trail kept
     expect(state.audits.map((a) => (a as { action: string }).action)).toContain("payment.void");
+  });
+
+  it("void appends a REVERSAL entry and drops the payment's allocations", async () => {
+    const state = seed2900();
+    state.payments.push({ ...pendingPayment("pay-1"), status: "CONFIRMED" });
+    state.installments[0].paidAmount = 2_900_000;
+    state.installments[0].status = "PAID";
+    state.transactions[0].totalPaid = 2_900_000;
+    state.transactions[0].outstandingBalance = 0;
+    state.transactions[0].status = "PAID_IN_FULL";
+    state.ledger.push({ id: "le-1", type: "PAYMENT", amount: 2_900_000, paymentId: "pay-1" });
+    state.allocs.push({ id: "pa-1", paymentId: "pay-1", installmentId: "inst-0", amount: 2_900_000 });
+    const tx = makeMockTx(state);
+
+    await reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1", reason: "dup" });
+
+    expect(state.ledger).toHaveLength(2);
+    expect(state.ledger[1]).toMatchObject({
+      type: "REVERSAL",
+      direction: "DEBIT",
+      amount: 2_900_000,
+      reversesEntryId: "le-1",
+      idempotencyKey: "reversal:pay-1",
+    });
+    expect(state.allocs).toHaveLength(0);
+  });
+
+  it("void of a pre-ledger payment still reverses stored totals (no entry to reverse)", async () => {
+    const state = seed2900();
+    state.payments.push({ ...pendingPayment("pay-1"), status: "CONFIRMED" });
+    state.installments[0].paidAmount = 2_900_000;
+    state.installments[0].status = "PAID";
+    state.transactions[0].totalPaid = 2_900_000;
+    state.transactions[0].outstandingBalance = 0;
+    const tx = makeMockTx(state);
+
+    const result = await reverseConfirmedPaymentDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1" });
+
+    expect(result.newTotalPaid).toBe(0);
+    expect(state.ledger).toHaveLength(0); // nothing to reverse; stored path still applied
   });
 
   it("second void aborts (already handled)", async () => {
@@ -476,7 +555,7 @@ function seedSplit(): MockState {
     paymentPlan: { code: "3M", name: "0-3 Months" },
     installments: [i0, i1],
   };
-  return { payments: [], installments: [i0, i1], transactions: [transaction], receipts: [], audits: [], bookings: [], activities: [] };
+  return { payments: [], installments: [i0, i1], transactions: [transaction], receipts: [], ledger: [], allocs: [], audits: [], bookings: [], activities: [] };
 }
 
 describe("waterfall allocation", () => {

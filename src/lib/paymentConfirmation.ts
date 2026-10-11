@@ -1,5 +1,12 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { amountToWords } from "./receipts/amountToWords";
+import {
+  planAllocation,
+  postPaymentEntry,
+  postAllocations,
+  postLedgerEntry,
+  LedgerError,
+} from "./finance/ledger";
 
 // Shared payment-confirmation core: database work ONLY. No PDF rendering,
 // no filesystem access, no email, no network. Slow or fallible side effects
@@ -202,49 +209,68 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   }
 
   if (installment) {
-    // Waterfall allocation: confirmed money fills the targeted installment,
-    // and any excess rolls forward into successive installments (never
-    // backward). Validation runs as a read-only first pass so an
-    // over-schedule payment throws before anything is written — the whole
-    // unit rolls back either way in production.
+    // Waterfall allocation (owned by the ledger service): confirmed money
+    // fills the targeted installment, and any excess rolls forward into
+    // successive installments (never backward). planAllocation throws
+    // LedgerError when the suffix capacity is insufficient — mapped to
+    // OverScheduleError below so routes keep their friendly message.
+    // Nothing is written yet at that point, so the unit aborts cleanly.
     const ordered = [...transaction.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
-    const startIdx = ordered.findIndex((i) => i.id === installment.id);
-    const suffix = startIdx >= 0 ? ordered.slice(startIdx) : ordered;
     const freshRows = [];
-    for (const inst of suffix) {
+    for (const inst of ordered) {
       const fresh = await tx.installment.findUnique({ where: { id: inst.id } });
       if (!fresh) throw new PaymentCorruptStateError("Installment row disappeared mid-transaction");
       freshRows.push(fresh);
     }
-    const plan: { id: string; newPaid: number; scheduledAmount: number; dueDate: Date }[] = [];
-    let remaining = payment.amount;
-    for (const fresh of freshRows) {
-      if (remaining <= 0) break;
-      const capacity = fresh.scheduledAmount - (fresh.paidAmount ?? 0);
-      if (capacity <= 0) continue;
-      const alloc = Math.min(remaining, capacity);
-      plan.push({ id: fresh.id, newPaid: (fresh.paidAmount ?? 0) + alloc, scheduledAmount: fresh.scheduledAmount, dueDate: new Date(fresh.dueDate) });
-      remaining -= alloc;
-    }
-    if (remaining > 0) {
-      // Excess past the final installment is still rejected (nothing was
-      // written yet, so the unit aborts cleanly).
-      throw new OverScheduleError(
-        freshRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
-        payment.amount,
-        freshRows.reduce((s, r) => s + r.scheduledAmount, 0)
+    let plan: { installmentId: string; amount: number }[];
+    try {
+      plan = planAllocation(
+        freshRows.map((f) => ({
+          id: f.id,
+          installmentNumber: f.installmentNumber,
+          scheduledAmount: f.scheduledAmount,
+          paidAmount: f.paidAmount ?? 0,
+        })),
+        installment.id,
+        payment.amount
       );
+    } catch (e) {
+      if (e instanceof LedgerError) {
+        const startIdx = ordered.findIndex((i) => i.id === installment.id);
+        const suffixRows = startIdx >= 0 ? freshRows.slice(startIdx) : freshRows;
+        throw new OverScheduleError(
+          suffixRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
+          payment.amount,
+          suffixRows.reduce((s, r) => s + r.scheduledAmount, 0)
+        );
+      }
+      throw e;
     }
     for (const step of plan) {
+      const fresh = freshRows.find((r) => r.id === step.installmentId)!;
+      const newPaid = (fresh.paidAmount ?? 0) + step.amount;
       await tx.installment.update({
-        where: { id: step.id },
+        where: { id: step.installmentId },
         data: {
-          paidAmount: step.newPaid,
-          status: deriveInstallmentStatus(step.newPaid, step.scheduledAmount, step.dueDate, now),
+          paidAmount: newPaid,
+          status: deriveInstallmentStatus(newPaid, fresh.scheduledAmount, new Date(fresh.dueDate), now),
           updatedAt: now,
         },
       });
     }
+    // Ledger dual-write (same tx): the PAYMENT entry + allocation rows.
+    // Legacy stored columns above stay the read source until the ledger
+    // backfill is verified — verifyTransactionLedger() proves they agree.
+    await postPaymentEntry(tx, {
+      transactionId: transaction.id,
+      paymentId: payment.id,
+      amount: payment.amount,
+      effectiveDate: new Date(payment.paymentDate),
+      method: payment.paymentMethod,
+      bankReference: payment.bankReference,
+      recordedById: input.confirmedById ?? null,
+    });
+    await postAllocations(tx, payment.id, plan);
   }
 
   // Totals derive from CONFIRMED payments only — recomputed, never incremented.
@@ -448,6 +474,30 @@ export async function reverseConfirmedPaymentDbUnit(
       updatedAt: now,
     },
   });
+
+  // Ledger dual-write (same tx): a REVERSAL DEBIT against the original
+  // PAYMENT entry, and removal of this payment's allocation rows (they are
+  // attribution of live money — the REVERSAL entry is the money record).
+  // Pre-ledger rows have no PAYMENT entry (backfill ordering); skipping the
+  // REVERSAL then is safe — the stored reversal above still applies — but it
+  // is logged loudly so the gap is visible.
+  const paymentEntry = await tx.ledgerEntry.findUnique({ where: { paymentId: payment.id } });
+  if (paymentEntry) {
+    await postLedgerEntry(tx, {
+      transactionId: transaction.id,
+      type: "REVERSAL",
+      amount: payment.amount,
+      direction: "DEBIT",
+      effectiveDate: now,
+      reversesEntryId: paymentEntry.id,
+      recordedById: input.actorId ?? null,
+      note: input.reason ? `Void: ${input.reason}` : "Void of confirmed payment",
+      idempotencyKey: `reversal:${payment.id}`,
+    });
+  } else {
+    logServerError(`void payment ${payment.id}: no PAYMENT ledger entry (pre-backfill row?)`, null);
+  }
+  await tx.paymentAllocation.deleteMany({ where: { paymentId: payment.id } });
 
   await tx.auditEvent.create({
     data: {

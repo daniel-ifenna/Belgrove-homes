@@ -45,10 +45,28 @@ Conservative option chosen wherever the owner was silent. Updated as answers arr
     fields are the permanent proof.
 
 ## Hosting secrets (Step 1b)
-
 - Deleted from code: Zoho SMTP path. After deploy, remove from hosting env:
   `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `ZOHO_APP_PASSWORD`,
   `EMAIL_PROVIDER`. Keep `SMTP_FROM` (sender address, now used for Resend),
   `RESEND_API_KEY`, `APP_URL` (= `https://www.belgrovehomes.com`).
 - Rotate/revoke: the Zoho app password for `info@belgrovehomes.com` (no longer used
   anywhere); audit who else holds it before revoking.
+
+## Step 2 ledger deviations from target (conservative)
+
+- **No PENDING entries**: only CONFIRMED payments become `PAYMENT` entries.
+  Pending money lives in `Payment` rows only. (Target listed a PENDING status;
+  redundant once pendings are excluded.)
+- **TEXT types, not enums**: entry `type`/`direction` are validated in
+  `src/lib/finance/ledger.ts` so new types never need an enum migration.
+  Amount positivity likewise enforced in the service (no DB CHECK, keeping
+  `migrate diff` clean).
+- **Void deletes allocation rows** for that payment (attribution of live money),
+  while the money correction is the append-only `REVERSAL` entry. Stored
+  `paidAmount` reversal logic unchanged.
+- **Pre-backfill voids** (no `PAYMENT` entry found) log loudly and still reverse
+  stored columns — never block the void.
+- **Dual-write until read-switch**: confirm/void/creation write ledger rows AND
+  legacy stored columns in the same transaction. Reads unchanged (stored +
+  finance service). `verify-ledger.ts` proves agreement; nightly reconciliation
+  (Step 6) takes over thereafter.

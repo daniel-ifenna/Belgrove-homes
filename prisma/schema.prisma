@@ -27,6 +27,7 @@ model User {
   transactionsCreated Transaction[] @relation("TransactionCreatedBy")
   paymentsRecorded Payment[] @relation("PaymentRecordedBy")
   paymentsConfirmed Payment[] @relation("PaymentConfirmedBy")
+  ledgerEntriesRecorded LedgerEntry[] @relation("LedgerRecordedBy")
 }
 
 enum Role {
@@ -434,6 +435,7 @@ model Transaction {
   installments Installment[]
   payments Payment[]
   receipts Receipt[]
+  ledgerEntries LedgerEntry[]
   @@index([status])
   @@index([customerEmail])
   @@index([estate])
@@ -453,6 +455,7 @@ model Installment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   payments Payment[]
+  allocations PaymentAllocation[]
   @@index([transactionId, installmentNumber])
   @@index([status])
   @@index([dueDate])
@@ -494,9 +497,73 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   receipt Receipt?
+  ledgerEntry LedgerEntry?
+  allocations PaymentAllocation[]
   @@index([transactionId])
   @@index([installmentId])
   @@index([status])
+}
+
+// Append-only money ledger (Step 2). One row per economic event on a
+// transaction; balances derive from these rows, never typed in.
+// - type: CHARGE_BASE | CHARGE_INTEREST | CHARGE_FEE | PAYMENT | DISCOUNT |
+//   WAIVER | ADJUSTMENT | REVERSAL (TEXT by design — new types must not
+//   require an enum migration).
+// - amount is always a positive whole-naira Int (CHECK amount > 0).
+// - direction DEBIT increases what the client owes (charges, reversals of
+//   payments); CREDIT decreases it (payments, discounts, waivers).
+// - Only CONFIRMED payments get a PAYMENT entry (effectiveDate = paymentDate,
+//   so backdated payments land correctly). PENDING payments live only in the
+//   Payment table. A voided payment gets a REVERSAL entry pointing at the
+//   original via reversesEntryId — rows are never edited or deleted.
+// - paymentId is set (and unique) on PAYMENT entries only: every confirmed
+//   payment has exactly one ledger entry.
+// - idempotencyKey is unique: replays and backfill reruns are safe no-ops.
+// Invariants (see src/lib/finance/ledger.ts):
+//   totalPayable = sum(CHARGE_*) - sum(DISCOUNT) - sum(WAIVER)
+//   totalPaid    = sum(PAYMENT) - sum(REVERSAL of payments)
+//   outstanding  = totalPayable - totalPaid
+model LedgerEntry {
+  id String @id @default(cuid())
+  transactionId String
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  type String
+  amount Int
+  direction String // DEBIT | CREDIT
+  effectiveDate DateTime
+  paymentId String? @unique
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  method String?
+  bankReference String?
+  reversesEntryId String?
+  reversesEntry LedgerEntry? @relation("EntryReversal", fields: [reversesEntryId], references: [id], onDelete: SetNull)
+  reversals LedgerEntry[] @relation("EntryReversal")
+  recordedById String?
+  recordedBy User? @relation("LedgerRecordedBy", fields: [recordedById], references: [id])
+  note String?
+  idempotencyKey String @unique
+  createdAt DateTime @default(now())
+
+  @@index([transactionId])
+  @@index([transactionId, type])
+  @@index([effectiveDate])
+}
+
+// Waterfall allocation rows (Step 2): how each confirmed payment's amount
+// was applied across installments (oldest unpaid first). Makes installment
+// status explainable: status derives from sum(allocations), never typed in.
+// Invariant: sum(allocations per payment) == payment amount.
+model PaymentAllocation {
+  id String @id @default(cuid())
+  paymentId String
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installmentId String
+  installment Installment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+  amount Int
+  createdAt DateTime @default(now())
+
+  @@unique([paymentId, installmentId])
+  @@index([installmentId])
 }
 
 // Immutable audit trail for payment/transaction/receipt mutations.
