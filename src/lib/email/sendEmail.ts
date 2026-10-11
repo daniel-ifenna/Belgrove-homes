@@ -1,73 +1,21 @@
-import nodemailer from "nodemailer";
-import { getEmailProvider, sendViaResend } from "./resendProvider";
+import { sendViaResend } from "./resendProvider";
 
 export type EmailResult = {
   sent: boolean;
   error: string | null;
-  // Permanent failures (e.g. Resend 4xx validation) must fail the outbox row
-  // immediately instead of riding the retry/backoff path forever.
+  // Permanent failures (e.g. Resend 4xx validation) must fail the caller
+  // immediately instead of riding any retry path.
   permanent?: boolean;
-  // Proof of sending, populated on success only: which provider delivered
-  // and that provider's message id (Resend email id / SMTP Message-ID).
-  provider?: "resend" | "smtp";
+  // Proof of sending, populated on success only: Resend's email id for
+  // tracing a delivery in the Resend dashboard.
+  provider?: "resend";
   providerMessageId?: string | null;
 };
 
-let transporter: nodemailer.Transporter | null = null;
-let transporterFingerprint: string | null = null;
-
-function getTransporterFingerprint(): string {
-  // Fingerprint the config that determines transport if env changes between
-  // calls (e.g. ZOHO disabled mid-run, MailHog creds swapped) we must rebuild.
-  return [
-    process.env.ZOHO_APP_PASSWORD ?? "",
-    process.env.SMTP_HOST ?? "",
-    process.env.SMTP_PORT ?? "",
-    process.env.SMTP_USER ?? "",
-  ].join("|");
-}
-
-function getTransporter() {
-  const fp = getTransporterFingerprint();
-  if (!transporter || transporterFingerprint !== fp) {
-    transporterFingerprint = fp;
-    // Zoho (production) uses ZOHO_APP_PASSWORD + info@belgrovehomes.com
-    // Falls back to generic SMTP_HOST for local dev (MailHog)
-    // Short timeouts are load-bearing on serverless: nodemailer's defaults
-    // wait minutes on a stalled connection, but the function is killed at
-    // maxDuration — a wedged row would sit in SENDING with an empty
-    // lastError. Failing fast turns a stall into a normal deferral (PENDING
-    // + lastError + backoff) that the next drain retries. Kept small enough
-    // that even one full send fits the 20s per-invocation start budget.
-    const timeouts = {
-      connectionTimeout: 5_000,
-      greetingTimeout: 5_000,
-      socketTimeout: 10_000,
-    };
-    if (process.env.ZOHO_APP_PASSWORD) {
-      transporter = nodemailer.createTransport({
-        host: "smtp.zoho.com",
-        port: 587,
-        secure: false,
-        auth: {
-          user: "info@belgrovehomes.com",
-          pass: process.env.ZOHO_APP_PASSWORD,
-        },
-        ...timeouts,
-      });
-    } else {
-      transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT ?? 587),
-        secure: false,
-        auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-        ...timeouts,
-      });
-    }
-  }
-  return transporter;
-}
-
+// Single email transport: Resend HTTP API only. There is no SMTP path —
+// the legacy direct-credential sender was removed (Step 1); Resend's
+// dashboard is the delivery log. Every email type in the app goes through
+// this wrapper.
 export async function sendEmail({
   to,
   subject,
@@ -79,8 +27,10 @@ export async function sendEmail({
   subject: string;
   html: string;
   attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[];
-  // Outbox row id, forwarded as the provider's idempotency key so a retried
-  // row can never double-send. Optional so direct callers keep working.
+  // Idempotency key forwarded as Resend's Idempotency-Key header.
+  // Retries of ONE logical send reuse the same key with a byte-identical
+  // body (safe replay). Every user-initiated resend generates a fresh key —
+  // never reuse a key across different bodies (Resend 409s it).
   idempotencyKey?: string;
 }): Promise<EmailResult> {
   const from = process.env.SMTP_FROM;
@@ -109,30 +59,13 @@ export async function sendEmail({
   } catch (err) {
     return { sent: false, error: err instanceof Error ? err.message : "Email policy error" };
   }
-  // Provider switch (default SMTP — nothing changes until EMAIL_PROVIDER is
-  // flipped). Dev-policy checks above stay common to both paths.
-  if (getEmailProvider() === "resend") {
-    return sendViaResend({
-      to: resolvedTo,
-      subject: resolvedSubject,
-      html,
-      attachments,
-      idempotencyKey,
-    });
-  }
-  try {
-    const info = await getTransporter().sendMail({
-      from,
-      to: resolvedTo,
-      subject: resolvedSubject,
-      html,
-      ...(attachments ? { attachments } : {}),
-    });
-    return { sent: true, error: null, provider: "smtp", providerMessageId: typeof info?.messageId === "string" ? info.messageId : null };
-  } catch (err) {
-    console.error("Email send failed:", err);
-    return { sent: false, error: err instanceof Error ? err.message : "Unknown email error" };
-  }
+  return sendViaResend({
+    to: resolvedTo,
+    subject: resolvedSubject,
+    html,
+    attachments,
+    idempotencyKey,
+  });
 }
 
 // Dev email safety policy (pure, unit-tested). Outside production, mail must

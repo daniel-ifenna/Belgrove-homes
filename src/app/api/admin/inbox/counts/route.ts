@@ -3,7 +3,6 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { getActionCounts } from "@/lib/inbox";
-import { drainOutboxOnAdminInboxLoad } from "@/lib/email/outbox";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +12,6 @@ export async function GET() {
   if (!isInternalRole(session?.user?.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // Same background drain as the inbox page (guarded to once per 60s per
-  // server instance): badge polling keeps deferred mail moving.
-  drainOutboxOnAdminInboxLoad();
   const counts = await getActionCounts();
   // Bookings still needing action: New, Under Review, or unassigned and not
   // closed. Approved/assigned/active/sold/closed bookings drop out.

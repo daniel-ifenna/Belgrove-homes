@@ -25,7 +25,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ token:
       buf = await renderReceiptPdfBuffer(receipt.id);
       await prisma.receipt.update({
         where: { id: receipt.id },
-        data: { pdfData: new Uint8Array(buf), pdfStatus: "GENERATED", lastError: null },
+        data: { pdfData: new Uint8Array(buf), pdfStatus: "GENERATED" },
       });
     } catch (e) {
       logServerError(`receipt ${receipt.ref}: PDF render failed`, e);

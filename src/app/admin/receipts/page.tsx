@@ -1,5 +1,4 @@
 import Link from "next/link";
-import StatusBadge from "@/components/admin/StatusBadge";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { auth } from "@/auth";
@@ -9,10 +8,9 @@ import AdminPagination from "@/components/admin/AdminPagination";
 import AdminListCard from "@/components/admin/AdminListCard";
 export const dynamic = "force-dynamic";
 
-type SearchParams = { q?: string; status?: string; source?: string; page?: string; from?: string; to?: string; showTest?: string };
+type SearchParams = { q?: string; source?: string; page?: string; from?: string; to?: string; showTest?: string };
 
 const PAGE_SIZE = 25;
-const allStatuses = ["pending", "generated", "sent", "failed"] as const;
 
 function formatDate(d: Date | string | null): string {
   if (!d) return "-";
@@ -31,7 +29,6 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const q = params.q?.trim() ?? "";
-  const status = params.status && (allStatuses as readonly string[]).includes(params.status) ? params.status : "";
   const source = params.source && ["BOOKING_FLOW", "ADMIN_MANUAL", "PAYMENT_CONFIRMATION"].includes(params.source) ? params.source : "";
   const showTest = params.showTest === "1";
   const from = params.from ? new Date(params.from) : null;
@@ -43,7 +40,6 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
     // exist without one). Hide test fixtures by default.
     where.transaction = { isTest: false };
   }
-  if (status) where.status = status as any;
   if (source) where.source = source as any;
   if (q) {
     where.OR = [
@@ -72,7 +68,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       omit: { pdfData: true },
-      include: { booking: { select: { id: true, ref: true, status: true } }, transaction: { select: { id: true, ref: true } }, sendAttempts: { orderBy: { attemptedAt: "desc" }, take: 1 } },
+      include: { booking: { select: { id: true, ref: true, status: true } }, transaction: { select: { id: true, ref: true } } },
     }),
     prisma.receipt.count({ where }),
   ]);
@@ -82,7 +78,6 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
   const paginationQuery = (() => {
     const qs = new URLSearchParams();
     if (params.q) qs.set("q", params.q);
-    if (status) qs.set("status", status);
     if (source) qs.set("source", source);
     if (params.from) qs.set("from", params.from);
     if (params.to) qs.set("to", params.to);
@@ -93,7 +88,6 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
     const merged = { ...params, ...overrides };
     const qs = new URLSearchParams();
     if (merged.q) qs.set("q", merged.q);
-    if (merged.status) qs.set("status", merged.status);
     if (merged.source) qs.set("source", merged.source);
     if (merged.from) qs.set("from", merged.from);
     if (merged.to) qs.set("to", merged.to);
@@ -121,14 +115,6 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
           <div className="flex flex-col gap-4">
             <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex flex-wrap gap-1.5">
-                {[{ label: "All", value: "" }, { label: "Sent", value: "sent" }, { label: "Failed", value: "failed" }, { label: "Generated", value: "generated" }, { label: "Pending", value: "pending" }, { label: "Draft", value: "draft" }].map((f) => {
-                  const active = (status ?? "") === f.value;
-                  return (
-                    <Link key={f.label} href={`/admin/receipts${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)]"}`}>{f.label}</Link>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
                 {[{ label: "All Sources", value: "" }, { label: "Payment", value: "PAYMENT_CONFIRMATION" }, { label: "Booking", value: "BOOKING_FLOW" }, { label: "Manual", value: "ADMIN_MANUAL" }].map((f) => {
                   const active = (source ?? "") === f.value;
                   return (
@@ -136,23 +122,19 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                   );
                 })}
               </div>
-              <form className="flex-1 flex gap-2" action="/admin/receipts" method="get">
-                {status && <input type="hidden" name="status" value={status} />}
-                {params.from && <input type="hidden" name="from" value={params.from} />}
-                {params.to && <input type="hidden" name="to" value={params.to} />}
-                <div className="relative flex-1">
+            <form className="flex-1 flex gap-2" action="/admin/receipts" method="get">
+              <div className="relative flex-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
                   </span>
                   <input name="q" defaultValue={q} placeholder="Search receipt #, customer, email, property, SKU…" className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-9 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10" />
                 </div>
                 <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)]">Search</button>
-                {(q || status || source || params.from || params.to) && <Link href="/admin/receipts" className="text-xs text-[var(--ops-muted)] self-center underline underline-offset-4">Clear</Link>}
+                {(q || source || params.from || params.to) && <Link href="/admin/receipts" className="text-xs text-[var(--ops-muted)] self-center underline underline-offset-4">Clear</Link>}
               </form>
             </div>
             <form className="flex flex-wrap gap-2 items-center" action="/admin/receipts" method="get">
               {q && <input type="hidden" name="q" value={q} />}
-              {status && <input type="hidden" name="status" value={status} />}
               {source && <input type="hidden" name="source" value={source} />}
               <span className="mono text-[11px] text-[var(--ops-muted)]">Issued from</span>
               <input type="date" name="from" defaultValue={params.from ?? ""} className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white" />
@@ -174,8 +156,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                   <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Transaction</th>
                   <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Amount</th>
                   <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Issued</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Sent</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Status</th>
+                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Emailed</th>
                   <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Source</th>
                   <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)] text-right">Actions</th>
                 </tr>
@@ -212,11 +193,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                       <div className="mono text-[10px] text-[var(--ops-muted)]">Before {formatNaira(r.amountBeforeDiscount)}</div>
                     </td>
                     <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{formatDate(r.issuedAt)}</td>
-                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{r.sentAt ? formatDateTime(r.sentAt) : "-"}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={r.status} />
-                      {r.error && <div className="mono text-[10px] text-red-600 mt-1 max-w-[160px] break-words">{r.error.slice(0, 80)}</div>}
-                    </td>
+                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{r.sentAt ? formatDateTime(r.sentAt) : <span className="text-[#92400E]">Not emailed</span>}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-medium border ${r.source === "ADMIN_MANUAL" ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]"}`}>{r.source === "ADMIN_MANUAL" ? "Manual" : r.source === "PAYMENT_CONFIRMATION" ? "Payment" : "Booking"}</span>
                     </td>
@@ -230,7 +207,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                 ))}
                 {receipts.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-16 text-center">
+                    <td colSpan={9} className="px-4 py-16 text-center">
                       <p className="public text-[14px] font-medium text-[var(--ops-text)]">No receipts found</p>
                       <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Receipts appear here after you mark an inspection as Sold and the receipt is issued.</p>
                     </td>
@@ -250,12 +227,12 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
               refText={r.ref}
               name={r.customerName}
               email={r.customerEmail}
-              badges={<StatusBadge status={r.status} />}
+              badges={r.sentAt ? <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-medium border bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]">Emailed</span> : <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-medium border bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]">Not emailed</span>}
               rows={[
                 { label: "Property", value: r.property },
                 { label: "Amount", value: <span className="mono text-[12px] font-medium price">{formatNaira(r.finalAmount)}</span> },
                 { label: "Issued", value: <span className="mono text-[11px]">{formatDate(r.issuedAt)}</span> },
-                { label: "Sent", value: <span className="mono text-[11px]">{r.sentAt ? formatDateTime(r.sentAt) : "-"}</span> },
+                { label: "Emailed", value: <span className="mono text-[11px]">{r.sentAt ? formatDateTime(r.sentAt) : "Not emailed"}</span> },
               ]}
             />
           ))}

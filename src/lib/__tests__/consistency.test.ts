@@ -36,12 +36,7 @@ const PAYMENTS = [
   { id: "p5", amount: 5_000_000, paymentDate: new Date("2026-09-15T10:00:00Z"), createdAt: new Date("2026-09-15T10:00:00Z"), status: "CONFIRMED", installmentId: "ix", transactionId: "tX", paymentReference: "PAY-TEST-1" },
 ];
 
-const OUTBOX = [
-  { id: "o1", type: "receipt", status: "FAILED", relatedId: "r1", createdAt: new Date("2026-09-03T10:00:00Z"), updatedAt: new Date("2026-09-03T10:05:00Z") },
-  { id: "o2", type: "receipt", status: "SENT", relatedId: "r1", createdAt: new Date("2026-09-03T11:00:00Z"), updatedAt: new Date("2026-09-03T11:00:00Z") },
-];
 
-const RECEIPTS = [{ id: "r1", ref: "RCT-2026-00007", customerName: "Adaeze Obi", finalAmount: 2_900_000 }];
 
 const BOOKINGS = [
   { id: "b1", ref: "BKG-00001", name: "New Lead", location: "Kado", estate: null, status: "new", outcome: null as string | null, agentId: null as string | null, isTest: false, inspectedAt: null as Date | null, preferredDate: new Date("2026-10-02T09:00:00Z"), rescheduledDate: null as Date | null, transaction: null, createdAt: NOW, updatedAt: NOW },
@@ -113,14 +108,6 @@ function matchBooking(b: (typeof BOOKINGS)[number], w: Where): boolean {
   return true;
 }
 
-function matchOutbox(o: (typeof OUTBOX)[number], w: Where): boolean {
-  if ("type" in w && !strEq(o.type, w.type)) return false;
-  if ("status" in w && !strEq(o.status, w.status)) return false;
-  const ca = w.createdAt as { lt?: Date } | undefined;
-  if (ca?.lt && o.createdAt >= ca.lt) return false;
-  return true;
-}
-
 // ---- Fakes ---------------------------------------------------------------
 const financeDb: FinanceDb = {
   payment: {
@@ -160,14 +147,6 @@ const inboxDb: InboxDb = {
         })(),
       })),
     count: async (a: { where: Where }) => PAYMENTS.filter((p) => matchPayment(p, a.where)).length,
-  },
-  emailOutbox: {
-    findMany: async (a: { where: Where }) => OUTBOX.filter((o) => matchOutbox(o, a.where)),
-    count: async (a: { where: Where }) => OUTBOX.filter((o) => matchOutbox(o, a.where)).length,
-  },
-  receipt: {
-    findMany: async (a: { where: { id?: { in?: string[] } } }) =>
-      RECEIPTS.filter((r) => !a.where?.id?.in || a.where.id.in.includes(r.id)),
   },
   inspectionBooking: {
     findMany: async (a: { where: Where }) => BOOKINGS.filter((b) => matchBooking(b, a.where ?? {})),
@@ -238,7 +217,6 @@ describe("phase 5: every surface agrees with the finance service", () => {
     expect(counts.total).toBe(Object.values(counts.byCategory).reduce((s, n) => s + n, 0));
     expect(counts.byCategory).toMatchObject({
       PAYMENT_PENDING_VERIFICATION: 1,
-      RECEIPT_SEND_FAILED: 1, // failed receipt email o1
       SOLD_WITHOUT_TRANSACTION: 1, // b5 only — b6 already has t1
       INSTALLMENT_OVERDUE: 1,
       BOOKING_NEW: 1, // b1 only — b8 is a fixture
@@ -252,7 +230,7 @@ describe("phase 5: every surface agrees with the finance service", () => {
       pendingPayments: counts.byCategory.PAYMENT_PENDING_VERIFICATION,
       bookingsNewUnassigned: counts.byCategory.BOOKING_NEW + counts.byCategory.BOOKING_UNASSIGNED,
     };
-    expect(badges).toEqual({ total: 8, pendingPayments: 1, bookingsNewUnassigned: 2 });
+    expect(badges).toEqual({ total: 7, pendingPayments: 1, bookingsNewUnassigned: 2 });
   });
 
   it("inbox items link every queue entry to its context", async () => {
@@ -261,7 +239,6 @@ describe("phase 5: every surface agrees with the finance service", () => {
     const byId = new Map(items.map((i) => [i.id, i]));
     expect(byId.get("pending-p3")?.href).toBe("/admin/transactions/t1#payment-p3");
     expect(byId.get("pending-p3")?.ref).toBe("PAY-2026-00013");
-    expect(byId.get("resend-o1")?.href).toBe("/admin/receipts/r1");
     expect(byId.get("sold-b5")?.href).toBe("/admin/transactions/new?bookingId=b5");
     expect(byId.get("overdue-i1")?.href).toBe("/admin/transactions/t1");
     for (const item of items) {

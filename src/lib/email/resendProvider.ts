@@ -1,14 +1,8 @@
 import type { EmailResult } from "./sendEmail";
 
-// HTTP email provider (Resend) — plain fetch, no new dependencies. Used when
-// EMAIL_PROVIDER="resend"; the SMTP sender stays the default and the fallback.
-// The API key is only ever sent as the Authorization header, never logged.
-
-export type EmailProvider = "resend" | "smtp";
-
-export function getEmailProvider(): EmailProvider {
-  return process.env.EMAIL_PROVIDER === "resend" ? "resend" : "smtp";
-}
+// HTTP email provider (Resend) — plain fetch, no new dependencies. The ONLY
+// transport: sendEmail() always routes here. The API key is only ever sent
+// as the Authorization header, never logged.
 
 export type ResendAttachment = {
   filename: string;
@@ -35,13 +29,18 @@ export function htmlToText(html: string): string {
     .join("\n");
 }
 
-export const RESEND_TIMEOUT_MS = 10_000;
+export const RESEND_TIMEOUT_MS = 30_000;
 
 // Explicit, bounded, and overridable without a redeploy of the logic:
 // RESEND_TIMEOUT_MS (ms) clamps to 5s..60s so a stuck provider call can
 // neither hang a serverless function past maxDuration nor abort
 // prematurely on a slow-but-healthy API. Timeouts stay retryable
-// (never `permanent`) — the outbox backoff handles them.
+// (never `permanent`).
+//
+// 30s default (was 10s): sends carry ~1MB base64 PDF attachments and run on
+// serverless after() workers where CPU can stall; production showed repeated
+// 10s timeouts that later succeeded unchanged. The timeout covers the network
+// request only — the body (including attachment encoding) is built first.
 export function resendTimeoutMs(): number {
   const raw = Number(process.env.RESEND_TIMEOUT_MS ?? RESEND_TIMEOUT_MS);
   if (!Number.isFinite(raw)) return RESEND_TIMEOUT_MS;
@@ -69,6 +68,28 @@ export async function sendViaResend(opts: {
   if (recipients.length === 0) {
     return { sent: false, error: "No recipients" };
   }
+  // Build the full request body BEFORE starting the timeout clock, so the
+  // timeout covers the network request only (base64 attachment encoding of
+  // ~800KB PDFs is CPU work, not network stall).
+  const requestBody = JSON.stringify({
+    from,
+    to: recipients,
+    subject: opts.subject,
+    html: opts.html,
+    text: htmlToText(opts.html),
+    ...(opts.attachments?.length
+      ? {
+          attachments: opts.attachments.map((a) => ({
+            filename: a.filename,
+            content: a.content.toString("base64"),
+            content_type: a.contentType,
+            ...(a.cid ? { content_id: a.cid } : {}),
+          })),
+        }
+      : {}),
+  });
+  // Retries of one logical send MUST reuse the same idempotency key with this
+  // exact body (safe replay). A user-initiated resend always mints a fresh key.
   const timeoutMs = opts.timeoutMs ?? resendTimeoutMs();
   const startedAt = Date.now();
   const controller = new AbortController();
@@ -81,23 +102,7 @@ export async function sendViaResend(opts: {
         "Content-Type": "application/json",
         ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
       },
-      body: JSON.stringify({
-        from,
-        to: recipients,
-        subject: opts.subject,
-        html: opts.html,
-        text: htmlToText(opts.html),
-        ...(opts.attachments?.length
-          ? {
-              attachments: opts.attachments.map((a) => ({
-                filename: a.filename,
-                content: a.content.toString("base64"),
-                content_type: a.contentType,
-                ...(a.cid ? { content_id: a.cid } : {}),
-              })),
-            }
-          : {}),
-      }),
+      body: requestBody,
       signal: controller.signal,
     });
     if (res.ok) {

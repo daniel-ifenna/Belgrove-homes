@@ -34,13 +34,13 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
       },
       agent: { select: { name: true, email: true } },
       createdBy: { select: { name: true, email: true } },
-      sendAttempts: { orderBy: { attemptedAt: "desc" } },
     },
   });
   if (!receipt) notFound();
 
-  const lastSent = receipt.sendAttempts.find((a) => a.status === "sent");
-  const attemptsCount = receipt.sendAttempts.length;
+  // Email proof only: Resend's dashboard is the delivery log. sentAt == null
+  // means not emailed (failures are never stored).
+  const emailed = !!receipt.sentAt;
 
   // As-of-issue figures: confirmed payments strictly before this one.
   const receiptPayment = receipt.payment;
@@ -63,26 +63,6 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
   // Plot quantity: receipt snapshot first, live transaction as fallback.
   const plotQty = receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? null;
   const unitPrice = receipt.unitPrice ?? receipt.transaction?.unitPrice ?? null;
-  const outbox = await prisma.emailOutbox.findMany({
-    where: { type: "receipt", relatedId: receipt.id },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-    select: {
-      id: true,
-      status: true,
-      attempts: true,
-      lastError: true,
-      createdAt: true,
-      startedAt: true,
-      sentAt: true,
-      nextAttemptAt: true,
-      priority: true,
-      provider: true,
-      providerMessageId: true,
-    },
-  });
-  const fmtWait = (ms: number) =>
-    ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${(ms / 60_000).toFixed(1)}m`;
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
@@ -99,13 +79,13 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               <div className="mono text-[11px] tracking-[0.14em] uppercase text-[var(--ops-muted)]">Receipt</div>
               <div className="flex flex-wrap items-baseline gap-3 mt-1">
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{receipt.ref}</h1>
-                <StatusBadge status={receipt.status} className="px-3 py-1.5 text-xs" />
+                <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${emailed ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>{emailed ? "Emailed" : "Not emailed"}</span>
               </div>
-              <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Issued {formatDateTime(receipt.issuedAt)} · {attemptsCount} send attempt{attemptsCount !== 1 ? "s" : ""} {lastSent ? `· Last sent ${formatDateTime(lastSent.attemptedAt)}` : ""}</div>
+              <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Issued {formatDateTime(receipt.issuedAt)}{receipt.sentAt ? ` · Emailed ${formatDateTime(receipt.sentAt)}` : ""}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <ReceiptActions
-                receipt={{ id: receipt.id, ref: receipt.ref, receiptUrl: receipt.receiptUrl, status: receipt.status }}
+                receipt={{ id: receipt.id, ref: receipt.ref, receiptUrl: receipt.receiptUrl }}
                 pdfHref={`/api/admin/receipts/${receipt.id}/pdf`}
               />
             </div>
@@ -169,67 +149,26 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
 
           <div className="space-y-6">
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Receipt status</h3>
+              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Email</h3>
               <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Status</span><StatusBadge status={receipt.status} /></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Issued</span><span className="font-mono text-[12px]">{formatDateTime(receipt.issuedAt)}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Sent</span><span className="font-mono text-[12px]">{receipt.sentAt ? formatDateTime(receipt.sentAt) : "-"}</span></div>
                 <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Recipient</span><span className="font-mono text-[12px] break-words">{receipt.recipientEmail}</span></div>
-                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Created by</span><span className="text-[12px]">{receipt.createdBy?.name ?? receipt.createdBy?.email ?? "-"}</span></div>
-                {receipt.error && <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 break-words">Error: {receipt.error}</div>}
-                {outbox.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-[var(--ops-border)]">
-                    <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)]">Delivery queue</div>
-                    {outbox.map((o) => {
-                      const wait = o.startedAt ? o.startedAt.getTime() - o.createdAt.getTime() : null;
-                      const dur = o.startedAt && o.sentAt ? o.sentAt.getTime() - o.startedAt.getTime() : null;
-                      const permanent =
-                        o.status === "FAILED" &&
-                        o.lastError &&
-                        /enoent|no such file|invalid recipient|resend error 4/i.test(o.lastError);
-                      return (
-                        <div key={o.id} className="mono text-[11px] text-[var(--ops-muted)] mt-1 flex justify-between gap-2">
-                          <StatusBadge status={o.status} className="px-2 py-0.5 text-[10px]" />
-                          <span className="text-right break-words">
-                            {o.attempts} attempt{o.attempts === 1 ? "" : "s"}
-                            {` · prio ${o.priority}`}
-                            {wait != null && wait >= 0 ? ` · wait ${fmtWait(wait)}` : ""}
-                            {dur != null && dur >= 0 ? ` · send ${fmtWait(dur)}` : ""}
-                            {o.provider ? ` · via ${o.provider}` : ""}
-                            {o.providerMessageId ? ` · id ${o.providerMessageId}` : ""}
-                            {o.lastError ? ` · ${o.lastError.slice(0, 60)}` : ""}
-                            {permanent ? " · permanent, will not retry" : ""}
-                          </span>
-                        </div>
-                      );
-                    })}
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Emailed</span><span className="font-mono text-[12px]">{receipt.sentAt ? formatDateTime(receipt.sentAt) : "Not emailed yet"}</span></div>
+                {receipt.resendEmailId && (
+                  <div className="flex justify-between">
+                    <span className="text-[var(--ops-muted)]">Resend message</span>
+                    <a href={`https://resend.com/emails/${receipt.resendEmailId}`} target="_blank" className="font-mono text-[12px] text-[var(--ops-primary)] hover:underline break-all">Open in Resend ↗</a>
                   </div>
                 )}
+                <p className="mono text-[10px] text-[var(--ops-muted)] pt-1">Delivery history lives in Resend — this id links to the message there (30-day log retention).</p>
               </div>
             </div>
 
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Send history</h3>
-              {receipt.sendAttempts.length === 0 ? (
-                <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No send attempts recorded.</p>
-              ) : (
-                <ol className="mt-3 space-y-2">
-                  {receipt.sendAttempts.map((a) => (
-                    <li key={a.id} className="flex gap-3 p-2.5 rounded-xl border border-[var(--ops-border)] bg-[var(--ops-bg)]/50">
-                      <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] shrink-0 ${a.status === "sent" ? "bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]" : a.status === "failed" ? "bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]" : "bg-[#FFFBEB] text-[#92400E] border"}`}>{a.status === "sent" ? "✓" : a.status === "failed" ? "✕" : "…"}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-[12px] font-medium"><span className="capitalize">{a.status}</span> → <span className="font-mono normal-case">{a.recipientEmail}</span></span>
-                          <span className="mono text-[11px] text-[var(--ops-muted)]">{formatDateTime(a.attemptedAt)}</span>
-                        </div>
-                        {a.actorName && <div className="mono text-[11px] text-[var(--ops-muted)]">by {a.actorName}</div>}
-                        {a.error && <div className="text-[11px] text-red-700 mt-1 break-words">Error: {a.error}</div>}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-              <div className="mono text-[10px] text-[var(--ops-muted)] mt-3">Last sent: {lastSent ? formatDateTime(lastSent.attemptedAt) : "-"} · Attempts: {attemptsCount} · Last status: {receipt.status}</div>
+              <h3 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Issued</h3>
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Issued</span><span className="font-mono text-[12px]">{formatDateTime(receipt.issuedAt)}</span></div>
+                <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Created by</span><span className="text-[12px]">{receipt.createdBy?.name ?? receipt.createdBy?.email ?? "-"}</span></div>
+              </div>
             </div>
             <div className="mt-6">
               <ActivitySection entityType="receipt" entityId={receipt.id} />

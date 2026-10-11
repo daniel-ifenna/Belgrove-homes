@@ -95,7 +95,6 @@ async function main() {
         pdfPath,
         pdfStatus: "GENERATED",
         pdfData: new Uint8Array(pdfBuffer),
-        lastError: null,
         paymentDescription,
       },
     });
@@ -106,24 +105,14 @@ async function main() {
         ref: r.ref,
         receiptUrl,
         pdfBuffer,
+        idempotencyKey: `regen:${r.id}:${Date.now()}`,
       });
-      await prisma.receiptSendAttempt.create({
-        data: {
-          receiptId: r.id,
-          recipientEmail: r.recipientEmail,
-          status: result.sent ? "sent" : "failed",
-          error: result.error ? `[corrected-link resend] ${result.error}` : "[corrected-link resend] previous link was incorrect; use the new link in this email",
-        },
-      });
-      await prisma.receipt.update({
-        where: { id: r.id },
-        data: {
-          emailStatus: result.sent ? "SENT" : "FAILED",
-          status: result.sent ? "sent" : "failed",
-          sentAt: result.sent ? new Date() : undefined,
-          lastError: result.sent ? null : result.error,
-        },
-      });
+      if (result.sent) {
+        await prisma.receipt.update({
+          where: { id: r.id },
+          data: { resendEmailId: result.providerMessageId ?? null, sentAt: new Date() },
+        });
+      }
       console.log(`    resent: sent=${result.sent}`);
     }
   }

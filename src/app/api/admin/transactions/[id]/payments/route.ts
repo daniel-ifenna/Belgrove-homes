@@ -105,7 +105,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     include: {
       installments: { orderBy: { installmentNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
-      receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true }, include: { sendAttempts: true } },
+      receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true } },
       paymentPlan: true,
     },
   });

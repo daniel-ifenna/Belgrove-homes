@@ -5,8 +5,8 @@ import { prefixedRef, generateUniqueBookingRef } from "@/lib/ref";
 import { bookingSubmissionSchema } from "@/lib/validation";
 import { BELGROVE_PLOTS } from "@/lib/belgroveData";
 
-// The inline outbox send runs after the response; allow headroom for the
-// request's own DB work plus the post-response SMTP sends (Hobby max: 300s).
+// Direct Resend sends run in-request (bounded); allow headroom for DB work
+// plus sends (Hobby max: 300s).
 export const maxDuration = 60;
 
 function isUniqueRefConflict(err: unknown): boolean {
@@ -102,7 +102,8 @@ export async function POST(request: NextRequest) {
   let ref = await generateUniqueBookingRef();
   const { findOrCreateCustomer } = await import("@/lib/customer");
   const { normalizeEmail, normalizeName, normalizePhoneE164 } = await import("@/lib/phone");
-  const { enqueueEmail, scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
+  const { sendBookingReceived, sendAdminNewBookingAlert } = await import("@/lib/email/emailService");
+  const { logServerError } = await import("@/lib/paymentConfirmation");
   const customerName = normalizeName(name) ?? name;
   const customerEmail = normalizeEmail(email) ?? email;
   const customerPhone = normalizePhoneE164(phone);
@@ -116,14 +117,10 @@ export async function POST(request: NextRequest) {
       return [];
     });
   let booking;
-  // Outbox ids enqueued inside the transaction. Collected in-tx, but the
-  // inline send is scheduled only AFTER the transaction commits (below) —
-  // scheduling inside would send before the rows exist and silently defer.
-  const outboxIds: string[] = [];
   for (let attempt = 0; ; attempt++) {
     try {
-      // One DB transaction: booking row + notifications + email outbox rows.
-      // The response returns after commit — never after SMTP delivery.
+      // One DB transaction: booking row + notifications. Emails send after
+      // commit (below) — never inside the transaction.
       booking = await prisma.$transaction(async (tx) => {
         const created = await tx.inspectionBooking.create({
           data: {
@@ -147,29 +144,9 @@ export async function POST(request: NextRequest) {
           selectionType: selectionType || (sqmNeeded ? "sqm_needed" : plotCode ? "unit" : null),
           },
         });
-        const bookingLike = {
-          name: created.name,
-          ref: created.ref,
-          preferredDate: created.preferredDate.toISOString(),
-          preferredTime: created.preferredTime,
-          location: created.location,
-          agentName: created.agentName,
-          phone: created.phone,
-          email: created.email,
-        };
-        // Visitor confirmation queued (never awaited — response returns now).
-        // Default dedupe key (booking:id:type:recipient): one row per booking.
-        outboxIds.push(
-          (
-            await enqueueEmail(tx, {
-              type: "booking_received",
-              to: created.email,
-              payload: { to: created.email, booking: bookingLike },
-              relatedType: "booking",
-              relatedId: created.id,
-            })
-          ).id
-        );
+        // Visitor confirmation + admin alert send after commit (below).
+        // Stable keys per booking: a retried submission that finds the same
+        // booking never double-sends.
         if (staffRecipients.length > 0) {
           await tx.notification.createMany({
             data: staffRecipients.map((r) => ({
@@ -179,17 +156,6 @@ export async function POST(request: NextRequest) {
               bookingId: created.id,
             })),
           });
-          outboxIds.push(
-            (
-              await enqueueEmail(tx, {
-                type: "admin_booking_alert",
-                to: staffRecipients.map((r) => r.email),
-                payload: { to: staffRecipients.map((r) => r.email), booking: bookingLike },
-                relatedType: "booking",
-                relatedId: created.id,
-              })
-            ).id
-          );
         }
         return created;
       });
@@ -203,9 +169,29 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Inline send after the response — the transaction above has committed,
-  // so the rows exist. Never blocks SMTP on the request.
-  scheduleInlineOutboxSend(outboxIds);
+  // Direct sends after commit — email failure never fails the booking.
+  const bookingLike = {
+    name: booking.name,
+    ref: booking.ref,
+    preferredDate: booking.preferredDate,
+    preferredTime: booking.preferredTime,
+    location: booking.location,
+    agentName: booking.agentName,
+    phone: booking.phone,
+    email: booking.email,
+  };
+  const visitorRes = await sendBookingReceived(booking.email, bookingLike, {
+    idempotencyKey: `booking:${booking.id}:booking_received:${booking.email.toLowerCase()}`,
+  });
+  if (!visitorRes.sent) logServerError(`booking ${booking.ref}: visitor email failed`, visitorRes.error);
+  if (staffRecipients.length > 0) {
+    const adminRes = await sendAdminNewBookingAlert(
+      staffRecipients.map((r) => r.email),
+      bookingLike,
+      { idempotencyKey: `booking:${booking.id}:admin_alert` }
+    );
+    if (!adminRes.sent) logServerError(`booking ${booking.ref}: admin alert failed`, adminRes.error);
+  }
 
   return NextResponse.json({ ref: booking.ref, id: booking.id }, { status: 201 });
 }

@@ -58,7 +58,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
         installment: { select: { installmentNumber: true, type: true } },
         recordedBy: { select: { name: true } },
         confirmedBy: { select: { name: true } },
-        receipt: { select: { id: true, ref: true, status: true } },
+        receipt: { select: { id: true, ref: true, sentAt: true } },
       },
     }),
     prisma.payment.count({ where }),

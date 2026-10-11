@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 
-// The inline outbox send runs after the response; allow headroom for the
-// request's own DB work plus the post-response SMTP send (Hobby max: 300s).
+// Agent follow-ups send directly through Resend (no queue); allow headroom
+// for DB work plus the bounded send (Hobby max: 300s).
 export const maxDuration = 60;
 
 export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -68,33 +68,27 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     },
   });
 
-  // Follow-up with assigned agent: queue message to agent email for follow-ups
+  // Follow-up with assigned agent: message to agent email for follow-ups.
+  // Sent directly; failure is logged and never fails the message save.
   if (booking.agentId) {
     try {
       const agent = await prisma.agent.findUnique({ where: { id: booking.agentId } });
       if (agent) {
-        const { enqueueEmail, scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
-        // One row per message: the default key would swallow a second,
-        // different message to the same agent, so key on the message id.
-        const row = await enqueueEmail(prisma, {
-          type: "agent_followup",
-          to: agent.email,
-          payload: {
-            to: agent.email,
-            params: {
-              agentName: agent.name,
-              clientName: booking.name,
-              ref: booking.ref,
-              location: booking.location,
-              message,
-              authorName,
-            },
+        const { sendAgentFollowUp } = await import("@/lib/email/emailService");
+        // One key per message: a second, different message to the same agent
+        // always sends; a double-submit replays identically.
+        const followRes = await sendAgentFollowUp(
+          agent.email,
+          {
+            agentName: agent.name,
+            clientName: booking.name,
+            ref: booking.ref,
+            location: booking.location,
+            message,
+            authorName,
           },
-          relatedType: "booking",
-          relatedId: id,
-          dedupeKey: `booking:${id}:agent_followup:${msg.id}`,
-        });
-        scheduleInlineOutboxSend([row.id]);
+          { idempotencyKey: `booking:${id}:agent_followup:${msg.id}` }
+        );
         await prisma.bookingActivity.create({
           data: {
             bookingId: id,
@@ -103,14 +97,15 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
             action: "message_to_agent",
             fromStatus: booking.status,
             toStatus: booking.status,
-            note: `Queued to ${agent.name} <${agent.email}>: ${message.slice(0, 500)}`,
-            emailSent: null,
-            emailError: "queued via outbox",
+            note: `Sent to ${agent.name} <${agent.email}>: ${message.slice(0, 500)}`,
+            emailSent: followRes.sent,
+            emailError: followRes.error,
           },
         });
+        if (!followRes.sent) console.error("Agent follow-up email failed:", followRes.error);
       }
     } catch (e) {
-      console.error("Agent follow-up email queue failed:", e);
+      console.error("Agent follow-up email failed:", e);
     }
   }
 

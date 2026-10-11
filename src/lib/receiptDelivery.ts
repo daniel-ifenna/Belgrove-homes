@@ -72,33 +72,26 @@ async function markPdf(
   }
 }
 
-export async function deliverReceiptEmail(opts: {
+export async function persistReceiptEmailSent(opts: {
   db: DeliveryDb;
   receiptId: string;
   ref: string;
-  send: () => Promise<{ sent: boolean; error: string | null }>;
-}): Promise<{ sent: boolean; error: string | null }> {
-  let result: { sent: boolean; error: string | null };
-  try {
-    result = await opts.send();
-  } catch (error) {
-    logServerError(`receipt ${opts.ref}: email send threw`, error);
-    result = { sent: false, error: shortMessage(error) };
-  }
+  resendEmailId: string | null;
+}): Promise<void> {
+  // Minimal permanent record: which Resend message proves this receipt was
+  // emailed, and when. Failures are NEVER written here — a failed attempt
+  // must not overwrite a prior success (the RCT-2026-69739 drift: a later
+  // 409 flipped a sent receipt back to failed). Not-emailed is simply
+  // sentAt == null; the admin retries with the Resend button.
   try {
     await opts.db.receipt.update({
       where: { id: opts.receiptId },
       data: {
-        emailStatus: result.sent ? "SENT" : "FAILED",
-        sentAt: result.sent ? new Date() : undefined,
-        lastError: result.sent ? null : result.error,
-        // Keep the legacy status column in sync for existing UIs.
-        status: result.sent ? "sent" : "failed",
-        error: result.sent ? null : result.error,
+        resendEmailId: opts.resendEmailId,
+        sentAt: new Date(),
       },
     });
   } catch (error) {
-    logServerError(`receipt ${opts.ref}: failed to persist emailStatus`, error);
+    logServerError(`receipt ${opts.ref}: failed to persist email proof`, error);
   }
-  return result;
 }

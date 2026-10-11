@@ -65,7 +65,7 @@ type MockState = {
   installments: MockInstallment[];
   transactions: MockTransaction[];
   receipts: Record<string, unknown>[];
-  outbox: Record<string, unknown>[];
+  
   audits: Record<string, unknown>[];
   bookings: { id: string; status: string; outcome: string | null }[];
   activities: Record<string, unknown>[];
@@ -157,19 +157,6 @@ function makeMockTx(state: MockState): TxClient {
         return row;
       },
     },
-    emailOutbox: {
-      findFirst: async (args: unknown) => {
-        const { where } = args as { where: { dedupeKey?: string } };
-        if (!where?.dedupeKey) return null;
-        return (state.outbox.find((o) => (o as { dedupeKey?: string }).dedupeKey === where.dedupeKey) as { id: string } | undefined) ?? null;
-      },
-      create: async (args: unknown) => {
-        const { data } = args as { data: Record<string, unknown> };
-        const row = { id: `out-${state.outbox.length + 1}`, ...data };
-        state.outbox.push(row);
-        return row;
-      },
-    },
     auditEvent: {
       create: async (args: unknown) => {
         const { data } = args as { data: Record<string, unknown> };
@@ -235,7 +222,7 @@ function seed2900(): MockState {
     paymentPlan: { code: "OUTRIGHT", name: "Outright" },
     installments: [installment],
   };
-  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], outbox: [], audits: [], bookings: [], activities: [] };
+  return { payments: [], installments: [installment], transactions: [transaction], receipts: [], audits: [], bookings: [], activities: [] };
 }
 
 function pendingPayment(id: string): MockPayment {
@@ -319,9 +306,8 @@ describe("applyConfirmationDbUnit", () => {
     expect((state.receipts[0] as { pdfStatus: string }).pdfStatus).toBe("PENDING");
     expect((state.receipts[0] as { paymentId: string }).paymentId).toBe("pay-1");
     // Receipt email queued in the SAME atomic unit (no post-commit enqueue).
-    expect(state.outbox).toHaveLength(1);
-    expect((state.outbox[0] as { type: string }).type).toBe("receipt");
-    expect((state.outbox[0] as { relatedId: string }).relatedId).toBe((state.receipts[0] as { id: string }).id);
+    expect(state.receipts).toHaveLength(1);
+    expect((state.receipts[0] as { source: string }).source).toBe("PAYMENT_CONFIRMATION");
     // Audit row written in the same unit.
     expect(state.audits).toHaveLength(1);
     expect((state.audits[0] as { action: string }).action).toBe("payment.confirm");
@@ -490,7 +476,7 @@ function seedSplit(): MockState {
     paymentPlan: { code: "3M", name: "0-3 Months" },
     installments: [i0, i1],
   };
-  return { payments: [], installments: [i0, i1], transactions: [transaction], receipts: [], outbox: [], audits: [], bookings: [], activities: [] };
+  return { payments: [], installments: [i0, i1], transactions: [transaction], receipts: [], audits: [], bookings: [], activities: [] };
 }
 
 describe("waterfall allocation", () => {

@@ -4,8 +4,6 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { getActionCounts, getActionItems, INBOX_CATEGORIES, type InboxCategory } from "@/lib/inbox";
 import { showTestFromParams } from "@/lib/test-data";
-import { drainOutboxOnAdminInboxLoad } from "@/lib/email/outbox";
-import RetryOutboxButton from "./RetryOutboxButton";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +15,6 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const showTest = showTestFromParams(params);
   const active = (params.category as InboxCategory | undefined) ?? null;
-
-  // Background drain of due outbox rows (at most once per 60s per server
-  // instance): keeps deferred mail moving while an admin works, no scheduler.
-  drainOutboxOnAdminInboxLoad();
 
   const [items, counts] = await Promise.all([
     getActionItems({ includeTest: showTest }),
@@ -75,9 +69,6 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                     <div className="text-[13px] font-medium text-[var(--ops-text)] leading-tight break-words">{item.title}</div>
                     <div className="text-[12px] text-[var(--ops-muted)] break-words">{item.subtitle}</div>
                   </div>
-                  {item.category === "EMAIL_STUCK" && item.outboxId ? (
-                    <RetryOutboxButton outboxId={item.outboxId} />
-                  ) : null}
                   <Link
                     href={item.href}
                     className="shrink-0 mono text-[11px] bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)] transition-colors"

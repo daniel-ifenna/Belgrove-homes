@@ -49,7 +49,6 @@ export default async function AdminBookingDetailPage({
       where: { bookingId: id },
       orderBy: { issuedAt: "desc" },
       omit: { pdfData: true },
-      include: { sendAttempts: { orderBy: { attemptedAt: "desc" }, take: 3 } },
     }),
     prisma.transaction.findUnique({
       where: { bookingId: id },
@@ -173,17 +172,16 @@ export default async function AdminBookingDetailPage({
             }}
           />
           {receipt ? (
-            <div className="mt-4 rounded-xl border bg-white px-4 py-4 shadow-sm" style={{ borderColor: receipt.status === "sent" ? "#A7F3D0" : receipt.status === "failed" ? "#FECACA" : "#E3E6E1", background: receipt.status === "sent" ? "#ECFDF5" : receipt.status === "failed" ? "#FEF2F2" : "#FFFFFF" }}>
+            <div className="mt-4 rounded-xl border bg-white px-4 py-4 shadow-sm" style={{ borderColor: receipt.sentAt ? "#A7F3D0" : "#E3E6E1", background: receipt.sentAt ? "#ECFDF5" : "#FFFFFF" }}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] ${receipt.status === "sent" ? "bg-[#065F46] text-white" : receipt.status === "failed" ? "bg-[#9F1239] text-white" : "bg-amber-500 text-white"}`}>{receipt.status === "sent" ? "✓" : receipt.status === "failed" ? "!" : "•"}</span>
+                  <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] ${receipt.sentAt ? "bg-[#065F46] text-white" : "bg-amber-500 text-white"}`}>{receipt.sentAt ? "✓" : "•"}</span>
                   <div>
-                    <div className="text-sm font-medium" style={{ color: receipt.status === "sent" ? "#065F46" : receipt.status === "failed" ? "#9F1239" : "#10231E" }}>
-                      Receipt {receipt.ref} ({receipt.status.toUpperCase()})
+                    <div className="text-sm font-medium" style={{ color: receipt.sentAt ? "#065F46" : "#10231E" }}>
+                      Receipt {receipt.ref} ({receipt.sentAt ? "EMAILED" : "NOT EMAILED"})
                     </div>
                     <div className="mono text-[11px] text-[var(--ops-muted)]">
-                      Issued {formatDateTime(receipt.issuedAt)} {receipt.sentAt ? `· Sent ${formatDateTime(receipt.sentAt)} to ${receipt.recipientEmail}` : `· Recipient ${receipt.recipientEmail}`} {receipt.sendAttempts.length > 1 ? `· ${receipt.sendAttempts.length} attempts` : ""}
-                      {receipt.error ? ` · Error: ${receipt.error.slice(0, 80)}` : ""}
+                      Issued {formatDateTime(receipt.issuedAt)} {receipt.sentAt ? `· Emailed ${formatDateTime(receipt.sentAt)} to ${receipt.recipientEmail}` : `· Recipient ${receipt.recipientEmail}`}
                     </div>
                   </div>
                 </div>
@@ -193,9 +191,9 @@ export default async function AdminBookingDetailPage({
                   <a href={`/api/admin/receipts/${receipt.ref}/pdf`} target="_blank" className="mono text-[11px] bg-[#065F46] text-white px-3 py-1.5 rounded-full hover:bg-[#0D3328]">Download PDF</a>
                 </div>
               </div>
-              {receipt.status === "failed" && (
-                <div className="mt-3 mono text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                  Last send failed: {receipt.error ?? "unknown"}. Use the Receipts page to retry. No new receipt number will be created.
+              {receipt.sentAt == null && (
+                <div className="mt-3 mono text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Not emailed yet. Open the receipt to send it via Resend.
                 </div>
               )}
             </div>

@@ -9,8 +9,6 @@ import { lagosDayKey, lagosTodayInput } from "@/lib/time";
 
 export type InboxCategory =
   | "PAYMENT_PENDING_VERIFICATION"
-  | "RECEIPT_SEND_FAILED"
-  | "EMAIL_STUCK"
   | "SOLD_WITHOUT_TRANSACTION"
   | "INSTALLMENT_OVERDUE"
   | "BOOKING_NEW"
@@ -20,8 +18,6 @@ export type InboxCategory =
 
 export const INBOX_CATEGORIES: { category: InboxCategory; priority: number; label: string; actionLabel: string }[] = [
   { category: "PAYMENT_PENDING_VERIFICATION", priority: 1, label: "Payments to verify", actionLabel: "Verify payment" },
-  { category: "RECEIPT_SEND_FAILED", priority: 2, label: "Failed receipt sends", actionLabel: "Resend" },
-  { category: "EMAIL_STUCK", priority: 3, label: "Stuck emails", actionLabel: "Investigate" },
   { category: "SOLD_WITHOUT_TRANSACTION", priority: 4, label: "Sold without transaction", actionLabel: "Create transaction" },
   { category: "INSTALLMENT_OVERDUE", priority: 5, label: "Overdue installments", actionLabel: "View transaction" },
   { category: "BOOKING_NEW", priority: 6, label: "New bookings", actionLabel: "Review booking" },
@@ -29,11 +25,6 @@ export const INBOX_CATEGORIES: { category: InboxCategory; priority: number; labe
   { category: "INSPECTION_AWAITING_OUTCOME", priority: 8, label: "Awaiting outcome", actionLabel: "Record outcome" },
   { category: "INSPECTION_DUE_TODAY", priority: 9, label: "Inspections today", actionLabel: "View" },
 ];
-
-// Mail that has sat unsent (PENDING/SENDING) longer than this is surfaced as
-// stuck — it means no worker is draining the outbox (cron down) or sends are
-// stalling. Receipt rows that already FAILED stay under RECEIPT_SEND_FAILED.
-export const STUCK_AFTER_MINUTES = 15;
 
 export type ActionItem = {
   id: string;
@@ -45,8 +36,6 @@ export type ActionItem = {
   age: string;
   actionLabel: string;
   href: string;
-  // EmailOutbox row id for EMAIL_STUCK items (drives the Retry now button).
-  outboxId?: string;
 };
 
 export function ageString(at: Date | string, now: Date = new Date()): string {
@@ -71,16 +60,6 @@ type PendingRow = {
   createdAt: Date;
   transaction: { id: string; ref: string; customerName: string } | null;
 };
-type OutboxRow = {
-  id: string;
-  relatedId: string | null;
-  updatedAt: Date;
-  createdAt: Date;
-  type?: string;
-  to?: unknown;
-  relatedType?: string | null;
-};
-type ReceiptRow = { id: string; ref: string; customerName: string; finalAmount: number };
 type BookingRow = {
   id: string;
   ref: string;
@@ -97,8 +76,6 @@ type TxnRefRow = { id: string; ref: string; customerName: string };
 
 export type InboxDb = {
   payment: { findMany(args: unknown): Promise<PendingRow[]>; count(args: unknown): Promise<number> };
-  emailOutbox: { findMany(args: unknown): Promise<OutboxRow[]>; count(args: unknown): Promise<number> };
-  receipt: { findMany(args: unknown): Promise<ReceiptRow[]> };
   inspectionBooking: { findMany(args: unknown): Promise<BookingRow[]>; count(args: unknown): Promise<number> };
   transaction: { findMany(args: unknown): Promise<TxnRefRow[]> };
 };
@@ -128,23 +105,12 @@ export async function getActionItems(
 
   const overdue = opts.overdue ?? (await getOverdueInstallments(undefined, undefined, { includeTest }));
 
-  const stuckCutoff = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
-  const [pendings, failedSends, stuckMails, soldNoTxn, fresh, unassigned, awaiting, scheduled] = await Promise.all([
+  const [pendings, soldNoTxn, fresh, unassigned, awaiting, scheduled] = await Promise.all([
     db.payment.findMany({
       where: { status: "PENDING_VERIFICATION", ...txnFilter(includeTest) },
       orderBy: { createdAt: "asc" },
       take: LIST_LIMIT,
       include: { transaction: { select: { id: true, ref: true, customerName: true } } },
-    }),
-    db.emailOutbox.findMany({
-      where: { type: "receipt", status: "FAILED" },
-      orderBy: { updatedAt: "desc" },
-      take: LIST_LIMIT,
-    }),
-    db.emailOutbox.findMany({
-      where: { status: { in: ["PENDING", "SENDING"] }, createdAt: { lt: stuckCutoff } },
-      orderBy: { createdAt: "asc" },
-      take: LIST_LIMIT,
     }),
     db.inspectionBooking.findMany({
       where: { outcome: "sold", transaction: null, ...testFilter(includeTest) },
@@ -185,44 +151,6 @@ export async function getActionItems(
       age: ageString(p.createdAt, now),
       actionLabel: "Verify payment",
       href: `/admin/transactions/${p.transactionId}#payment-${p.id}`,
-    });
-  }
-
-  const receiptIds = [...new Set(failedSends.map((o) => o.relatedId).filter((v): v is string => !!v))];
-  const receipts = receiptIds.length ? await db.receipt.findMany({ where: { id: { in: receiptIds } } }) : [];
-  const receiptById = new Map(receipts.map((r) => [r.id, r]));
-  for (const o of failedSends) {
-    const r = o.relatedId ? receiptById.get(o.relatedId) : undefined;
-    items.push({
-      id: `resend-${o.id}`,
-      category: "RECEIPT_SEND_FAILED",
-      priority: 2,
-      ref: r?.ref ?? "receipt",
-      title: "Resend failed receipt",
-      subtitle: `${r?.customerName ?? "-"} · ${formatNaira(r?.finalAmount ?? 0)}`,
-      age: ageString(o.updatedAt ?? o.createdAt, now),
-      actionLabel: "Resend",
-      href: r ? `/admin/receipts/${r.id}` : "/admin/receipts",
-    });
-  }
-
-  for (const o of stuckMails) {
-    const kind = typeof o.type === "string" && o.type ? o.type : "email";
-    const recipients = Array.isArray(o.to) ? o.to.join(", ") : String(o.to ?? "—");
-    let href = "/admin/inbox";
-    if (o.relatedType === "receipt" && o.relatedId) href = `/admin/receipts/${o.relatedId}`;
-    else if (o.relatedType === "booking" && o.relatedId) href = `/admin/bookings/${o.relatedId}`;
-    items.push({
-      id: `stuck-${o.id}`,
-      category: "EMAIL_STUCK",
-      priority: 3,
-      ref: kind,
-      title: `Stuck email (${kind})`,
-      subtitle: `${recipients} · unsent for ${ageString(o.createdAt, now)}`,
-      age: ageString(o.createdAt, now),
-      actionLabel: "Investigate",
-      href,
-      outboxId: o.id,
     });
   }
 
@@ -328,8 +256,6 @@ export function emptyCounts(): ActionCounts {
     total: 0,
     byCategory: {
       PAYMENT_PENDING_VERIFICATION: 0,
-      RECEIPT_SEND_FAILED: 0,
-      EMAIL_STUCK: 0,
       SOLD_WITHOUT_TRANSACTION: 0,
       INSTALLMENT_OVERDUE: 0,
       BOOKING_NEW: 0,
@@ -341,17 +267,12 @@ export function emptyCounts(): ActionCounts {
 }
 
 export async function getActionCounts(
-  opts: { includeTest?: boolean; db?: InboxDb; overdue?: Awaited<ReturnType<typeof getOverdueInstallments>>; now?: Date } = {}
+  opts: { includeTest?: boolean; db?: InboxDb; overdue?: Awaited<ReturnType<typeof getOverdueInstallments>> } = {}
 ): Promise<ActionCounts> {
-  const { includeTest = false, db = realDb, now = new Date() } = opts;
+  const { includeTest = false, db = realDb } = opts;
   const overdue = opts.overdue ?? (await getOverdueInstallments(undefined, undefined, { includeTest }));
-  const stuckCutoff = new Date(now.getTime() - STUCK_AFTER_MINUTES * 60_000);
-  const [pending, failed, stuck, sold, newCount, unassigned, awaiting, scheduled] = await Promise.all([
+  const [pending, sold, newCount, unassigned, awaiting, scheduled] = await Promise.all([
     db.payment.count({ where: { status: "PENDING_VERIFICATION", ...txnFilter(includeTest) } }),
-    db.emailOutbox.count({ where: { type: "receipt", status: "FAILED" } }),
-    db.emailOutbox.count({
-      where: { status: { in: ["PENDING", "SENDING"] }, createdAt: { lt: stuckCutoff } },
-    }),
     db.inspectionBooking.count({ where: { outcome: "sold", transaction: null, ...testFilter(includeTest) } }),
     db.inspectionBooking.count({ where: { status: "new", ...testFilter(includeTest) } }),
     db.inspectionBooking.count({ where: { agentId: null, status: { not: "closed" }, ...testFilter(includeTest) } }),
@@ -368,8 +289,6 @@ export async function getActionCounts(
   ).length;
   const byCategory: Record<InboxCategory, number> = {
     PAYMENT_PENDING_VERIFICATION: pending,
-    RECEIPT_SEND_FAILED: failed,
-    EMAIL_STUCK: stuck,
     SOLD_WITHOUT_TRANSACTION: sold,
     INSTALLMENT_OVERDUE: overdue.length,
     BOOKING_NEW: newCount,

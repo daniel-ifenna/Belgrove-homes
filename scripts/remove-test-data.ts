@@ -43,10 +43,6 @@ async function main() {
   const receiptIds = new Set(receipts.map((r) => r.id));
 
   const entityIds = [...bookingIds, ...txnIds, ...paymentIds, ...receiptIds];
-  const outbox = await prisma.emailOutbox.findMany({
-    where: { relatedId: { in: entityIds } },
-    select: { id: true, type: true, status: true },
-  });
   const audits = await prisma.auditEvent.findMany({
     where: { entityId: { in: entityIds } },
     select: { id: true },
@@ -98,7 +94,6 @@ async function main() {
   console.log(`payments on test transactions: ${payments.length}`);
   console.log(`receipts linked to test rows: ${receipts.length}`);
   for (const r of receipts) console.log(`  RECEIPT ${r.ref} ₦${r.finalAmount.toLocaleString("en-NG")}`);
-  console.log(`outbox rows for test entities: ${outbox.length}`);
   console.log(`audit events for test entities: ${audits.length}`);
   console.log(`notifications on test bookings: ${notifications.length}`);
   console.log(`booking activities on test bookings: ${activities.length}`);
@@ -125,7 +120,6 @@ async function main() {
   await prisma.$transaction(async (tx) => {
     if (notifications.length) await tx.notification.deleteMany({ where: { id: { in: notifications.map((n) => n.id) } } });
     if (activities.length) await tx.bookingActivity.deleteMany({ where: { id: { in: activities.map((a) => a.id) } } });
-    if (outbox.length) await tx.emailOutbox.deleteMany({ where: { id: { in: outbox.map((o) => o.id) } } });
     if (audits.length) await tx.auditEvent.deleteMany({ where: { id: { in: audits.map((a) => a.id) } } });
     if (receiptIds.size) await tx.receipt.deleteMany({ where: { id: { in: [...receiptIds] } } }); // cascades send attempts
     if (txnIds.size) await tx.transaction.deleteMany({ where: { id: { in: [...txnIds] } } }); // cascades installments + payments
@@ -134,7 +128,7 @@ async function main() {
   });
   console.log(
     `Deleted ${bookings.length} bookings, ${transactions.length} transactions, ${payments.length} payments, ` +
-      `${receipts.length} receipts, ${outbox.length} outbox rows, ${audits.length} audit events, ` +
+      `${receipts.length} receipts, ${audits.length} audit events, ` +
       `${notifications.length} notifications, ${activities.length} booking activities, ${deletableCustomers.length} customers.`
   );
 }

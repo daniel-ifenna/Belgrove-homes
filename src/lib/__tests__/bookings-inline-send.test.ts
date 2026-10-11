@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Inline-send ordering for POST /api/bookings: outbox ids must be collected
-// inside the DB transaction, and the after() send scheduled only AFTER the
-// transaction commits — scheduling inside would send before the rows exist
-// and silently defer the mail to retry.
+// POST /api/bookings sends directly through Resend after commit (no queue):
+// visitor confirmation + staff alert go out in-request with stable per-booking
+// idempotency keys, and email failure never fails the booking.
 
 const events: string[] = [];
-const outboxRows: { id: string; data: Record<string, unknown> }[] = [];
-let scheduledIds: string[][] = [];
+const sent: { fn: string; args: unknown[] }[] = [];
 
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: () => ({ ok: true }),
@@ -27,18 +25,9 @@ vi.mock("@/lib/prisma", () => {
     location: "Kado",
     agentName: null,
   };
-  const txEmailOutbox = {
-    findFirst: async () => null,
-    create: async (args: { data: Record<string, unknown> }) => {
-      const row = { id: `out-${outboxRows.length + 1}`, data: args.data };
-      outboxRows.push(row);
-      return { id: row.id };
-    },
-  };
   const tx = {
     inspectionBooking: { create: async () => ({ ...createdBooking }) },
     notification: { createMany: async () => ({ count: 1 }) },
-    emailOutbox: txEmailOutbox,
   };
   return {
     prisma: {
@@ -65,16 +54,18 @@ vi.mock("@/lib/prisma", () => {
   };
 });
 
-vi.mock("@/lib/email/outbox", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/lib/email/outbox")>();
-  return {
-    ...original,
-    scheduleInlineOutboxSend: (ids: string[]) => {
-      events.push("scheduled");
-      scheduledIds.push(ids);
-    },
-  };
-});
+vi.mock("@/lib/email/emailService", () => ({
+  sendBookingReceived: async (...args: unknown[]) => {
+    events.push("visitor-email");
+    sent.push({ fn: "sendBookingReceived", args });
+    return { sent: true, error: null };
+  },
+  sendAdminNewBookingAlert: async (...args: unknown[]) => {
+    events.push("admin-email");
+    sent.push({ fn: "sendAdminNewBookingAlert", args });
+    return { sent: true, error: null };
+  },
+}));
 
 import { NextRequest } from "next/server";
 import { POST } from "@/app/api/bookings/route";
@@ -94,20 +85,23 @@ function bookingRequest() {
   });
 }
 
-describe("POST /api/bookings inline send", () => {
+describe("POST /api/bookings direct send", () => {
   beforeEach(() => {
     events.length = 0;
-    outboxRows.length = 0;
-    scheduledIds = [];
+    sent.length = 0;
   });
 
-  it("responds 201 and schedules the send only after commit, with both row ids", async () => {
+  it("responds 201 and sends both emails after commit with stable keys", async () => {
     const res = await POST(bookingRequest());
     expect(res.status).toBe(201);
-    // Both rows (visitor confirmation + staff alert) were enqueued in-tx…
-    expect(outboxRows).toHaveLength(2);
-    // …and the inline send was scheduled strictly after the commit.
-    expect(events).toEqual(["committed", "scheduled"]);
-    expect(scheduledIds).toEqual([[outboxRows[0].id, outboxRows[1].id]]);
+    // Both emails go out strictly after the commit, in-request.
+    expect(events).toEqual(["committed", "visitor-email", "admin-email"]);
+    expect(sent).toHaveLength(2);
+    const visitor = sent.find((s) => s.fn === "sendBookingReceived")!;
+    const admin = sent.find((s) => s.fn === "sendAdminNewBookingAlert")!;
+    expect(visitor.args[0]).toBe("buyer@example.com");
+    expect(visitor.args[2]).toEqual({ idempotencyKey: "booking:bk-1:booking_received:buyer@example.com" });
+    expect(admin.args[0]).toEqual(["staff@example.com"]);
+    expect(admin.args[2]).toEqual({ idempotencyKey: "booking:bk-1:admin_alert" });
   });
 });

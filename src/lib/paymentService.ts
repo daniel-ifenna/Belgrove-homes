@@ -135,19 +135,41 @@ export async function recordPaymentAndGenerateReceipt(params: {
   });
 
   if (!pdfOutcome.ok) {
-    try {
-      await prisma.receipt.update({
-        where: { id: confirmed.receiptId },
-        data: { emailStatus: "FAILED", lastError: "Skipped: PDF generation failed" },
-      });
-    } catch (e) {
-      logServerError(`receipt ${receiptRef}: failed to mark email skipped`, e);
-    }
+    const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId }, omit: { pdfData: true } });
+    const payment = await prisma.payment.findUnique({ where: { id: confirmed.payment.id } });
+    return { payment, receipt, email: { sent: false as const, error: pdfOutcome.error } };
+  }
+
+  // Direct Resend send (no queue). Stable key per receipt — safe replay.
+  const { sendReceiptEmail } = await import("@/lib/receipts/emailReceipt");
+  const { persistReceiptEmailSent } = await import("@/lib/receiptDelivery");
+  let email: { sent: boolean; error: string | null; resendEmailId?: string | null };
+  try {
+    const sent = await sendReceiptEmail({
+      to: transaction.customerEmail,
+      clientName: transaction.customerName,
+      ref: receiptRef,
+      receiptUrl,
+      pdfBuffer: pdfOutcome.bytes!,
+      idempotencyKey: `receipt:${confirmed.receiptId}`,
+      isFinalPayment: confirmed.isPaidInFull,
+    });
+    email = { sent: sent.sent, error: sent.error, resendEmailId: sent.providerMessageId ?? null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Email failed";
+    logServerError(`receipt ${receiptRef}: email send threw`, e);
+    email = { sent: false, error: msg };
+  }
+  if (email.sent) {
+    await persistReceiptEmailSent({
+      db: prisma,
+      receiptId: confirmed.receiptId,
+      ref: receiptRef,
+      resendEmailId: email.resendEmailId ?? null,
+    });
   }
 
   const receipt = await prisma.receipt.findUnique({ where: { id: confirmed.receiptId }, omit: { pdfData: true } });
   const payment = await prisma.payment.findUnique({ where: { id: confirmed.payment.id } });
-  // The receipt outbox row was queued inside the confirmation transaction
-  // (committed above); the caller schedules the inline send post-response.
-  return { payment, receipt, emailQueued: true as const, outboxId: confirmed.outboxId };
+  return { payment, receipt, email };
 }

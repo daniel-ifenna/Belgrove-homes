@@ -30,7 +30,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
       paymentPlan: true,
       installments: { orderBy: { installmentNumber: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
-      receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true }, include: { sendAttempts: true } },
+      receipts: { orderBy: { issuedAt: "desc" }, omit: { pdfData: true } },
       booking: { select: { id: true, ref: true } },
     },
   });
@@ -171,7 +171,7 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                           <div className="mt-1.5">
                             <StatusBadge status={p.status} className="px-2 py-0.5 text-[10px]" />
                           </div>
-                          {receipt && <div className="mono text-[11px] mt-1"><Link href={`/admin/receipts/${receipt.id}`} className="text-[var(--ops-primary)] hover:underline">Receipt: {receipt.ref}</Link> · {receipt.status}</div>}
+                          {receipt && <div className="mono text-[11px] mt-1"><Link href={`/admin/receipts/${receipt.id}`} className="text-[var(--ops-primary)] hover:underline">Receipt: {receipt.ref}</Link></div>}
                           {p.status === "CONFIRMED" && (
                             <PaymentVerificationButtons
                               transactionId={transaction.id}
@@ -200,11 +200,11 @@ export default async function TransactionDetailPage({ params }: { params: Promis
                     <Link key={r.id} href={`/admin/receipts/${r.id}`} className="block p-3 rounded-xl border border-[var(--ops-border)] hover:bg-[var(--ops-bg)]">
                       <div className="flex items-center justify-between gap-2">
                         <div className="font-mono text-[12px] font-medium text-[var(--ops-primary)]">{r.ref}</div>
-                        {(r.pdfStatus === "FAILED" || r.emailStatus === "FAILED") && (
+                        {(r.pdfStatus === "FAILED" || !r.sentAt) && (
                           <span className="mono text-[10px] px-2 py-0.5 rounded-full bg-[#A6402F] text-white">Needs retry →</span>
                         )}
                       </div>
-                      <div className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(r.issuedAt)} · {r.status} · {formatNaira(r.finalAmount)}</div>
+                      <div className="mono text-[11px] text-[var(--ops-muted)]">{formatDate(r.issuedAt)} · {r.sentAt ? "Emailed" : "Not emailed"} · {formatNaira(r.finalAmount)}</div>
                     </Link>
                   ))}
                 </div>

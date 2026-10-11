@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { logServerError } from "@/lib/paymentConfirmation";
-import { enqueueEmail, findPendingReceiptOutboxRow, scheduleInlineOutboxSend } from "@/lib/email/outbox";
+import { renderReceiptPdfBuffer } from "@/lib/receipt-render";
+import { sendReceiptEmail } from "@/lib/receipts/emailReceipt";
+import { persistReceiptEmailSent } from "@/lib/receiptDelivery";
 
-// The inline outbox send runs after the response; allow headroom for the
-// request's own DB work plus the post-response send (Hobby max: 300s).
+// Manual receipt resend. Sends immediately through Resend (no queue) and
+// records only the minimal proof: resendEmailId + sentAt.
+//
+// Idempotency contract:
+// - Every user-initiated resend mints a FRESH key (`resend:{id}:{uuid}`) —
+//   never reuse a key across different bodies (Resend 409s that).
+// - If the send times out (unknown outcome: may have delivered), the response
+//   is 503 with the SAME key so the client retries with key + identical body
+//   (safe replay — Resend returns the original send instead of duplicating).
+// - A 409 means the key was seen with a different body: surfaces as a
+//   conflict, never silently marked sent or failed.
 export const maxDuration = 60;
+
+function isTimeoutMessage(msg: string | null): boolean {
+  return !!msg && /timed out/i.test(msg);
+}
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -16,65 +31,114 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const { id } = await ctx.params;
   const receipt = await prisma.receipt.findUnique({
     where: { id },
-    select: { id: true, ref: true, recipientEmail: true, status: true },
-  });
-  if (!receipt) return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
-
-  // Reuse same ref, same receipt record — do not create new receipt number.
-  // Delivery goes through the outbox (retries + backoff); the request never
-  // blocks on the provider. Sends reuse the stored PDF bytes generated once
-  // at confirmation; only { regen: true } ("Regenerate & resend") rebuilds
-  // the PDF from the snapshot before sending.
-  const body = await request.json().catch(() => null);
-  const regen = body?.regen === true;
-
-  let outboxId: string;
-  let deduped = false;
-  // Cooldown: a queued or in-flight row for this receipt means a send is
-  // already on its way — reuse it instead of queueing a duplicate. This is
-  // what stops rapid repeat clicks from piling up attempts on one receipt.
-  // A regen resend always queues fresh so the rebuild isn't swallowed.
-  const inFlight = regen
-    ? null
-    : await findPendingReceiptOutboxRow(prisma, receipt.id).catch((e) => {
-        logServerError(`receipt ${receipt.ref}: pending-row lookup failed`, e);
-        return null;
-      });
-  if (inFlight) {
-    outboxId = inFlight.id;
-    deduped = true;
-  } else {
-    try {
-      // Explicit user action: force bypasses dedupe so a resend always sends.
-      // regen:true rebuilds the stored PDF first (the only path that ever
-      // regenerates); otherwise the send reuses the stored bytes.
-      outboxId = (
-        await enqueueEmail(prisma, {
-          type: "receipt",
-          to: receipt.recipientEmail,
-          payload: regen ? { receiptId: receipt.id, regen: true } : { receiptId: receipt.id },
-          relatedType: "receipt",
-          relatedId: receipt.id,
-          force: true,
-        })
-      ).id;
-    } catch (e) {
-      logServerError(`receipt ${receipt.ref}: resend enqueue failed`, e);
-      return NextResponse.json({ error: "Couldn't queue the resend. Please try again." }, { status: 500 });
-    }
-  }
-  await prisma.auditEvent.create({
-    data: {
-      actorId: session!.user.id,
-      actorName: session!.user.name ?? session!.user.email ?? "Unknown",
-      action: regen ? "receipt.regen_resend" : "receipt.resend",
-      entityType: "receipt",
-      entityId: receipt.id,
-      before: Prisma.JsonNull,
-      after: { queued: true, deduped, regenerated: regen, to: receipt.recipientEmail },
+    include: {
+      payment: { include: { installment: true } },
+      transaction: {
+        select: {
+          totalPayable: true,
+          payments: { where: { status: "CONFIRMED" }, select: { amount: true } },
+        },
+      },
     },
   });
-  scheduleInlineOutboxSend([outboxId]);
+  if (!receipt) return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
+  if (!receipt.payment) return NextResponse.json({ error: "Receipt has no payment link" }, { status: 409 });
 
-  return NextResponse.json({ queued: true, deduped, regenerated: regen, receipt }, { status: 202 });
+  const body = await request.json().catch(() => null);
+  const regen = body?.regen === true;
+  // Client retry of a timed-out send passes back the key it was given; a new
+  // click mints a fresh one. One key, one body — always.
+  const key =
+    typeof body?.idempotencyKey === "string" && body.idempotencyKey.length >= 8
+      ? body.idempotencyKey.slice(0, 120)
+      : `resend:${receipt.id}:${randomUUID()}`;
+
+  // Same stored bytes every send (render-once); only an explicit regen
+  // rebuilds from the snapshot before sending.
+  let pdfBuffer: Buffer | null = receipt.pdfData && !regen ? Buffer.from(receipt.pdfData) : null;
+  if (!pdfBuffer) {
+    try {
+      pdfBuffer = await renderReceiptPdfBuffer(receipt.id, regen ? { force: true } : undefined);
+      await prisma.receipt.update({
+        where: { id: receipt.id },
+        data: { pdfStatus: "GENERATED", pdfData: new Uint8Array(pdfBuffer) },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.slice(0, 500) : "PDF regenerate failed";
+      logServerError(`receipt ${receipt.ref}: resend PDF rebuild failed`, e);
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+  }
+
+  const confirmedTotal = (receipt.transaction?.payments ?? []).reduce((s, p) => s + p.amount, 0);
+  const isFinalPayment = !!receipt.transaction && confirmedTotal >= receipt.transaction.totalPayable;
+  let result: { sent: boolean; error: string | null; providerMessageId?: string | null };
+  try {
+    result = await sendReceiptEmail({
+      to: receipt.recipientEmail,
+      clientName: receipt.customerName,
+      ref: receipt.ref,
+      receiptUrl: receipt.receiptUrl,
+      pdfBuffer,
+      idempotencyKey: key,
+      isFinalPayment,
+      plotsSummary:
+        receipt.plotQuantity != null
+          ? receipt.sqm
+            ? `Plots: ${receipt.plotQuantity} × ${receipt.sqm}sqm`
+            : `Plots: ${receipt.plotQuantity}`
+          : null,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Email failed";
+    logServerError(`receipt ${receipt.ref}: resend threw`, e);
+    result = { sent: false, error: msg };
+  }
+
+  const actorName = session!.user.name ?? session!.user.email ?? "Unknown";
+  if (result.sent) {
+    await persistReceiptEmailSent({
+      db: prisma,
+      receiptId: receipt.id,
+      ref: receipt.ref,
+      resendEmailId: result.providerMessageId ?? null,
+    });
+    await prisma.auditEvent.create({
+      data: {
+        actorId: session!.user.id,
+        actorName,
+        action: regen ? "receipt.regen_resend" : "receipt.resend",
+        entityType: "receipt",
+        entityId: receipt.id,
+        before: { emailed: true },
+        after: { resent: true, regenerated: regen, to: receipt.recipientEmail, resendEmailId: result.providerMessageId ?? null },
+      },
+    });
+    return NextResponse.json({
+      resent: true,
+      regenerated: regen,
+      resendEmailId: result.providerMessageId ?? null,
+      receipt: { id: receipt.id, ref: receipt.ref, recipientEmail: receipt.recipientEmail },
+    });
+  }
+
+  // Unknown outcome (timeout): the first request may have delivered. Do NOT
+  // mint a new key — hand this one back so the retry replays identically.
+  if (isTimeoutMessage(result.error)) {
+    return NextResponse.json(
+      {
+        error: "The send timed out and may have delivered. Check Resend before retrying; retrying reuses the same idempotency key.",
+        idempotencyKey: key,
+        retryable: true,
+      },
+      { status: 503 }
+    );
+  }
+  if (result.error?.includes("409")) {
+    return NextResponse.json(
+      { error: "Resend already recorded this send key with different content. Check the Resend dashboard instead of resending." },
+      { status: 409 }
+    );
+  }
+  return NextResponse.json({ error: result.error ?? "Resend failed" }, { status: 502 });
 }

@@ -174,7 +174,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             {receipts.length > 0 && (
               <Group title="Receipts" href={`/admin/receipts?q=${encodeURIComponent(q)}`} count={receipts.length}>
                 {receipts.map((r) => (
-                  <Row key={r.id} href={`/admin/receipts/${r.id}`} primary={r.ref} secondary={`${r.customerName} · ${r.status}`} />
+                  <Row key={r.id} href={`/admin/receipts/${r.id}`} primary={r.ref} secondary={`${r.customerName} · ${formatNaira(r.finalAmount)}`} />
                 ))}
               </Group>
             )}

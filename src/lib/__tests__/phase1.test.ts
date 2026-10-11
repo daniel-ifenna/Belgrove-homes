@@ -47,6 +47,12 @@ describe("getAppUrl", () => {
     delete process.env.APP_URL;
     expect(() => getAppUrl()).toThrow(/APP_URL/);
   });
+  it("throws in production when APP_URL points at a local origin", () => {
+    for (const local of ["http://localhost:3000", "http://127.0.0.1:3000", "http://192.168.1.10:3000"]) {
+      process.env = { ...OLD, APP_URL: local, NODE_ENV: "production" };
+      expect(() => getAppUrl()).toThrow(/local/i);
+    }
+  });
   it("falls back to localhost in development", () => {
     process.env = { ...OLD, NODE_ENV: "development" };
     delete process.env.APP_URL;

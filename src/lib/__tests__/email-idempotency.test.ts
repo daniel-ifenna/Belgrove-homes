@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
-// The outbox row id must ride every provider call as its idempotency key.
+// Every logical send carries an idempotency key: stable per logical send for
+// safe replay, fresh per user-initiated resend — never reused across bodies.
 vi.mock("../email/sendEmail", () => ({
   sendEmail: vi.fn(async () => ({ sent: true, error: null })),
 }));

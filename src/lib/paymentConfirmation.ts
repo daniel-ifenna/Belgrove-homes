@@ -141,10 +141,6 @@ export type ConfirmDbResult = {
   installment: { id: string; type: string; installmentNumber: number } | null;
   transactionId: string;
   receiptId: string;
-  // Outbox row id for the receipt email, so the caller can schedule the
-  // inline send after the transaction commits. Matches an existing row when
-  // dedupe collapses a repeat enqueue.
-  outboxId: string;
   newTotalPaid: number;
   newOutstanding: number;
   isPaidInFull: boolean;
@@ -309,9 +305,7 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       paymentPlanName: transaction.paymentPlan?.name ?? null,
       issuedAt: new Date(payment.paymentDate),
       recipientEmail: transaction.customerEmail,
-      status: "generated",
       pdfStatus: "PENDING",
-      emailStatus: "PENDING",
       receiptUrl: input.receiptUrl,
       qrTargetUrl: input.qrTargetUrl,
       pdfPath: input.pdfPath ?? null,
@@ -320,20 +314,9 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
     },
   });
 
-  // Receipt email queued in the SAME atomic unit (DB work only — delivery
-  // happens post-commit via the inline send, with the outbox as retry).
-  // If confirmation commits, the email is durably queued; no post-commit
-  // enqueue can be lost. One row per receipt (dedupe key = receipt id).
-  const { enqueueEmail } = await import("./email/outbox");
-  const outboxRow = await enqueueEmail(tx as unknown as Parameters<typeof enqueueEmail>[0], {
-    type: "receipt",
-    to: transaction.customerEmail,
-    payload: { receiptId: receipt.id },
-    relatedType: "receipt",
-    relatedId: receipt.id,
-  });
-
-  // Immutable audit row in the same unit: who confirmed what.
+  // Immutable audit row in the same unit: who confirmed what. Email is sent
+  // post-commit by the caller (direct Resend send, no queue) — delivery state
+  // lives in Resend's dashboard, not here.
   await tx.auditEvent.create({
     data: {
       actorId: input.confirmedById ?? null,
@@ -358,7 +341,6 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       : null,
     transactionId: transaction.id,
     receiptId: receipt.id,
-    outboxId: outboxRow.id,
     newTotalPaid,
     newOutstanding,
     isPaidInFull,

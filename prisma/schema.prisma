@@ -24,7 +24,6 @@ model User {
   messages         BookingMessage[]
   internalNotes    InternalNote[]
   createdReceipts  Receipt[]           @relation("ReceiptCreatedBy")
-  receiptSendAttempts ReceiptSendAttempt[] @relation("ReceiptSendActor")
   transactionsCreated Transaction[] @relation("TransactionCreatedBy")
   paymentsRecorded Payment[] @relation("PaymentRecordedBy")
   paymentsConfirmed Payment[] @relation("PaymentConfirmedBy")
@@ -277,14 +276,6 @@ model InternalNote {
   @@index([bookingId, createdAt])
 }
 
-enum ReceiptStatus {
-  draft
-  pending
-  generated
-  sent
-  failed
-}
-
 enum ReceiptSource {
   BOOKING_FLOW
   ADMIN_MANUAL
@@ -332,20 +323,22 @@ model Receipt {
   issuedAt DateTime
   sentAt DateTime?
   recipientEmail String
-  status ReceiptStatus @default(pending)
   receiptUrl String
   qrTargetUrl String
   pdfPath String? // public/receipts/{ref}.pdf
 
-  // Post-commit delivery tracking (payment stays CONFIRMED even if these fail)
+  // PDF build state (payment stays CONFIRMED even if this fails)
   pdfStatus String @default("PENDING") // PENDING | GENERATED | FAILED
-  emailStatus String @default("PENDING") // PENDING | SENT | FAILED
-  lastError String?
 
   // Tokenized client access: the QR code and client URL carry this token,
   // never the receipt ref. Revoking hides the receipt without deleting it.
   accessToken String? @unique
   accessTokenRevokedAt DateTime?
+  // Minimal permanent email proof (Step 1): Resend's message id for this
+  // receipt's latest send. Deep-links to the Resend dashboard (30-day log
+  // retention); afterwards this id + sentAt + recipientEmail are the proof.
+  // Failures are never recorded here — not-emailed is simply sentAt == null.
+  resendEmailId String?
   // Stored PDF bytes: rendered once at payment confirmation, reused for
   // every send and download. Resends never regenerate — only an explicit
   // "Regenerate & resend" rebuilds. Null for rows predating this column
@@ -355,33 +348,14 @@ model Receipt {
 
   createdById String?
   createdBy User? @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
-  error String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sendAttempts ReceiptSendAttempt[]
-
-  @@index([status])
   @@index([customerEmail])
   @@index([estate])
   @@index([issuedAt])
   @@index([bookingId])
-}
-
-model ReceiptSendAttempt {
-  id String @id @default(cuid())
-  receiptId String
-  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  attemptedAt DateTime @default(now())
-  recipientEmail String
-  status String // sent, failed, pending
-  error String?
-  actorId String?
-  actor User? @relation("ReceiptSendActor", fields: [actorId], references: [id])
-  actorName String?
-
-  @@index([receiptId, attemptedAt])
 }
 
 enum TransactionStatus {
@@ -523,54 +497,6 @@ model Payment {
   @@index([transactionId])
   @@index([installmentId])
   @@index([status])
-}
-
-// Email outbox (Phase 2): every fire-and-forget send is a durable row.
-// Enqueued in the same DB transaction as the business change where possible;
-// processOutbox() delivers with exponential backoff (5 attempts → FAILED).
-// Receipt delivery rows also write ReceiptSendAttempt on send/fail.
-enum EmailOutboxStatus {
-  PENDING
-  SENDING
-  SENT
-  FAILED
-}
-
-model EmailOutbox {
-  id            String            @id @default(cuid())
-  type          String
-  to            Json // string | string[]
-  subject       String?
-  // Priority: receipts and payment confirmations (10) send before reminders
-  // and bulk mail (0). Higher sends first.
-  priority      Int               @default(0)
-  // Timing trail: createdAt is enqueued_at; startedAt is set on claim;
-  // sentAt on success. Queue wait = startedAt - createdAt, send duration =
-  // sentAt - startedAt, shown on the receipt page.
-  startedAt     DateTime?
-  payload       Json
-  // Deterministic dedupe key (relatedType:relatedId:type:recipients, or a
-  // caller override). Nullable so legacy rows are untouched; new rows always
-  // set it and the unique index turns a duplicate enqueue into a P2002 that
-  // enqueueEmail converts into "return the existing row".
-  dedupeKey     String?           @unique
-  // Proof of sending, written on SENT only: which provider delivered the row
-  // and that provider's message id (Resend email id / SMTP Message-ID) for
-  // tracing a delivery with the provider. Both stay NULL unless sent.
-  provider          String?
-  providerMessageId String?
-  status        EmailOutboxStatus @default(PENDING)
-  attempts      Int               @default(0)
-  nextAttemptAt DateTime          @default(now())
-  lastError     String?
-  relatedType   String?
-  relatedId     String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  sentAt        DateTime?
-
-  @@index([status, nextAttemptAt])
-  @@index([relatedType, relatedId])
 }
 
 // Immutable audit trail for payment/transaction/receipt mutations.

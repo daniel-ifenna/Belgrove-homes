@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { generateAndStoreReceiptPdf, deliverReceiptEmail } from "../receiptDelivery";
+import { generateAndStoreReceiptPdf, persistReceiptEmailSent } from "../receiptDelivery";
 
 function mockDb() {
   const update = vi.fn(async () => ({}));
@@ -90,59 +90,28 @@ describe("generateAndStoreReceiptPdf", () => {
   });
 });
 
-describe("deliverReceiptEmail", () => {
-  it("marks SENT with sentAt on success", async () => {
+describe("persistReceiptEmailSent", () => {
+  it("writes only the minimal proof: resendEmailId + sentAt", async () => {
     const { db, update } = mockDb();
-    const send = vi.fn(async () => ({ sent: true as const, error: null as string | null }));
-
-    const result = await deliverReceiptEmail({ db, receiptId: "rcpt-1", ref: "BEL-2026-00001", send });
-
-    expect(result.sent).toBe(true);
-    expect(result.error).toBe(null);
+    await persistReceiptEmailSent({ db, receiptId: "rcpt-1", ref: "RCT-1", resendEmailId: "msg-abc" });
     expect(update).toHaveBeenCalledWith({
       where: { id: "rcpt-1" },
-      data: {
-        emailStatus: "SENT",
-        sentAt: expect.any(Date),
-        lastError: null,
-        status: "sent",
-        error: null,
-      },
+      data: { resendEmailId: "msg-abc", sentAt: expect.any(Date) },
     });
   });
 
-  it("marks FAILED with lastError when sending fails or throws", async () => {
-    const { db, update } = mockDb();
+  it("never throws when the bookkeeping write fails", async () => {
+    const db = { receipt: { update: vi.fn(async () => { throw new Error("db down"); }) } };
+    await expect(
+      persistReceiptEmailSent({ db, receiptId: "rcpt-1", ref: "RCT-1", resendEmailId: "msg-abc" })
+    ).resolves.toBeUndefined();
+  });
 
-    const failed = await deliverReceiptEmail({
-      db,
-      receiptId: "rcpt-1",
-      ref: "BEL-2026-00001",
-      send: async () => ({ sent: false as const, error: "SMTP 550 mailbox unavailable" }),
-    });
-    expect(failed.sent).toBe(false);
-    expect(failed.error).toBe("SMTP 550 mailbox unavailable");
-
-    const threw = await deliverReceiptEmail({
-      db,
-      receiptId: "rcpt-1",
-      ref: "BEL-2026-00001",
-      send: async () => {
-        throw new Error("socket hang up");
-      },
-    });
-    expect(threw.sent).toBe(false);
-    expect(threw.error).toBe("socket hang up");
-
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "rcpt-1" },
-      data: {
-        emailStatus: "FAILED",
-        sentAt: undefined,
-        lastError: "socket hang up",
-        status: "failed",
-        error: "socket hang up",
-      },
-    });
+  it("has no failure write path: a failed send leaves prior proof untouched", async () => {
+    // The module exposes no function that writes a failed state — failures
+    // simply never call persist. Asserted structurally: only the success
+    // helper exists alongside the PDF helpers.
+    const mod = await import("../receiptDelivery");
+    expect(Object.keys(mod).sort()).toEqual(["generateAndStoreReceiptPdf", "persistReceiptEmailSent"]);
   });
 });

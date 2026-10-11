@@ -15,8 +15,8 @@ import {
 } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 
-// The inline outbox send runs after the response; allow headroom for the
-// request's own DB work plus the post-response SMTP send (Hobby max: 300s).
+// Confirm submits promptly; the receipt email sends synchronously (bounded
+// Resend call, no queue). maxDuration covers DB work + PDF render + one send.
 export const maxDuration = 60;
 
 function formatDateDMY(d: Date): string {
@@ -160,43 +160,70 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   });
 
   if (!pdfOutcome.ok) {
-    try {
-      await prisma.receipt.update({
-        where: { id: confirmed.receiptId },
-        data: { emailStatus: "FAILED", lastError: "Skipped: PDF generation failed" },
-      });
-    } catch (e) {
-      logServerError(`receipt ${receiptRef}: failed to mark email skipped`, e);
-    }
-    try {
-      await prisma.receiptSendAttempt.create({
-        data: {
-          receiptId: confirmed.receiptId,
-          recipientEmail: txn.customerEmail,
-          status: "failed",
-          error: pdfOutcome.error,
-          actorId: session!.user.id,
-          actorName: session!.user.name ?? session!.user.email ?? "Unknown",
-        },
-      });
-    } catch (e) {
-      logServerError(`receipt ${receiptRef}: failed to log send attempt`, e);
-    }
     return NextResponse.json({
       receipt: { id: confirmed.receiptId, ref: receiptRef },
-      emailResult: { sent: false, error: pdfOutcome.error },
+      email: { sent: false as const, error: pdfOutcome.error },
       warning: "Payment confirmed, but the receipt PDF failed. Retry from the receipt page.",
     });
   }
 
-  // The receipt email was queued inside the confirmation transaction
-  // (committed above): inline-send it after the response, never blocking SMTP.
-  const { scheduleInlineOutboxSend } = await import("@/lib/email/outbox");
-  scheduleInlineOutboxSend([confirmed.outboxId]);
+  // Direct Resend send (no queue). Stable key per receipt: a retried confirm
+  // request can never double-send (the atomic claim 409s before this point),
+  // and a timeout retry replays the identical body under the same key.
+  const { sendReceiptEmail } = await import("@/lib/receipts/emailReceipt");
+  const { persistReceiptEmailSent } = await import("@/lib/receiptDelivery");
+  const plotsSummary =
+    txn.plotQuantity != null
+      ? txn.sqm
+        ? `Plots: ${txn.plotQuantity} × ${txn.sqm}sqm`
+        : `Plots: ${txn.plotQuantity}`
+      : null;
+  let email: { sent: boolean; error: string | null; resendEmailId?: string | null };
+  try {
+    const sent = await sendReceiptEmail({
+      to: txn.customerEmail,
+      clientName: txn.customerName,
+      ref: receiptRef,
+      receiptUrl,
+      pdfBuffer: pdfOutcome.bytes!,
+      idempotencyKey: `receipt:${confirmed.receiptId}`,
+      plotsSummary,
+      isFinalPayment: confirmed.isPaidInFull,
+    });
+    email = { sent: sent.sent, error: sent.error, resendEmailId: sent.providerMessageId ?? null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Email failed";
+    logServerError(`receipt ${receiptRef}: email send threw`, e);
+    email = { sent: false, error: msg };
+  }
+  if (email.sent) {
+    await persistReceiptEmailSent({
+      db: prisma,
+      receiptId: confirmed.receiptId,
+      ref: receiptRef,
+      resendEmailId: email.resendEmailId ?? null,
+    });
+    try {
+      await prisma.auditEvent.create({
+        data: {
+          actorId: session!.user.id,
+          actorName: session!.user.name ?? session!.user.email ?? "Unknown",
+          action: "receipt.send",
+          entityType: "receipt",
+          entityId: confirmed.receiptId,
+          before: { emailSent: false },
+          after: { sent: true, to: txn.customerEmail, resendEmailId: email.resendEmailId ?? null },
+        },
+      });
+    } catch (e) {
+      logServerError(`receipt ${receiptRef}: failed to log send audit`, e);
+    }
+  }
 
   return NextResponse.json({
     receipt: { id: confirmed.receiptId, ref: receiptRef },
-    emailQueued: true,
+    email,
+    ...(email.sent ? {} : { warning: "Payment confirmed and receipt generated, but the email did not send. Use Resend on the receipt page." }),
   });
 }
 

@@ -6,7 +6,7 @@ export default function ReceiptActions({
   receipt,
   pdfHref,
 }: {
-  receipt: { id: string; ref: string; receiptUrl: string; status: string };
+  receipt: { id: string; ref: string; receiptUrl: string };
   pdfHref: string;
 }) {
   const router = useRouter();
@@ -14,6 +14,9 @@ export default function ReceiptActions({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
+  // Key handed back with a 503 timeout: retrying with it replays the same
+  // send instead of duplicating (the first request may have delivered).
+  const [retryKey, setRetryKey] = useState<string | null>(null);
 
   async function copy(text: string, label: string) {
     try {
@@ -29,9 +32,10 @@ export default function ReceiptActions({
   }
 
   async function resend(regen = false) {
-    if (!confirm(regen
+    const key = retryKey;
+    if (!key && !confirm(regen
       ? `Rebuild receipt ${receipt.ref} with current branding and resend it? The download updates once rebuilt.`
-      : `Resend receipt ${receipt.ref} to its recipient? This will reuse the same reference and create a new send attempt.`)) return;
+      : `Resend receipt ${receipt.ref} to its recipient? Each click sends a new email through Resend.`)) return;
     setBusy(true);
     setErr(null);
     setMsg(null);
@@ -39,20 +43,21 @@ export default function ReceiptActions({
       const res = await fetch(`/api/admin/receipts/${receipt.id}/resend`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(regen ? { regen: true } : {}),
+        body: JSON.stringify({ ...(regen ? { regen: true } : {}), ...(key ? { idempotencyKey: key } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Resend failed");
-      if (data.regenerated) {
-        setMsg(`Rebuilding with current branding and resending to ${data.receipt?.recipientEmail ?? "recipient"} — download again shortly.`);
-      } else if (data.queued) {
-        setMsg(`Queued for resend to ${data.receipt?.recipientEmail ?? "recipient"} — sends automatically with retries.`);
-      } else {
-        setMsg(`Resent to ${data.receipt?.recipientEmail ?? "recipient"} (${data.receipt?.status})`);
+      if (res.status === 503 && data.idempotencyKey) {
+        // Unknown outcome (timeout): keep the key and ask before replaying.
+        setRetryKey(data.idempotencyKey);
+        setErr(`${data.error ?? "Send timed out."} Click Resend again to retry with the same key — it will not duplicate.`);
+        return;
       }
+      if (!res.ok) throw new Error(data.error ?? "Resend failed");
+      setRetryKey(null);
+      setMsg(`Emailed ${data.receipt?.recipientEmail ?? "recipient"}${data.regenerated ? " with a rebuilt PDF" : ""}. Proof: ${data.resendEmailId ?? "see Resend dashboard"}.`);
       router.refresh();
-    } catch (e: any) {
-      setErr(e.message ?? "Resend failed");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Resend failed");
     } finally {
       setBusy(false);
     }
@@ -66,7 +71,7 @@ export default function ReceiptActions({
         <a href={receipt.receiptUrl} target="_blank" className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">View</a>
         <a href={pdfHref} target="_blank" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 hover:bg-[var(--ops-deep)]">Download PDF</a>
         <button onClick={() => resend(false)} disabled={busy} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)] disabled:opacity-50">
-          {busy ? "Resending…" : "Resend"}
+          {busy ? "Sending…" : retryKey ? "Retry send (same key)" : "Resend email"}
         </button>
         <button onClick={() => resend(true)} disabled={busy} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)] disabled:opacity-50" title="Rebuild the PDF with current branding, then resend">
           {busy ? "Working…" : "Regenerate & resend"}
@@ -90,7 +95,7 @@ export default function ReceiptActions({
           )}
         </div>
       </div>
-      <p className="mono text-[10px] text-[var(--ops-muted)]">Resend reuses the same receipt <span className="font-mono font-medium text-[var(--ops-text)]">{receipt.ref}</span> and records a new send attempt. No new receipt number is created.</p>
+      <p className="mono text-[10px] text-[var(--ops-muted)]">Resend emails the same receipt <span className="font-mono font-medium text-[var(--ops-text)]">{receipt.ref}</span> through Resend. Delivery history lives in the Resend dashboard. No new receipt number is created.</p>
     </div>
   );
 }

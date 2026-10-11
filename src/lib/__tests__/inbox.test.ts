@@ -5,8 +5,6 @@ const NOW = new Date("2026-09-28T12:00:00Z");
 
 type State = {
   payments: { id: string; amount: number; paymentReference: string; transactionId: string; status: string; createdAt: Date; txn: { id: string; ref: string; customerName: string } | null; isTestTxn: boolean }[];
-  outbox: { id: string; relatedId: string | null; status: string; updatedAt: Date; createdAt: Date; type?: string; to?: unknown; relatedType?: string | null }[];
-  receipts: { id: string; ref: string; customerName: string; finalAmount: number }[];
   bookings: {
     id: string; ref: string; name: string; location: string; estate: string | null;
     status: string; outcome: string | null; agentId: string | null;
@@ -25,10 +23,6 @@ function seed(): State {
         txn: { id: "t1", ref: "TXN-1", customerName: "Ada" }, isTestTxn: false,
       },
     ],
-    outbox: [
-      { id: "o1", relatedId: "r1", status: "FAILED", updatedAt: new Date("2026-09-27T10:00:00Z"), createdAt: new Date("2026-09-27T09:00:00Z") },
-    ],
-    receipts: [{ id: "r1", ref: "RCT-1", customerName: "Ada", finalAmount: 1_450_000 }],
     bookings: [
       {
         id: "b1", ref: "BKG-1", name: "Ada", location: "Estate", estate: null,
@@ -75,19 +69,6 @@ function statusNot(where: Where): string | null {
   return typeof st === "object" && st !== null ? (st.not ?? null) : null;
 }
 
-function matchOutboxRows(s: State, where: Where) {
-  return s.outbox.filter((o) => {
-    const st = where.status;
-    if (typeof st === "string") {
-      if (o.status !== st) return false;
-    } else if (st && typeof st === "object" && st.in) {
-      if (!st.in.includes(o.status)) return false;
-    }
-    if (where.createdAt?.lt && !(o.createdAt < where.createdAt.lt)) return false;
-    return true;
-  });
-}
-
 function fakeDb(s: State): InboxDb {
   const liveBookings = (where: Where) =>
     s.bookings.filter((b) => {
@@ -124,16 +105,6 @@ function fakeDb(s: State): InboxDb {
           return true;
         }).length,
     },
-    emailOutbox: {
-      findMany: async (args: { where: Where }) => matchOutboxRows(s, args.where).map((o) => ({ ...o })),
-      count: async (args: { where: Where }) => matchOutboxRows(s, args.where).length,
-    },
-    receipt: {
-      findMany: async (args: { where: Where }) => {
-        const ids = typeof args.where.id === "object" && args.where.id !== null ? (args.where.id.in ?? []) : [];
-        return s.receipts.filter((r) => ids.includes(r.id));
-      },
-    },
     inspectionBooking: {
       findMany: async (args: { where: Where; take?: number }) => liveBookings(args.where).slice(0, args.take ?? 50),
       count: async (args: { where: Where }) => liveBookings(args.where).length,
@@ -153,7 +124,6 @@ describe("inbox items", () => {
     const items = await getActionItems({ db: fakeDb(seed()), now: NOW, ...hermetic });
     const cats = items.map((i) => i.category);
     expect(cats).toContain("PAYMENT_PENDING_VERIFICATION");
-    expect(cats).toContain("RECEIPT_SEND_FAILED");
     expect(cats).toContain("SOLD_WITHOUT_TRANSACTION");
     expect(cats).toContain("BOOKING_NEW");
     expect(cats).toContain("BOOKING_UNASSIGNED");
@@ -165,28 +135,6 @@ describe("inbox items", () => {
       expect(i.actionLabel).toBeTruthy();
       expect(i.href).toMatch(/^\/admin\//);
     }
-  });
-
-  it("stuck unsent mail appears as EMAIL_STUCK; fresh queue does not", async () => {
-    const s = seed();
-    // Unsent for over an hour → stuck (links to the receipt for resend context).
-    s.outbox.push({
-      id: "o2", relatedId: "r1", relatedType: "receipt", type: "receipt", to: "client@x.com",
-      status: "PENDING", updatedAt: new Date("2026-09-28T11:00:00Z"), createdAt: new Date("2026-09-28T11:00:00Z"),
-    });
-    // Enqueued a minute ago → still normal, not stuck.
-    s.outbox.push({
-      id: "o3", relatedId: null, relatedType: "booking", type: "booking_received", to: "fresh@x.com",
-      status: "PENDING", updatedAt: new Date("2026-09-28T11:59:00Z"), createdAt: new Date("2026-09-28T11:59:00Z"),
-    });
-    const items = await getActionItems({ db: fakeDb(s), now: NOW, overdue: [] });
-    const stuck = items.filter((i) => i.category === "EMAIL_STUCK");
-    expect(stuck).toHaveLength(1);
-    expect(stuck[0].id).toBe("stuck-o2");
-    expect(stuck[0].href).toBe("/admin/receipts/r1");
-    expect(stuck[0].ref).toBe("receipt");
-    const counts = await getActionCounts({ db: fakeDb(s), now: NOW, overdue: [] });
-    expect(counts.byCategory.EMAIL_STUCK).toBe(1);
   });
 
   it("pending item disappears on confirm or void", async () => {

@@ -1,7 +1,7 @@
 // One-time workspace wipe (dev cleanup): deletes ALL business data —
 // bookings, transactions (+installments/payments via cascade), receipts
 // (+send attempts via cascade), customers, audit events, messages/notes
-// (via booking cascade), notifications, activities, and ALL outbox rows.
+// (via booking cascade), notifications, activities.
 // USERS ARE NEVER TOUCHED (login credentials preserved).
 // Storage PDFs with no receipt row are removed from disk.
 //
@@ -26,10 +26,6 @@ async function main() {
   const payments = await prisma.payment.findMany({ select: { id: true } });
   const receipts = await prisma.receipt.findMany({ select: { id: true, ref: true } });
   const customers = await prisma.customer.findMany({ select: { id: true, email: true } });
-  const outbox = await prisma.emailOutbox.findMany({
-    select: { id: true, type: true, status: true },
-    orderBy: { createdAt: "asc" },
-  });
   const audits = await prisma.auditEvent.findMany({ select: { id: true } });
   const notifications = await prisma.notification.findMany({ select: { id: true } });
   const activities = await prisma.bookingActivity.findMany({ select: { id: true } });
@@ -53,8 +49,6 @@ async function main() {
   console.log(`payments (via cascade): ${payments.length}`);
   console.log(`receipts (ALL deleted): ${receipts.length}`);
   console.log(`customers (ALL deleted): ${customers.length}`);
-  console.log(`outbox rows (ALL deleted): ${outbox.length}`);
-  for (const o of outbox) console.log(`  OUTBOX ${o.type} [${o.status}]`);
   console.log(`audit events: ${audits.length}`);
   console.log(`notifications: ${notifications.length}`);
   console.log(`booking activities: ${activities.length}`);
@@ -71,7 +65,6 @@ async function main() {
   await prisma.$transaction(async (tx) => {
     if (notifications.length) await tx.notification.deleteMany({ where: { id: { in: notifications.map((n) => n.id) } } });
     if (activities.length) await tx.bookingActivity.deleteMany({ where: { id: { in: activities.map((a) => a.id) } } });
-    if (outbox.length) await tx.emailOutbox.deleteMany({ where: { id: { in: outbox.map((o) => o.id) } } });
     if (audits.length) await tx.auditEvent.deleteMany({ where: { id: { in: audits.map((a) => a.id) } } });
     if (receipts.length) await tx.receipt.deleteMany({ where: { id: { in: receipts.map((r) => r.id) } } });
     if (transactions.length) await tx.transaction.deleteMany({ where: { id: { in: transactions.map((t) => t.id) } } });
