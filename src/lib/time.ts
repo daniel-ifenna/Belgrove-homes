@@ -92,8 +92,7 @@ export function lagosMonthRange(month: Date = new Date(), zone: string = BUSINES
   return { start, end };
 }
 
-export function formatLagos(d: Date | string, style: "date" | "datetime" = "date", zone: string = BUSINESS_TIMEZONE): string {
-  const dt = typeof d === "string" ? new Date(d) : d;
+export function formatLagos(d: Date | string, style: "date" | "datetime" = "date", zone: string = BUSINESS_TIMEZONE): string {  const dt = typeof d === "string" ? new Date(d) : d;
   if (style === "datetime") {
     return new Intl.DateTimeFormat("en-GB", {
       timeZone: zone,
@@ -105,4 +104,35 @@ export function formatLagos(d: Date | string, style: "date" | "datetime" = "date
     }).format(dt);
   }
   return new Intl.DateTimeFormat("en-GB", { timeZone: zone, day: "2-digit", month: "short", year: "numeric" }).format(dt);
+}
+
+// Canonical payment/document date "dd-mm-yyyy" in an explicit zone (default
+// business zone). THE only date formatter for money surfaces: Payment
+// History, statements, receipts, ledger pages, dashboard figures. Never use
+// getDate()/toLocaleDateString() (server-local zone) on these paths — that
+// off-by-one is how 08-08 became 09-08 between panels.
+export function formatDateDMY(d: Date | string, zone: string = BUSINESS_TIMEZONE): string {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(dt);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return `${get("day")}-${get("month")}-${get("year")}`;
+}
+
+// Payment effective dates are calendar dates, not instants. Callers holding a
+// "YYYY-MM-DD" form value (or any Date) pass it here and store the result: a
+// noon-UTC instant whose calendar date is stable under DATE *and* timestamp
+// columns in every zone from UTC-12 to UTC+12. Midnight instants are banned —
+// Lagos midnight is 23:00Z the previous day, which is exactly how one panel
+// printed 08-08 while another printed 09-08.
+export function toDateOnlyNoonUtc(input: Date | string): Date {
+  if (typeof input === "string") {
+    const dm = input.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!dm) throw new Error(`Invalid date: ${input}`);
+    return new Date(Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), 12, 0, 0, 0));
+  }
+  if (Number.isNaN(input.getTime())) throw new Error("Invalid date");
+  // Date inputs mean "that day in Lagos" (e.g. a default of now at 23:30Z is
+  // already tomorrow in Lagos) — derive the Lagos calendar day first.
+  const [y, mo, d] = lagosDayKey(input).split("-").map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, 12, 0, 0, 0));
 }

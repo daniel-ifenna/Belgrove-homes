@@ -2,14 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
 import { getReceiptAccessUrl } from "@/lib/app-url";
-import { buildReceiptHistory, buildAccountRef, settlementLabel } from "@/lib/receipt-amounts";
+import { buildReceiptHistory, buildAccountRef, settlementLabel, appliedToLabel } from "@/lib/receipt-amounts";
+import { getAllocationLabelParts } from "@/lib/finance/ledger";
+import { formatDateDMY } from "@/lib/time";
 
-function formatDateDMY(d: Date | string): string {
-  const x = new Date(d);
-  const dd = String(x.getDate()).padStart(2, "0");
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  return `${dd}-${mm}-${x.getFullYear()}`;
-}
+
 
 // Single source of truth for rebuilding a receipt PDF from the stored
 // snapshot + linked payment/transaction. Used when the filesystem cache
@@ -62,6 +59,13 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
   if (!canonicalUrl) throw new Error("Receipt has no QR target URL");
   const qr = await generateQrDataUrl(canonicalUrl).catch(() => undefined);
   const totalPayable = receipt.transaction?.totalPayable ?? receipt.amountBeforeDiscount;
+  // Replacement linkage: this receipt supersedes the original's receipt.
+  let replacesRef: string | null = null;
+  const correctsId = (receipt.payment as { correctsPaymentId?: string | null } | null)?.correctsPaymentId ?? null;
+  if (correctsId) {
+    const original = await prisma.receipt.findFirst({ where: { paymentId: correctsId }, select: { ref: true } });
+    replacesRef = original?.ref ?? null;
+  }
   // Voided payments leave CONFIRMED scope but their receipt stays renderable:
   // include the receipt's own payment so history still stops at this payment.
   const confirmedList = [...(receipt.transaction?.payments ?? [])];
@@ -89,6 +93,9 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
     .filter((h) => !h.isCurrent)
     .reduce((s, h) => s + h.amount, 0);
   const balanceAfter = totalPayable - previouslyPaid - receipt.finalAmount;
+  // Allocation-derived label (see receipt-amounts); pre-backfill rows without
+  // allocation rows keep the old installment-link label.
+  const allocParts = await getAllocationLabelParts(prisma, receipt.payment.id).catch(() => []);
 
   return generateReceiptPdf({
     ref: receipt.ref,
@@ -106,6 +113,7 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
     payments: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount })),
     history: history.map((h) => ({ date: h.date, method: h.method, amount: h.amount, receiptRef: h.receiptRef, runningBalance: h.runningBalance, isCurrent: h.isCurrent })),
     accountRef: receipt.transaction ? buildAccountRef(receipt.transaction.ref, receipt.transaction.booking?.ref ?? null) : undefined,
+    replacesRef,
     label: settlementLabel(balanceAfter),
     paymentDate: formatDateDMY(receipt.payment?.paymentDate ?? receipt.issuedAt),
     paymentMethodLabel: receipt.paymentMethod ?? receipt.payment?.paymentMethod ?? "Bank Transfer",
@@ -120,10 +128,12 @@ export async function renderReceiptPdfBuffer(receiptId: string, opts?: { force?:
     previouslyPaid,
     totalPaidAfter: previouslyPaid + receipt.finalAmount,
     outstandingBalance: balanceAfter,
-    installmentLabel: receipt.payment?.installment
-      ? receipt.payment.installment.type === "INITIAL"
-        ? "Initial payment"
-        : `Month ${receipt.payment.installment.installmentNumber} payment`
-      : undefined,
+    installmentLabel: allocParts.length > 0
+      ? appliedToLabel(allocParts)
+      : receipt.payment?.installment
+        ? receipt.payment.installment.type === "INITIAL"
+          ? "Initial payment"
+          : `Month ${receipt.payment.installment.installmentNumber} payment`
+        : undefined,
   });
 }

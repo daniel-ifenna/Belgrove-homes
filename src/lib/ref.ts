@@ -3,10 +3,11 @@ import { randomInt } from "node:crypto";
 
 // Reference numbers. New records use distinct prefixes per model so a ref is
 // self-describing and collisions across tables are impossible by construction:
-// BEL (bookings), TXN (transactions), PAY (payments), RCT (receipts).
+// BEL (bookings), TXN (transactions), PAY (payments), RCT (receipts),
+// STM (statements).
 // Existing refs are NEVER renamed or rewritten (they are on sent emails and
 // documents); search matches every format via substring.
-export type RefPrefix = "BKG" | "TXN" | "PAY" | "RCT" | "BEL";
+export type RefPrefix = "BKG" | "TXN" | "PAY" | "RCT" | "BEL" | "STM";
 
 export function prefixedRef(prefix: RefPrefix): string {
   const year = new Date().getFullYear();
@@ -56,6 +57,10 @@ export async function generateUniquePaymentRef(): Promise<string> {
 
 export async function generateUniqueReceiptRef(): Promise<string> {
   return generatePrefixedRef("RCT", async (ref) => !!(await prisma.receipt.findUnique({ where: { ref }, select: { id: true } })), "receipt");
+}
+
+export async function generateUniqueStatementNumber(): Promise<string> {
+  return generatePrefixedRef("STM", async (ref) => !!(await prisma.statement.findUnique({ where: { number: ref }, select: { id: true } })), "statement");
 }
 
 /** @deprecated Use generateUniqueBookingRef directly. */

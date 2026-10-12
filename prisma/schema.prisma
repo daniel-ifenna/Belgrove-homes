@@ -28,6 +28,7 @@ model User {
   paymentsRecorded Payment[] @relation("PaymentRecordedBy")
   paymentsConfirmed Payment[] @relation("PaymentConfirmedBy")
   ledgerEntriesRecorded LedgerEntry[] @relation("LedgerRecordedBy")
+  statementsCreated Statement[] @relation("StatementCreatedBy")
 }
 
 enum Role {
@@ -335,6 +336,13 @@ model Receipt {
   // never the receipt ref. Revoking hides the receipt without deleting it.
   accessToken String? @unique
   accessTokenRevokedAt DateTime?
+  // Void marking: wrong receipts are VOIDED, never deleted or rewritten.
+  // The stored PDF stays exactly as issued (evidence); the public page shows
+  // a VOID banner with a link to the replacement. Set by the Correct action.
+  voidedAt DateTime?
+  replacedByReceiptId String?
+  replacedBy Receipt? @relation("ReceiptReplacement", fields: [replacedByReceiptId], references: [id], onDelete: SetNull)
+  replacements Receipt[] @relation("ReceiptReplacement")
   // Minimal permanent email proof (Step 1): Resend's message id for this
   // receipt's latest send. Deep-links to the Resend dashboard (30-day log
   // retention); afterwards this id + sentAt + recipientEmail are the proof.
@@ -425,6 +433,10 @@ model Transaction {
   // Canonical customer link (nullable during migration/backfill)
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // Contract (sale) date: the effective date of the charge entries. Set at
+  // creation to the creation date; corrected to the real sale date by admin
+  // action with an audit entry (fixes statement ordering).
+  contractDate DateTime?
   // Why this transaction exists without a booking (required when bookingId
   // is null — enforced server-side; legacy rows predate the rule).
   manualReason String?
@@ -436,6 +448,7 @@ model Transaction {
   payments Payment[]
   receipts Receipt[]
   ledgerEntries LedgerEntry[]
+  statements Statement[]
   @@index([status])
   @@index([customerEmail])
   @@index([estate])
@@ -478,7 +491,10 @@ model Payment {
   installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
   paymentReference String @unique // PAY-YYYY-XXXXX (backfilled; generator-required, no default)
   amount Int
-  paymentDate DateTime
+  // Effective calendar date (Africa/Lagos), stored as a date-only value so no
+  // timezone can shift it between panels. Always formatted with the shared
+  // formatDateDMY helper (explicit zone), never server-local getters.
+  paymentDate DateTime @db.Date
   paymentMethod String?
   bankReference String?
   notes String?
@@ -499,6 +515,15 @@ model Payment {
   // the schedulable portion; creditAmount is the remainder.
   isCredit Boolean @default(false)
   creditAmount Int?
+  // Correction linkage: a replacement payment points at the original it
+  // supersedes (voided via the Correct action, never edited in place).
+  correctsPaymentId String?
+  correctsPayment Payment? @relation("PaymentCorrection", fields: [correctsPaymentId], references: [id], onDelete: SetNull)
+  corrections Payment[] @relation("PaymentCorrection")
+  // Verification note: bank-statement line evidence ("checked against bank
+  // statement line dated ..., confirmed by ...") and reconcile ticks.
+  // Appended, never overwritten.
+  verificationNote String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   receipt Receipt?
@@ -569,6 +594,40 @@ model PaymentAllocation {
 
   @@unique([paymentId, installmentId])
   @@index([installmentId])
+}
+
+// Stored statement of account (Part B). Immutable once issued: the PDF bytes
+// are stored with a statement number (STM-YYYY-XXXXX) and an unguessable
+// public token (/s/<token>). Generating again with an unchanged ledger
+// returns the existing row; a changed ledger creates a new one. Minimal
+// email proof only (emailSentAt/emailRecipient/resendEmailId) — sends happen
+// exclusively through the explicit admin Email action, never automatically.
+model Statement {
+  id String @id @default(cuid())
+  number String @unique // STM-YYYY-XXXXX
+  transactionId String
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  token String @unique
+  tokenRevokedAt DateTime?
+  pdfData Bytes
+  closingBalance Int
+  ledgerHash String
+  asAt DateTime @default(now())
+  // Statement template build: as-of date, renderer version and PDF integrity.
+  // Nullable so pre-existing rows stay valid. pdfData bytes remain the private
+  // store (never under public/); no pdfStorageKey — see issueStatement.
+  asOfDate DateTime?
+  layoutVersion String?
+  pdfSha256 String?
+  emailSentAt DateTime?
+  emailRecipient String?
+  resendEmailId String?
+  createdById String?
+  createdBy User? @relation("StatementCreatedBy", fields: [createdById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([transactionId])
+  @@index([transactionId, ledgerHash])
 }
 
 // Immutable audit trail for payment/transaction/receipt mutations.

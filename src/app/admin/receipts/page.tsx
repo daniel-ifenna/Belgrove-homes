@@ -6,21 +6,23 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import AdminListCard from "@/components/admin/AdminListCard";
+// Money/document dates go through the shared Lagos helpers (src/lib/time.ts)
+// with an explicit zone — never server-local toLocaleString, which shifted
+// printed dates by a day between panels (TXN-2026-62831).
+import { formatLagos } from "@/lib/time";
 export const dynamic = "force-dynamic";
 
-type SearchParams = { q?: string; source?: string; page?: string; from?: string; to?: string; showTest?: string };
+type SearchParams = { q?: string; source?: string; page?: string; from?: string; to?: string; showTest?: string; voided?: string };
 
 const PAGE_SIZE = 25;
 
 function formatDate(d: Date | string | null): string {
   if (!d) return "-";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return formatLagos(d, "date");
 }
 function formatDateTime(d: Date | string | null): string {
   if (!d) return "-";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatLagos(d, "datetime");
 }
 
 export default async function AdminReceiptsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -30,6 +32,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
   const page = Math.max(1, Number(params.page) || 1);
   const q = params.q?.trim() ?? "";
   const source = params.source && ["BOOKING_FLOW", "ADMIN_MANUAL", "PAYMENT_CONFIRMATION"].includes(params.source) ? params.source : "";
+  const voidedOnly = params.voided === "1";
   const showTest = params.showTest === "1";
   const from = params.from ? new Date(params.from) : null;
   const to = params.to ? new Date(params.to) : null;
@@ -41,6 +44,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
     where.transaction = { isTest: false };
   }
   if (source) where.source = source as any;
+  if (voidedOnly) where.voidedAt = { not: null };
   if (q) {
     where.OR = [
       { ref: { contains: q, mode: "insensitive" } },
@@ -82,6 +86,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
     if (params.from) qs.set("from", params.from);
     if (params.to) qs.set("to", params.to);
     if (showTest) qs.set("showTest", "1");
+    if (voidedOnly) qs.set("voided", "1");
     return qs.toString();
   })();
   function buildQuery(overrides: Partial<SearchParams>) {
@@ -92,6 +97,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
     if (merged.from) qs.set("from", merged.from);
     if (merged.to) qs.set("to", merged.to);
     if (merged.showTest) qs.set("showTest", merged.showTest);
+    if (merged.voided) qs.set("voided", merged.voided);
     if (merged.page && merged.page !== "1") qs.set("page", merged.page);
     const str = qs.toString();
     return str ? `?${str}` : "";
@@ -121,6 +127,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                     <Link key={f.label} href={`/admin/receipts${buildQuery({ source: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)]"}`}>{f.label}</Link>
                   );
                 })}
+                <Link href={`/admin/receipts${buildQuery({ voided: voidedOnly ? undefined : "1", page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${voidedOnly ? "bg-red-700 text-white border-red-700" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)]"}`}>Voided</Link>
               </div>
             <form className="flex-1 flex gap-2" action="/admin/receipts" method="get">
               <div className="relative flex-1">
@@ -130,7 +137,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                   <input name="q" defaultValue={q} placeholder="Search receipt #, customer, email, property, SKU…" className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-9 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10" />
                 </div>
                 <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)]">Search</button>
-                {(q || source || params.from || params.to) && <Link href="/admin/receipts" className="text-xs text-[var(--ops-muted)] self-center underline underline-offset-4">Clear</Link>}
+                {(q || source || params.from || params.to || voidedOnly) && <Link href="/admin/receipts" className="text-xs text-[var(--ops-muted)] self-center underline underline-offset-4">Clear</Link>}
               </form>
             </div>
             <form className="flex flex-wrap gap-2 items-center" action="/admin/receipts" method="get">
@@ -167,6 +174,7 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
                     <td className="px-4 py-3">
                       <Link href={`/admin/receipts/${r.id}`} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline">{r.ref}</Link>
                       <div className="mono text-[10px] text-[var(--ops-muted)]">{r.plotCode ?? ""}</div>
+                      {(r as any).voidedAt ? <span className="mono text-[10px] px-1.5 py-0.5 rounded-full bg-red-700 text-white">VOID</span> : ""}
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-words">{r.customerName}</div>

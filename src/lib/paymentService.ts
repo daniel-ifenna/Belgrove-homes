@@ -5,14 +5,9 @@ import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
 import { applyConfirmationDbUnit, logServerError } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
+import { formatDateDMY } from "@/lib/time";
 
-function formatDateDMY(d: Date | string): string {
-  const x = new Date(d);
-  const dd = String(x.getDate()).padStart(2, "0");
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const yyyy = x.getFullYear();
-  return `${dd}-${mm}-${yyyy}`;
-}
+
 
 // Single-step record-and-confirm used by transaction creation with an
 // initial payment. Same guarantees as the two-step flow: the database
@@ -102,7 +97,8 @@ export async function recordPaymentAndGenerateReceipt(params: {
     receiptId: confirmed.receiptId,
     ref: receiptRef,
     render: async () => {
-      const { buildReceiptHistory, buildAccountRef, settlementLabel } = await import("@/lib/receipt-amounts");
+      const { buildReceiptHistory, buildAccountRef, settlementLabel, appliedToLabel } = await import("@/lib/receipt-amounts");
+      const { getAllocationLabelParts } = await import("@/lib/finance/ledger");
       const fullTxn = await prisma.transaction.findUnique({
         where: { id: transaction.id },
         select: { bookingId: true },
@@ -127,6 +123,15 @@ export async function recordPaymentAndGenerateReceipt(params: {
         formatDateDMY
       );
       const saved = await prisma.payment.findUnique({ where: { id: confirmed.payment.id }, select: { bankReference: true } });
+      const allocParts = await getAllocationLabelParts(prisma, confirmed.payment.id).catch(() => []);
+      const installmentLabel =
+        allocParts.length > 0
+          ? appliedToLabel(allocParts)
+          : confirmed.installment
+            ? confirmed.installment.type === "INITIAL"
+              ? "Initial payment"
+              : `Month ${confirmed.installment.installmentNumber} payment`
+            : undefined;
       return generateReceiptPdf({
         ref: receiptRef,
         issuedDate: issuedDateStr,
@@ -158,11 +163,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
         totalPaidAfter: confirmed.newTotalPaid,
         outstandingBalance: confirmed.newOutstanding,
         transactionRef: transaction.ref,
-        installmentLabel: confirmed.installment
-          ? confirmed.installment.type === "INITIAL"
-            ? "Initial payment"
-            : `Month ${confirmed.installment.installmentNumber} payment`
-          : undefined,
+        installmentLabel,
       });
     },
   });

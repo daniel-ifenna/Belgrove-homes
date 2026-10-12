@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { amountToWords } from "./receipts/amountToWords";
+import { formatDateDMY } from "./time";
 import {
   planAllocation,
   planAllocationCapped,
@@ -333,7 +334,7 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
     });
   }
 
-  const issuedDateStr = formatDMY(new Date(payment.paymentDate));
+  const issuedDateStr = formatDateDMY(payment.paymentDate);
   const receipt = await tx.receipt.create({
     data: {
       ref: input.receiptRef,
@@ -571,10 +572,4 @@ export async function reverseConfirmedPaymentDbUnit(
   }
 
   return { paymentId: payment.id, newTotalPaid, newOutstanding };
-}
-
-function formatDMY(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}-${mm}-${d.getFullYear()}`;
 }

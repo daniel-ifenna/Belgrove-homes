@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getEntityHistory, getActivityFeed } from "../activity";
+import { getEntityHistory, getActivityFeed, getTransactionHistory, describeAuditAction } from "../activity";
 
 function fakeDb() {
   return {
@@ -74,6 +74,53 @@ describe("getEntityHistory", () => {
     const rows = await getEntityHistory("payment", "p1", fakeDb() as never);
     expect(rows).toHaveLength(1);
     expect(rows[0].detail).toContain("CONFIRMED");
+  });
+
+  it("renders human sentences instead of raw event keys", async () => {
+    const rows = await getEntityHistory("payment", "p1", fakeDb() as never);
+    expect(rows[0].action).toBe("Payment of ₦1,450,000 confirmed");
+    expect(describeAuditAction("payment.correct", { amount: 3_000_000, reason: "typo" }, { amount: 3_250_000 })).toBe(
+      "Payment of ₦3,250,000 corrected to ₦3,000,000: typo"
+    );
+    expect(
+      describeAuditAction(
+        "payment.correct",
+        { amount: 3_000_000, reason: "typo", originalReceiptRef: "RCT-2026-69739", replacementReceiptRef: "RCT-2026-00001" },
+        { amount: 3_250_000 }
+      )
+    ).toBe(
+      "Payment of ₦3,250,000 corrected to ₦3,000,000, receipt RCT-2026-69739 voided, replacement RCT-2026-00001 issued: typo"
+    );
+    expect(describeAuditAction("payment.void", { amount: 1, reason: "dup" }, null)).toBe("Payment of ₦1 voided: dup");
+    expect(describeAuditAction("transaction.create", {}, null)).toBe("Transaction created");
+    expect(describeAuditAction("statement.email", { to: "c@x.com" }, null)).toBe("Statement emailed to c@x.com");
+    expect(describeAuditAction("contract.set_date", {}, null)).toBe("Contract date set");
+    expect(describeAuditAction("something.unknown", {}, null)).toBe("something.unknown");
+  });
+
+  it("transaction history includes payment, receipt and statement events", async () => {
+    const db = {
+      ...fakeDb(),
+      payment: { findMany: async () => [{ id: "p1" }] },
+      receipt: { findMany: async () => [{ id: "r9" }] },
+      statement: { findMany: async () => [{ id: "s1" }] },
+      auditEvent: {
+        findMany: async (args: { where: { entityId?: { in?: string[] } } }) => {
+          const all = [
+            { id: "a1", actorName: "A", action: "transaction.create", entityType: "transaction", entityId: "t1", before: null, after: {}, createdAt: new Date() },
+            { id: "a2", actorName: "A", action: "payment.confirm", entityType: "payment", entityId: "p1", before: null, after: { amount: 5 }, createdAt: new Date() },
+            { id: "a3", actorName: "A", action: "receipt.send", entityType: "receipt", entityId: "r9", before: null, after: {}, createdAt: new Date() },
+            { id: "a4", actorName: "A", action: "statement.generate", entityType: "statement", entityId: "s1", before: null, after: { number: "STM-1" }, createdAt: new Date() },
+            { id: "a5", actorName: "A", action: "payment.confirm", entityType: "payment", entityId: "other", before: null, after: {}, createdAt: new Date() },
+          ];
+          const ids = args.where.entityId?.in ?? [];
+          return all.filter((r) => ids.includes(r.entityId));
+        },
+      },
+    };
+    const rows = await getTransactionHistory("t1", db as never);
+    expect(rows.map((r) => r.id).sort()).toEqual(["a1", "a2", "a3", "a4"]);
+    expect(rows.find((r) => r.id === "a4")?.action).toBe("Statement STM-1 generated");
   });
 });
 

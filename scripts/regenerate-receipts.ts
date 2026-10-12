@@ -13,18 +13,13 @@ import { generateReceiptAccessToken, getReceiptAccessUrl } from "../src/lib/app-
 import { receiptPdfPath, writeReceiptPdf } from "../src/lib/receipt-storage.js";
 import { generateReceiptPdf } from "../src/lib/receipts/generateReceiptPdf.js";
 import { generateQrDataUrl } from "../src/lib/receipts/qr.js";
+import { formatDateDMY } from "../src/lib/time.js";
 import { sendReceiptEmail } from "../src/lib/receipts/emailReceipt.js";
 
 const APPLY = process.argv.includes("--apply");
 const RESEND = process.argv.includes("--resend");
 
-function formatDateDMY(d: Date | string): string {
-  const x = new Date(d);
-  const dd = String(x.getDate()).padStart(2, "0");
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const yyyy = x.getFullYear();
-  return `${dd}-${mm}-${yyyy}`;
-}
+
 
 async function main() {
   if (RESEND && !APPLY) {

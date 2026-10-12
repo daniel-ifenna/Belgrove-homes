@@ -53,9 +53,51 @@ function auditDetail(action: string, after: unknown): string | null {
   if (typeof a.amount === "number") bits.push(`₦${a.amount.toLocaleString("en-NG")}`);
   if (typeof a.status === "string") bits.push(a.status);
   if (typeof a.receiptRef === "string") bits.push(a.receiptRef);
+  // Correction linkage: voided → replacement receipt refs (the client-visible
+  // trail — the stored PDFs themselves are never rewritten).
+  if (typeof a.originalReceiptRef === "string" && a.originalReceiptRef) bits.push(`${a.originalReceiptRef} voided`);
+  if (typeof a.replacementReceiptRef === "string" && a.replacementReceiptRef) bits.push(`${a.replacementReceiptRef} issued`);
   if (typeof a.reason === "string" && a.reason) bits.push(a.reason.slice(0, 80));
   if (typeof a.ref === "string") bits.push(a.ref);
-  return bits.length > 0 ? `${action}: ${bits.join(" · ")}` : action;
+  return bits.length > 0 ? bits.join(" · ") : null;
+}
+
+const naira = (v: unknown) => (typeof v === "number" ? `₦${v.toLocaleString("en-NG")}` : null);
+
+// Human sentences for audit actions (Activity panel). Raw keys never render.
+export function describeAuditAction(action: string, after: unknown, before: unknown): string {
+  const a = (after ?? {}) as Record<string, unknown>;
+  switch (action) {
+    case "transaction.create":
+      return "Transaction created";
+    case "payment.record":
+      return `Payment of ${naira(a.amount) ?? "?"} recorded (pending verification)`;
+    case "payment.confirm":
+      return `Payment of ${naira(a.amount) ?? "?"} confirmed${typeof a.receiptRef === "string" ? `, receipt ${a.receiptRef} issued` : ""}`;
+    case "payment.void":
+      return `Payment of ${naira(a.amount) ?? "?"} voided${typeof a.reason === "string" && a.reason ? `: ${a.reason}` : ""}`;
+    case "payment.correct": {
+      const beforeAmt = (before as Record<string, unknown> | null)?.amount;
+      const orig = typeof a.originalReceiptRef === "string" && a.originalReceiptRef ? `, receipt ${a.originalReceiptRef} voided` : "";
+      const repl = typeof a.replacementReceiptRef === "string" && a.replacementReceiptRef ? `, replacement ${a.replacementReceiptRef} issued` : "";
+      return `Payment of ${naira(beforeAmt) ?? "?"} corrected to ${naira(a.amount) ?? "?"}${orig}${repl}${typeof a.reason === "string" && a.reason ? `: ${a.reason}` : ""}`;
+    }
+    case "payment.reconcile":
+      return "Payment reconciled against the bank statement";
+    case "receipt.send":
+      return "Receipt emailed";
+    case "receipt.resend":
+    case "receipt.regen_resend":
+      return "Receipt resent";
+    case "statement.generate":
+      return `Statement ${typeof a.number === "string" ? a.number : ""} generated`.trim();
+    case "statement.email":
+      return `Statement emailed to ${typeof a.to === "string" ? a.to : "client"}`;
+    case "contract.set_date":
+      return "Contract date set";
+    default:
+      return action;
+  }
 }
 
 export async function getEntityHistory(
@@ -63,8 +105,7 @@ export async function getEntityHistory(
   entityId: string,
   db: ActivityDb = realDb
 ): Promise<HistoryRow[]> {
-  if (entityType === "booking") {
-    const rows = await db.bookingActivity.findMany({
+  if (entityType === "booking") {    const rows = await db.bookingActivity.findMany({
       where: { bookingId: entityId },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -95,11 +136,55 @@ export async function getEntityHistory(
     id: a.id,
     at: new Date(a.createdAt),
     actor: a.actorName,
-    action: a.action,
+    action: describeAuditAction(a.action, a.after, a.before),
     entityType,
     entityRef: entityId.slice(0, 8),
     detail: auditDetail(a.action, a.after),
     href,
+  }));
+}
+
+// Transaction-scoped history: the transaction's own events PLUS every
+// payment/receipt/statement event on it — corrections, voids, reissues and
+// statement events included, newest first.
+export async function getTransactionHistory(
+  transactionId: string,
+  db: ActivityDb & {
+    payment: { findMany(args: unknown): Promise<{ id: string; transactionId?: string }[]> };
+    receipt: { findMany(args: unknown): Promise<{ id: string }[]> };
+    statement: { findMany(args: unknown): Promise<{ id: string }[]> };
+  } = realDb as never
+): Promise<HistoryRow[]> {
+  const [payments, receipts, statements] = await Promise.all([
+    db.payment.findMany({ where: { transactionId }, select: { id: true } }),
+    db.receipt.findMany({ where: { transactionId }, select: { id: true } }),
+    (db as { statement?: { findMany(args: unknown): Promise<{ id: string }[]> } }).statement?.findMany({
+      where: { transactionId },
+      select: { id: true },
+    }) ?? [],
+  ]);
+  const ids = [transactionId, ...payments.map((p) => p.id), ...receipts.map((r) => r.id), ...statements.map((s) => s.id)];
+  const rows = await db.auditEvent.findMany({
+    where: { entityId: { in: ids } },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  return rows.map((a) => ({
+    id: a.id,
+    at: new Date(a.createdAt),
+    actor: a.actorName,
+    action: describeAuditAction(a.action, a.after, a.before),
+    entityType: a.entityType,
+    entityRef: a.entityId.slice(0, 8),
+    detail: auditDetail(a.action, a.after),
+    href:
+      a.entityType === "transaction"
+        ? `/admin/transactions/${a.entityId}`
+        : a.entityType === "receipt"
+          ? `/admin/receipts/${a.entityId}`
+          : a.entityType === "statement"
+            ? `/admin/transactions/${transactionId}`
+            : "/admin/payments",
   }));
 }
 

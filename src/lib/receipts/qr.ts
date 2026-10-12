@@ -12,3 +12,16 @@ export async function generateQrDataUrl(text: string): Promise<string> {
     color: { dark: "#16281F", light: "#FFFFFF" },
   });
 }
+
+// SVG QR for the statement template (`assets.qrSvg` is embedded as raw markup;
+// the template sizes it to 104px). Spec: EC level M, 4-module quiet zone,
+// dark ink on white — same palette as receipts.
+export async function generateQrSvg(text: string): Promise<string> {
+  return QRCode.toString(text, {
+    type: "svg",
+    errorCorrectionLevel: "M",
+    margin: 4,
+    width: 104,
+    color: { dark: "#16281F", light: "#FFFFFF" },
+  });
+}

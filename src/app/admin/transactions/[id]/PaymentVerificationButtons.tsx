@@ -136,6 +136,9 @@ export default function PaymentVerificationButtons({
           <div className="font-medium text-[var(--ops-text)]">
             {allowConfirm ? "Void this pending payment?" : "Void this CONFIRMED payment?"}
           </div>
+          {!allowConfirm && (
+            <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">A reason is required — voids are permanent audit entries.</div>
+          )}
           {payment && (
             <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">
               {formatNaira(payment.amount)} · {payment.installmentLabel}
@@ -151,7 +154,7 @@ export default function PaymentVerificationButtons({
             />
             <button
               onClick={doVoid}
-              disabled={busy !== null}
+              disabled={busy !== null || (!allowConfirm && !voidReason.trim())}
               className="mono text-[11px] bg-[#A6402F] text-white rounded-full px-3.5 py-1.5 font-medium disabled:opacity-50"
             >
               {busy === "void" ? "Voiding…" : "Confirm void"}

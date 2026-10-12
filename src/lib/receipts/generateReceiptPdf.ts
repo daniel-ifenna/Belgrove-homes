@@ -40,6 +40,8 @@ export type ReceiptData = {
   // Account reference line: transaction ref + booking ref (separate from the
   // receipt number, which stays RCT-…).
   accountRef?: string;
+  // Replacement line: "Replaces RCT-…" for corrected receipts.
+  replacesRef?: string | null;
   // Settlement label: PART PAYMENT while balance remains, FINAL when settled.
   label?: "PART PAYMENT" | "FINAL PAYMENT, ACCOUNT SETTLED";
   // This payment's own channel details.
@@ -108,6 +110,12 @@ export function generateReceiptPdf(data: ReceiptData): Buffer {
   doc.text(`ISSUED DATE: ${data.issuedDate}`, rightX, y - 1, { align: "right" });
   if (data.accountRef) {
     doc.text(`ACCOUNT: ${data.accountRef}`, rightX, y + 4, { align: "right" });
+  }
+  if (data.replacesRef) {
+    doc.setFontSize(7);
+    doc.setTextColor(150, 90, 40);
+    doc.text(`Replaces ${data.replacesRef}`, rightX, y + 8.5, { align: "right" });
+    doc.setTextColor(107, 102, 86);
   }
   y += 10;
 

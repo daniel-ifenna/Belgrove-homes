@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
 import { formatDateTime } from "@/lib/booking-ui";
-import { receiptAmountsRows, buildReceiptHistory, buildAccountRef, settlementLabel } from "@/lib/receipt-amounts";
+import { receiptAmountsRows, buildReceiptHistory, buildAccountRef, settlementLabel, appliedToLabel } from "@/lib/receipt-amounts";
 import ActivitySection from "@/components/admin/ActivitySection";
 export const dynamic = "force-dynamic";
 import ReceiptActions from "./ReceiptActions";
@@ -23,7 +23,8 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
     omit: { pdfData: true },
     include: {
       booking: { select: { id: true, ref: true, status: true, location: true } },
-      payment: { select: { id: true, paymentReference: true, amount: true, paymentDate: true, paymentMethod: true, bankReference: true, installment: { select: { type: true, installmentNumber: true } } } },
+      payment: { select: { id: true, paymentReference: true, amount: true, paymentDate: true, paymentMethod: true, bankReference: true, correctsPaymentId: true, installment: { select: { type: true, installmentNumber: true } }, allocations: { select: { amount: true, installment: { select: { type: true, installmentNumber: true, scheduledAmount: true } } } } } },
+      replacedBy: { select: { id: true, ref: true } },
       transaction: {
         select: {
           id: true, ref: true, bookingId: true, manualReason: true, totalPayable: true,
@@ -39,8 +40,13 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
   });
   if (!receipt) notFound();
 
-  // Email proof only: Resend's dashboard is the delivery log. sentAt == null
-  // means not emailed (failures are never stored).
+  // Replacement linkage: this receipt supersedes the original's receipt.
+  let replacesRef: string | null = null;
+  const correctsId = receipt.payment?.correctsPaymentId ?? null;
+  if (correctsId) {
+    const original = await prisma.receipt.findFirst({ where: { paymentId: correctsId }, select: { ref: true } });
+    replacesRef = original?.ref ?? null;
+  }
   const emailed = !!receipt.sentAt;
 
   // As-of-issue figures: confirmed payments strictly before this one.
@@ -62,11 +68,17 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
   const balanceRemaining = totalPrice - paidToDate;
   const label = settlementLabel(balanceRemaining);
   const accountRef = receipt.transaction ? buildAccountRef(receipt.transaction.ref, receipt.transaction.booking?.ref ?? null) : null;
-  const installmentLabel = receipt.payment?.installment
-    ? receipt.payment.installment.type === "INITIAL"
-      ? "Initial payment"
-      : `Month ${receipt.payment.installment.installmentNumber} payment`
-    : null;
+  // Allocation-derived "Applied to" (waterfall rows), never the payment's
+  // single installment link — a payment can span installments, which is why
+  // the old rigid "Initial payment"/"Month N payment" labels misled.
+  const allocParts = (receipt.payment as unknown as { allocations?: { amount: number; installment: { type: string; installmentNumber: number; scheduledAmount: number } }[] } | null)?.allocations ?? [];
+  const installmentLabel = allocParts.length > 0
+    ? appliedToLabel(allocParts.map((a) => ({ installmentNumber: a.installment.installmentNumber, type: a.installment.type, amount: a.amount, scheduledAmount: a.installment.scheduledAmount })))
+    : receipt.payment?.installment
+      ? receipt.payment.installment.type === "INITIAL"
+        ? "Initial payment"
+        : `Month ${receipt.payment.installment.installmentNumber} payment`
+      : null;
   // Plot quantity: receipt snapshot first, live transaction as fallback.
   const plotQty = receipt.plotQuantity ?? receipt.transaction?.plotQuantity ?? null;
   const unitPrice = receipt.unitPrice ?? receipt.transaction?.unitPrice ?? null;
@@ -88,7 +100,16 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{receipt.ref}</h1>
                 <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${emailed ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>{emailed ? "Emailed" : "Not emailed"}</span>
                 <span className="inline-flex px-3 py-1.5 rounded-full text-xs font-medium border bg-white border-[var(--ops-border)] text-[var(--ops-text)]">{label}</span>
+                {receipt.voidedAt && <span className="inline-flex px-3 py-1.5 rounded-full text-xs font-medium border bg-red-700 text-white border-red-700">VOID</span>}
               </div>
+              {receipt.voidedAt && (
+                <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  Voided {formatDateTime(receipt.voidedAt)} — superseded, kept as evidence.
+                  {receipt.replacedBy && (
+                    <> Replacement: <Link href={`/admin/receipts/${receipt.replacedBy.id}`} className="font-mono underline underline-offset-2">{receipt.replacedBy.ref}</Link></>
+                  )}
+                </div>
+              )}
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Issued {formatDateTime(receipt.issuedAt)}{receipt.sentAt ? ` · Emailed ${formatDateTime(receipt.sentAt)}` : ""}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -126,6 +147,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                 {receipt.paymentMethod && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Method</span><span className="font-medium">{receipt.paymentMethod}</span></div>}
                 {receipt.payment?.bankReference && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Bank ref</span><span className="font-mono text-[12px]">{receipt.payment.bankReference}</span></div>}
                 {accountRef && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Account ref</span><span className="font-mono text-[12px]">{accountRef}</span></div>}
+                {replacesRef && <div className="flex justify-between"><span className="text-[var(--ops-muted)]">Replaces</span><span className="font-mono text-[12px]">{replacesRef}</span></div>}
               </div>
             </div>
 

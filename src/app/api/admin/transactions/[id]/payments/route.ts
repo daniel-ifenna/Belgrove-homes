@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { generateUniquePaymentRef } from "@/lib/ref";
-import { lagosDayKey } from "@/lib/time";
+import { lagosDayKey, toDateOnlyNoonUtc } from "@/lib/time";
 
 export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -20,8 +20,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const amt = Number(amount);
   if (!Number.isInteger(amt) || amt <= 0) return NextResponse.json({ error: "Enter a whole-naira amount" }, { status: 400 });
 
-  const date = paymentDate ? new Date(paymentDate) : new Date();
-  if (Number.isNaN(date.getTime())) return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
+  // Effective dates are calendar dates: normalize to noon UTC (stable under
+  // DATE and timestamp columns in every zone) via the shared helper.
+  let date: Date;
+  try {
+    date = paymentDate ? toDateOnlyNoonUtc(String(paymentDate)) : toDateOnlyNoonUtc(new Date());
+  } catch {
+    return NextResponse.json({ error: "Invalid payment date" }, { status: 400 });
+  }
 
   // Enforced idempotency: one UUID per form open. A repeat submission with the
   // same key returns the existing row (unique constraint is the enforcer;

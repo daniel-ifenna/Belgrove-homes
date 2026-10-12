@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { receiptAmountsRows, settlementLabel, buildReceiptHistory } from "../receipt-amounts";
+import { receiptAmountsRows, settlementLabel, buildReceiptHistory, appliedToLabel, installmentAppliedLabel } from "../receipt-amounts";
 
 describe("receiptAmountsRows", () => {
   const base = {
@@ -74,5 +74,28 @@ describe("buildReceiptHistory", () => {
     const rows = buildReceiptHistory([...pays].reverse(), new Map(), "p3", 18_500_000, fmt);
     expect(rows.map((r) => r.date)).toEqual(["09-08-2026", "19-08-2026", "24-09-2026"]);
     expect(rows[0].receiptRef).toBeNull();
+  });
+});
+
+describe("installmentAppliedLabel / appliedToLabel", () => {
+  it("labels the initial installment as Initial deposit", () => {
+    expect(installmentAppliedLabel(0, "INITIAL")).toBe("Initial deposit");
+    expect(installmentAppliedLabel(1, "MONTHLY")).toBe("Month 1");
+    expect(installmentAppliedLabel(3, "MONTHLY")).toBe("Month 3");
+  });
+
+  it("describes a single-installment payment (TXN-2026-62831 payments 1-3)", () => {
+    expect(
+      appliedToLabel([{ installmentNumber: 0, type: "INITIAL", amount: 3_000_000, scheduledAmount: 9_250_000 }])
+    ).toBe("Initial deposit ₦3,000,000 of ₦9,250,000");
+  });
+
+  it("describes a split payment (TXN-2026-62831 corrected payment 4: ₦250k clears Initial, rest to Month 1)", () => {
+    expect(
+      appliedToLabel([
+        { installmentNumber: 1, type: "MONTHLY", amount: 2_750_000, scheduledAmount: 3_083_333 },
+        { installmentNumber: 0, type: "INITIAL", amount: 250_000, scheduledAmount: 9_250_000 },
+      ])
+    ).toBe("Initial deposit ₦250,000 of ₦9,250,000, Month 1 ₦2,750,000 of ₦3,083,333");
   });
 });

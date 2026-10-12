@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/admin/:path*", headers: noStore },
       { source: "/api/admin/:path*", headers: noStore },
+      // Public statement pages must never be indexed.
+      { source: "/s/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
     ];
   },
 };

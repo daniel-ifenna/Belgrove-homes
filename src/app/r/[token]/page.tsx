@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { formatDisplayName } from "@/lib/formatName";
-import { receiptAmountsRows, buildReceiptHistory, buildAccountRef, settlementLabel } from "@/lib/receipt-amounts";
+import { receiptAmountsRows, buildReceiptHistory, buildAccountRef, settlementLabel, appliedToLabel } from "@/lib/receipt-amounts";
+import { getAllocationLabelParts } from "@/lib/finance/ledger";
 import { isTokenUsable } from "@/lib/receipt-access";
+import { formatDateDMY } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -12,13 +14,7 @@ export const viewport = {
   initialScale: 1,
 };
 
-function formatDateDMY(d: Date | string): string {
-  const x = new Date(d);
-  const dd = String(x.getDate()).padStart(2, "0");
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const yyyy = x.getFullYear();
-  return `${dd}-${mm}-${yyyy}`;
-}
+
 
 // Client-facing receipt page. No login — the unguessable access token in the
 // URL is the authorization. Revoked or unknown tokens render notFound.
@@ -29,6 +25,7 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
     omit: { pdfData: true },
     include: {
       payment: { include: { installment: { select: { type: true, installmentNumber: true } } } },
+      replacedBy: { select: { ref: true, accessToken: true } },
       transaction: {
         select: {
           ref: true,
@@ -46,11 +43,19 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const installmentLabel = receipt.payment?.installment
-    ? receipt.payment.installment.type === "INITIAL"
-      ? "Initial payment"
-      : `Month ${receipt.payment.installment.installmentNumber} payment`
-    : null;
+  // Allocation-derived label (waterfall rows), never the payment's single
+  // installment link — a payment can span installments. Pre-backfill rows
+  // without allocation rows keep the old installment-link label.
+  const allocParts = receipt.payment
+    ? await getAllocationLabelParts(prisma, receipt.payment.id).catch(() => [])
+    : [];
+  const installmentLabel = allocParts.length > 0
+    ? appliedToLabel(allocParts)
+    : receipt.payment?.installment
+      ? receipt.payment.installment.type === "INITIAL"
+        ? "Initial payment"
+        : `Month ${receipt.payment.installment.installmentNumber} payment`
+      : null;
   const clientPayment = receipt.payment;
   const confirmedList = [...(receipt.transaction?.payments ?? [])];
   if (clientPayment && !confirmedList.some((p) => p.id === clientPayment.id)) {
@@ -90,6 +95,19 @@ export default async function ClientReceiptPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="px-4 sm:px-8 py-6">
+          {receipt.voidedAt && (
+            <div className="mb-6 rounded-xl border-2 border-red-700 bg-red-50 px-4 py-4">
+              <div className="fraunces text-[16px] font-bold text-red-800">VOID — this receipt was corrected and is no longer valid</div>
+              <p className="public text-[13px] text-red-900 mt-1">
+                The figures on this receipt are superseded. Please use the replacement receipt instead.
+              </p>
+              {receipt.replacedBy?.accessToken && (
+                <a href={`/r/${receipt.replacedBy.accessToken}`} className="mt-2 inline-block mono text-[12px] bg-red-800 text-white px-4 py-2 rounded-full">
+                  Open replacement {receipt.replacedBy.ref} ↗
+                </a>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pt-2">
             <div>
               <h1 className="fraunces text-[24px] sm:text-[28px] font-bold text-[#16281F]">RECEIPT</h1>

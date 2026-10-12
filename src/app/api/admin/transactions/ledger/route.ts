@@ -280,7 +280,7 @@ export async function GET(request: NextRequest) {
   drawReportBanner(doc, {
     title: "Belgrove Homes",
     subtitle: "Company Sales Ledger — Chronological",
-    meta: `Generated ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}  •  ${transactions.length} transaction(s)  •  ${rows.length} row(s)${filters.length ? `  •  ${filters.join("  •  ")}` : ""}  •  Confirmed payments only`,
+    meta: `Generated ${formatLagos(new Date(), "datetime")}  •  ${transactions.length} transaction(s)  •  ${rows.length} row(s)${filters.length ? `  •  ${filters.join("  •  ")}` : ""}  •  Confirmed payments only`,
     margin,
   });
 

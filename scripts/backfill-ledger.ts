@@ -41,6 +41,10 @@ async function main() {
 
   for (const t of transactions) {
     // --- charges (idempotent keys) ---
+    // Effective on the contract (sale) date when set — otherwise creation.
+    // (TXN-2026-62831 was recorded 09-10-2026 for August/September payments;
+    // its charges re-date when the admin sets the real sale date.)
+    const chargeDate = (t as { contractDate?: Date | null }).contractDate ?? t.createdAt;
     const chargeOps: { type: "CHARGE_BASE" | "CHARGE_INTEREST"; amount: number; key: string; note: string }[] = [
       { type: "CHARGE_BASE", amount: t.baseAmount, key: `charge:${t.id}:base`, note: "Base price at transaction creation (backfill)" },
     ];
@@ -120,7 +124,7 @@ async function main() {
           type: c.type,
           amount: c.amount,
           direction: "DEBIT",
-          effectiveDate: t.createdAt,
+          effectiveDate: chargeDate,
           note: c.note,
           idempotencyKey: c.key,
         });

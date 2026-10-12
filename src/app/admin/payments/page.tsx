@@ -11,7 +11,7 @@ import { formatDate } from "@/lib/booking-ui";
 import { getCollectedRevenue } from "@/lib/finance";
 export const dynamic = "force-dynamic";
 
-type SearchParams = { q?: string; status?: string; method?: string; page?: string; showTest?: string };
+type SearchParams = { q?: string; status?: string; method?: string; page?: string; showTest?: string; showSuperseded?: string };
 
 const PAGE_SIZE = 25;
 
@@ -24,11 +24,14 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
   const status = params.status ?? "";
   const method = params.method ?? "";
   const showTest = params.showTest === "1";
+  // Effective payments by default (superseded voided rows hidden unless asked).
+  const showSuperseded = params.showSuperseded === "1";
 
   const where: any = {};
   // Payments inherit test status from their transaction (payments cannot
   // exist without one). Hidden by default.
   if (!showTest) where.transaction = { isTest: false };
+  if (!showSuperseded) where.status = { not: "CANCELLED" };
   if (status) where.status = status;
   if (method) where.paymentMethod = method;
   if (q) {
@@ -56,11 +59,11 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
       include: {
         transaction: { select: { ref: true, estate: true, customerName: true, customerEmail: true, paymentPlan: { select: { name: true } } } },
         installment: { select: { installmentNumber: true, type: true } },
+        allocations: { include: { installment: { select: { installmentNumber: true, type: true } } } },
         recordedBy: { select: { name: true } },
         confirmedBy: { select: { name: true } },
         receipt: { select: { id: true, ref: true, sentAt: true } },
-      },
-    }),
+      },    }),
     prisma.payment.count({ where }),
     // Ledger totals from the finance service (rule 3): collected counts
     // CONFIRMED payments on real transactions only.
@@ -77,6 +80,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
     if (status) qs.set("status", status);
     if (method) qs.set("method", method);
     if (showTest) qs.set("showTest", "1");
+    if (showSuperseded) qs.set("showSuperseded", "1");
     return qs.toString();
   })();
   function buildQuery(overrides: Partial<SearchParams>) {
@@ -86,6 +90,7 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
     if (merged.status) qs.set("status", merged.status);
     if (merged.method) qs.set("method", merged.method);
     if (merged.showTest) qs.set("showTest", merged.showTest);
+    if (merged.showSuperseded) qs.set("showSuperseded", merged.showSuperseded);
     if (merged.page && merged.page !== "1") qs.set("page", merged.page);
     const str = qs.toString();
     return str ? `?${str}` : "";
@@ -100,6 +105,11 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
             <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All confirmed and pending payments: financial truth from the payment ledger.</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} payments · Page {page} of {totalPages}</p>
             <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">Collected <span className="text-[var(--ops-text)] font-medium price">{formatNaira(collected)}</span> · {pendingCount} awaiting verification</p>
+            <div className="mt-2">
+              <Link href={`/admin/payments${buildQuery({ showSuperseded: showSuperseded ? undefined : "1", page: "1" })}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline underline-offset-4">
+                {showSuperseded ? "Hide superseded entries" : "Show superseded entries"}
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -167,10 +177,10 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
                     <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "-"}</td>
                     <td className="px-4 py-3 font-mono text-[11px]"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><div className="mono text-[10px] text-[var(--ops-muted)]">{p.transaction.estate}</div></td>
                     <td className="px-4 py-3"><div className="text-[13px] leading-none break-words">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-words">{p.transaction.customerEmail}</div></td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "-"}</td>
+                    <td className="px-4 py-3 mono text-[11px]">{p.allocations?.length ? p.allocations.map((a: any) => `${a.installment.type === "INITIAL" ? "Initial" : `Month ${a.installment.installmentNumber}`}`).join(", ") : p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "-"}</td>
                     <td className="px-4 py-3 mono text-[12px] font-medium text-right price">{formatNaira(p.amount)}</td>
                     <td className="px-4 py-3 mono text-[11px]">{p.paymentMethod ?? "-"}</td>
-                    <td className="px-4 py-3"><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" /></td>
+                    <td className="px-4 py-3"><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" />{p.correctsPaymentId ? <span className="ml-1 mono text-[10px] px-2 py-1 rounded-full bg-[#E0F2F1] text-[#0D3328] border border-[#B2DFDB]">Corrected</span> : null}</td>
                     <td className="px-4 py-3 mono text-[11px]">{formatDate(p.paymentDate)}</td>
                     <td className="px-4 py-3 mono text-[11px]">{p.confirmedBy?.name ?? "-"}</td>
                   </ClickableRow>

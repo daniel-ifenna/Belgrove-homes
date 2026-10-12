@@ -92,6 +92,10 @@ export async function createTransactionFromBooking(
         totalPaid: 0,
         outstandingBalance: totalPayable,
         status: "ACTIVE",
+        // Contract (sale) date defaults to creation; the admin corrects it to
+        // the real sale date when backdated (charges re-date with it, so the
+        // statement orders the contract first).
+        contractDate: now,
         createdById,
       },
     });
@@ -238,6 +242,8 @@ export async function createManualTransaction(params: {
         totalPaid: 0,
         outstandingBalance: totalPayable,
         status: "ACTIVE",
+        // Same contract-date default as booking-flow creation (see above).
+        contractDate: now,
         createdById: params.createdById,
       },
     });

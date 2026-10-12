@@ -26,6 +26,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   if (!payment || payment.transactionId !== id) {
     return NextResponse.json({ error: "Payment not found for this transaction." }, { status: 404 });
   }
+  if (payment.status === "CONFIRMED" && !reason) {
+    return NextResponse.json({ error: "A reason is required to void a confirmed payment." }, { status: 400 });
+  }
 
   try {
     if (payment.status === "PENDING_VERIFICATION") {

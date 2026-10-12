@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { createManualTransaction } from "@/lib/transactionService";
 import { getTransactionOverviews } from "@/lib/finance";
+import { formatLagos } from "@/lib/time";
 import { logServerError } from "@/lib/paymentConfirmation";
 
 // Sends are direct Resend calls (no queue); allow headroom for the request's
@@ -139,8 +140,9 @@ export async function POST(request: NextRequest) {
         include: { paymentPlan: true, installments: { orderBy: { installmentNumber: "asc" } } },
       });
       if (created) {
-        const fmtD = (d: Date | string) =>
-          new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+        // Schedule dates through the shared Lagos helper (explicit zone) so
+        // the confirmation email agrees with every money surface.
+        const fmtD = (d: Date | string) => formatLagos(d, "date");
         const initial = created.installments.find((i) => i.type === "INITIAL");
         const monthlies = created.installments.filter((i) => i.type === "MONTHLY");
         const bookingRef = bookingId
@@ -186,7 +188,15 @@ export async function POST(request: NextRequest) {
     }
     if (body.initialPayment && body.initialPayment.amount) {
       const { recordPaymentAndGenerateReceipt } = await import("@/lib/paymentService");
-      const payDate = body.initialPayment.paymentDate ? new Date(body.initialPayment.paymentDate) : new Date();
+      const { toDateOnlyNoonUtc } = await import("@/lib/time");
+      let payDate: Date;
+      try {
+        payDate = body.initialPayment.paymentDate
+          ? toDateOnlyNoonUtc(String(body.initialPayment.paymentDate))
+          : toDateOnlyNoonUtc(new Date());
+      } catch {
+        return NextResponse.json({ error: "Invalid initial payment date" }, { status: 400 });
+      }
       const payMethod = body.initialPayment.paymentMethod || "Bank Transfer";
       const payAmount = Number(body.initialPayment.amount);
       if (!Number.isInteger(payAmount) || payAmount <= 0) {

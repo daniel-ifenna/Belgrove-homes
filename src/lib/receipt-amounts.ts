@@ -2,6 +2,33 @@
 // Used by the admin receipt page, the client receipt page, and the PDF
 // template so all three read: This payment · Installment · Total price ·
 // Paid to date · Balance remaining, with Discount only when > 0.
+import { formatNaira } from "./currency";
+
+// Installment display label for allocation-derived "Applied to" lines. THE
+// replacement for the old rigid schedule labels ("Initial payment" /
+// "Month 1" from the payment's single installment link): a payment can span
+// several installments via the waterfall, so labels always derive from the
+// allocation rows, never from payment.installment.
+export function installmentAppliedLabel(installmentNumber: number, type: string): string {
+  return type === "INITIAL" || installmentNumber === 0 ? "Initial deposit" : `Month ${installmentNumber}`;
+}
+
+export type AppliedToPart = {
+  installmentNumber: number;
+  type: string;
+  amount: number;
+  scheduledAmount: number;
+};
+
+// "Initial deposit ₦250,000 of ₦9,250,000, Month 1 ₦2,750,000 of ₦3,083,333".
+// Shared by Payment History, receipt pages and new receipt PDFs so the three
+// can never describe one payment differently.
+export function appliedToLabel(parts: AppliedToPart[]): string {
+  const ordered = [...parts].sort((a, b) => a.installmentNumber - b.installmentNumber);
+  return ordered
+    .map((p) => `${installmentAppliedLabel(p.installmentNumber, p.type)} ${formatNaira(p.amount)} of ${formatNaira(p.scheduledAmount)}`)
+    .join(", ");
+}
 export type ReceiptAmountsInput = {
   thisPayment: number;
   installmentLabel?: string | null;

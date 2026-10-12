@@ -45,6 +45,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   });
   if (!receipt) return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
   if (!receipt.payment) return NextResponse.json({ error: "Receipt has no payment link" }, { status: 409 });
+  if (receipt.voidedAt) {
+    return NextResponse.json({ error: "This receipt is void (corrected). Resend the replacement instead." }, { status: 409 });
+  }
 
   const body = await request.json().catch(() => null);
   const regen = body?.regen === true;

@@ -1,10 +1,14 @@
-import { getEntityHistory } from "@/lib/activity";
+import { getEntityHistory, getTransactionHistory } from "@/lib/activity";
 import { formatLagos } from "@/lib/time";
 
 // Read-only per-entity audit trail for transaction and receipt detail pages.
 // (Bookings show their history in the existing UnifiedTimeline.)
+// Transaction pages show the full scope: transaction events plus every
+// payment/receipt/statement event on the account (corrections, voids,
+// reissues, statements) with readable sentences.
 export default async function ActivitySection({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const rows = await getEntityHistory(entityType, entityId);
+  const rows =
+    entityType === "transaction" ? await getTransactionHistory(entityId) : await getEntityHistory(entityType, entityId);
   return (
     <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
       <div className="flex items-center justify-between">

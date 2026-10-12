@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { createHash } from "node:crypto";
 
 // Single ledger service (Step 2): the ONLY code allowed to write money
 // entries (LedgerEntry) and allocation rows (PaymentAllocation), and to
@@ -38,6 +39,24 @@ export class LedgerError extends Error {
     super(message);
     this.name = "LedgerError";
   }
+}
+
+export function logLedgerError(context: string, error: unknown): void {
+  console.error(`[ledger] ${context}`, error);
+}
+
+// LedgerError messages carry amounts, never internals — safe to surface.
+// Anything else becomes a friendly message; details stay server-side.
+export function toUserFacingLedgerError(error: unknown): string {
+  if (error instanceof LedgerError) return error.message;
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : null;
+  if (code === "P2002") return "This was already recorded. Refresh to see the latest state.";
+  if (code === "P2025") return "The record no longer exists. Refresh to see the latest state.";
+  if (code === "P2034") return "Someone else just changed this. Refresh and try again.";
+  return "Couldn't save. Please try again.";
 }
 
 function assertWholeNaira(amount: number, what: string): void {
@@ -141,6 +160,57 @@ export function previewAllocation(
 }
 
 // ---------------------------------------------------------------------------
+// Shared ledger ordering rule (statements, ledger views, backfill): effective
+// date, then charge before payment, then recorded time, then id.
+// ---------------------------------------------------------------------------
+
+const TYPE_RANK: Record<string, number> = {
+  CHARGE_BASE: 0,
+  CHARGE_INTEREST: 0,
+  CHARGE_FEE: 0,
+  DISCOUNT: 1,
+  WAIVER: 1,
+  ADJUSTMENT: 1,
+  PAYMENT: 2,
+  REFUND: 3,
+  REVERSAL: 4,
+};
+
+export type OrderableEntry = {
+  id: string;
+  type: string;
+  effectiveDate: Date | string;
+  createdAt?: Date | string;
+};
+
+export function compareLedgerEntries(a: OrderableEntry, b: OrderableEntry): number {
+  const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  return (
+    new Date(a.effectiveDate).getTime() - new Date(b.effectiveDate).getTime() ||
+    (TYPE_RANK[a.type] ?? 9) - (TYPE_RANK[b.type] ?? 9) ||
+    aCreated - bCreated ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+}
+
+export function orderLedgerEntries<T extends OrderableEntry>(entries: T[]): T[] {
+  return [...entries].sort(compareLedgerEntries);
+}
+
+// Canonical fingerprint of a transaction's ledger: generating a statement
+// with an unchanged hash returns the existing statement; any ledger change
+// (new/voided/corrected entry) produces a new one.
+export function hashLedgerEntries(
+  entries: { id: string; type: string; amount: number; direction: string; effectiveDate: Date | string }[]
+): string {
+  const canonical = orderLedgerEntries(entries)
+    .map((e) => [e.id, e.type, e.amount, e.direction, new Date(e.effectiveDate).toISOString()].join("|"))
+    .join("\n");
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
+// ---------------------------------------------------------------------------
 // Writers (tx-scoped; throw LedgerError on misuse, P2002 on replay)
 // ---------------------------------------------------------------------------
 
@@ -232,7 +302,6 @@ export async function postAllocations(
 // ---------------------------------------------------------------------------
 // Readers: balances derived from entries only
 // ---------------------------------------------------------------------------
-
 export type LedgerBalances = {
   totalPayable: number;
   totalPaid: number;
@@ -275,6 +344,26 @@ export async function getLedgerBalances(
 
 export async function getPaymentAllocations(tx: TxClient, paymentId: string) {
   return tx.paymentAllocation.findMany({ where: { paymentId } });
+}
+
+// Allocation parts for one payment, for allocation-derived "Applied to"
+// labels (receipt pages, new receipt PDFs, Payment History). Never falls back
+// to the payment's single installment link — a waterfall payment can span
+// installments, which is why the old rigid labels misled.
+export async function getAllocationLabelParts(
+  tx: TxClient,
+  paymentId: string
+): Promise<{ installmentNumber: number; type: string; amount: number; scheduledAmount: number }[]> {
+  const rows = await tx.paymentAllocation.findMany({
+    where: { paymentId },
+    include: { installment: { select: { installmentNumber: true, type: true, scheduledAmount: true } } },
+  });
+  return rows.map((r) => ({
+    installmentNumber: r.installment.installmentNumber,
+    type: r.installment.type,
+    amount: r.amount,
+    scheduledAmount: r.installment.scheduledAmount,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -359,4 +448,92 @@ export async function verifyTransactionLedger(
     installmentPaid,
     problems,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Effective ledger for client statements: reversed payments and their
+// REVERSAL lines are excluded (the client sees the confirmed position, with
+// no corrections note — the void → replacement trail lives in the Corrections
+// panel, the internal ledger view, the activity feed and the correction
+// email). The internal ledger view shows everything, unfiltered.
+// ---------------------------------------------------------------------------
+
+export type EffectiveEntry = {
+  id: string;
+  type: string;
+  amount: number;
+  direction: string;
+  effectiveDate: Date;
+  createdAt: Date;
+  method: string | null;
+  bankReference: string | null;
+  paymentId: string | null;
+  paymentReference: string | null;
+  receiptRef: string | null;
+  note: string | null;
+};
+
+export async function getEffectiveEntries(tx: TxClient, transactionId: string): Promise<EffectiveEntry[]> {
+  const [entries, receipts] = await Promise.all([
+    tx.ledgerEntry.findMany({
+      where: { transactionId },
+      include: { payment: { select: { paymentReference: true } } },
+    }),
+    tx.receipt.findMany({ where: { transactionId }, select: { paymentId: true, ref: true } }),
+  ]);
+  const refByPayment = new Map(receipts.map((r) => [r.paymentId as string, r.ref]));
+  const reversedEntryIds = new Set(
+    entries.filter((e) => e.type === "REVERSAL" && e.reversesEntryId).map((e) => e.reversesEntryId as string)
+  );
+  return orderLedgerEntries(
+    entries
+      .filter((e) => e.type !== "REVERSAL" && !reversedEntryIds.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        type: e.type,
+        amount: e.amount,
+        direction: e.direction,
+        effectiveDate: e.effectiveDate,
+        createdAt: e.createdAt,
+        method: e.method,
+        bankReference: e.bankReference,
+        paymentId: e.paymentId,
+        paymentReference: e.payment?.paymentReference ?? null,
+        receiptRef: e.paymentId ? (refByPayment.get(e.paymentId) ?? null) : null,
+        note: e.note,
+      }))
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Contract date: the sale date a transaction's charges are effective on.
+// Correcting it re-dates the CHARGE entries (sanctioned data fix with an
+// audit entry — the previous date was wrongly recorded, as with amounts).
+// ---------------------------------------------------------------------------
+
+export async function setTransactionContractDate(
+  tx: TxClient,
+  opts: { transactionId: string; contractDate: Date; actorId?: string | null; actorName?: string | null; reason?: string | null }
+): Promise<{ updatedCharges: number }> {
+  const txn = await tx.transaction.findUnique({ where: { id: opts.transactionId } });
+  if (!txn) throw new LedgerError(`Transaction ${opts.transactionId} not found`);
+  if (Number.isNaN(opts.contractDate.getTime())) throw new LedgerError("Invalid contract date");
+  const before = txn.contractDate ?? txn.createdAt;
+  await tx.transaction.update({ where: { id: txn.id }, data: { contractDate: opts.contractDate } });
+  const charges = await tx.ledgerEntry.updateMany({
+    where: { transactionId: txn.id, type: { startsWith: "CHARGE" } },
+    data: { effectiveDate: opts.contractDate },
+  });
+  await tx.auditEvent.create({
+    data: {
+      actorId: opts.actorId ?? null,
+      actorName: opts.actorName ?? "System",
+      action: "contract.set_date",
+      entityType: "transaction",
+      entityId: txn.id,
+      before: { contractDate: before },
+      after: { contractDate: opts.contractDate, reason: opts.reason ?? null, chargesRedated: charges.count },
+    },
+  });
+  return { updatedCharges: charges.count };
 }

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { buildStatementRows, describeStatementEntry, generateStatementPdf } from "../statement";
+import fs from "node:fs";
+import path from "node:path";
+import { buildStatementRows, describeStatementEntry, chargeSubtitle, withChargeSubtitle } from "../statement";
 import { generateReceiptPdf } from "../receipts/generateReceiptPdf";
 
 const E = (over: Partial<Parameters<typeof buildStatementRows>[0][number]> & { id: string; type: string; amount: number }) => ({
@@ -20,7 +22,9 @@ describe("buildStatementRows", () => {
     expect(rows.map((r) => r.balance)).toEqual([18_500_000, 18_000_000, 15_000_000, 18_000_000]);
     expect(rows[1].details).toBe("Discount");
     expect(closing).toBe(18_000_000);
-    expect(totalCharges).toBe(18_500_000);
+    // Net charges: discounts/waivers reduce what is owed, so the Totals row
+    // foots (charges − paid = balance): 18.5M − 0.5M = 18M.
+    expect(totalCharges).toBe(18_000_000);
     expect(totalPaid).toBe(0); // 3M paid then fully reversed
   });
 
@@ -34,33 +38,52 @@ describe("buildStatementRows", () => {
   });
 
   it("describes payment rows with method, bank ref and receipt ref", () => {
+    // Details carry the method; bank ref + receipt ref ride the second line
+    // (refLine) — asserted together so the refs are proven to render.
     expect(
       describeStatementEntry({ id: "x", type: "PAYMENT", amount: 1, direction: "CREDIT", effectiveDate: new Date(), createdAt: new Date(), method: "Bank Transfer", bankReference: "TRF-1", receiptRef: "RCT-1" })
-    ).toBe("Payment received — Bank Transfer (TRF-1) · RCT-1");
+    ).toBe("Payment received, Bank Transfer");
+    const { rows } = buildStatementRows([
+      E({ id: "x", type: "PAYMENT", amount: 1_000_000, direction: "CREDIT", method: "Bank Transfer", bankReference: "TRF-1", receiptRef: "RCT-1" }),
+    ]);
+    expect(rows[0].line2).toBe("Ref TRF-1 · Receipt RCT-1");
+  });
+
+  it("prints the property line under the contract charge (layout reference)", () => {
+    expect(chargeSubtitle("Sunrise Estate", "SUN-P1-500SQM")).toBe("Sunrise Estate, SUN-P1-500SQM");
+    expect(chargeSubtitle("Sunrise Estate", null)).toBe("Sunrise Estate");
+    expect(chargeSubtitle(null, null)).toBeNull();
+    const { rows } = buildStatementRows(
+      withChargeSubtitle(
+        [
+          E({ id: "c1", type: "CHARGE_BASE", amount: 18_500_000, direction: "DEBIT" }),
+          E({ id: "p1", type: "PAYMENT", amount: 3_000_000, direction: "CREDIT", method: "Bank Transfer", receiptRef: "RCT-1" }),
+        ],
+        chargeSubtitle("Sunrise Estate", "SUN-P1-500SQM")
+      )
+    );
+    expect(rows[0]).toMatchObject({ details: "Contract price", line2: "Sunrise Estate, SUN-P1-500SQM" });
+    // Payments keep the ref line — the subtitle only ever lands on charges.
+    expect(rows[1]).toMatchObject({ details: "Payment received, Bank Transfer", line2: "Receipt RCT-1" });
   });
 });
 
-describe("statement PDF smoke", () => {
-  // NOTE: with the embedded Noto font jsPDF encodes text as glyph ids, so
-  // literal strings are not greppable in the bytes (unlike helvetica
-  // exports). These smokes prove the render path succeeds end to end with
-  // real fonts; content is asserted at the data level above.
-  it("renders a plausible PDF without throwing", () => {
-    const pdf = generateStatementPdf({
-      transactionRef: "TXN-2026-00001",
-      bookingRef: "BEL-2026-00001",
-      clientName: "Ada Obi",
-      clientPhone: "+2348012345678",
-      clientEmail: "ada@x.com",
-      propertyLine: "Belgrove Peninsula · Plot",
-      entries: [
-        { id: "c1", type: "CHARGE_BASE", amount: 10_000_000, direction: "DEBIT", effectiveDate: new Date("2026-01-01"), createdAt: new Date("2026-01-01") },
-        { id: "p1", type: "PAYMENT", amount: 4_000_000, direction: "CREDIT", effectiveDate: new Date(2026, 1, 1, 12), createdAt: new Date(2026, 1, 1, 12), method: "Bank Transfer", receiptRef: "RCT-1" },
-      ],
-      generatedAt: new Date("2026-03-01"),
-    });
-    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
-    expect(pdf.length).toBeGreaterThan(20_000); // fonts + content embedded
+describe("single statement PDF path", () => {
+  // The jsPDF hand-positioned generator is deleted: every statement PDF comes
+  // from renderStatementPdf (supplied HTML template + Chromium). This test
+  // fails if the old generator — or a second one — is reintroduced.
+  it("has exactly one PDF producer and no hand-positioned text", () => {
+    const src = fs.readFileSync(
+      path.join(process.cwd(), "src", "lib", "statement.ts"),
+      "utf8"
+    );
+    expect(src).not.toContain("generateStatementPdf");
+    expect(src).not.toContain("jspdf");
+    expect(src).not.toContain("addImage");
+    const producers = fs
+      .readFileSync(path.join(process.cwd(), "src", "lib", "statement-pdf.ts"), "utf8")
+      .match(/export async function renderStatementPdf/);
+    expect(producers?.length).toBe(1);
   });
 });
 
