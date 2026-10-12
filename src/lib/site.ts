@@ -29,7 +29,7 @@ export const SITE_ESTATES: SiteEstate[] = [
     sizes: "200–400 sqm",
     minSize: 200,
     maxSize: 400,
-    from: 16600000,
+    from: 17100000,
     status: "Available",
     images: [
       { src: "/aurum-400-fully-detached.jpeg", alt: "Aurum Residence detached duplex", render: true },

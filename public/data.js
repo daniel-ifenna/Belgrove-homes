@@ -4,9 +4,9 @@
 
 window.BELGROVE_PLOTS = [
   /* ---- Aurum Residence — Katampe Extension, Abuja (Pre-Sale, FCTA Approved) ---- */
-  { id: 'aurum-200', estate: 'Aurum Residence', location: 'Katampe Extension, Abuja', unitType: 'Four Bedroom Terrace Duplex', size: 200, price: 16600000, status: 'available', code: 'AUR-200SQM', image: 'aurum-200-terrace.jpeg' },
-  { id: 'aurum-300', estate: 'Aurum Residence', location: 'Katampe Extension, Abuja', unitType: 'Five Bedroom Semi-Detached Duplex + BQ', size: 300, price: 24900000, status: 'available', code: 'AUR-300SQM', image: 'aurum-300-semi-detached.jpeg' },
-  { id: 'aurum-400', estate: 'Aurum Residence', location: 'Katampe Extension, Abuja', unitType: 'Five Bedroom Fully-Detached Duplex + BQ', size: 400, price: 33200000, status: 'available', code: 'AUR-400SQM', image: 'aurum-400-fully-detached.jpeg' },
+  { id: 'aurum-200', estate: 'Aurum Residence', location: 'Katampe Extension, Abuja', unitType: 'Four Bedroom Terrace Duplex', size: 200, price: 17100000, status: 'available', code: 'AUR-200SQM', image: 'aurum-200-terrace.jpeg' },
+  { id: 'aurum-300', estate: 'Aurum Residence', location: 'Katampe Extension, Abuja', unitType: 'Five Bedroom Semi-Detached Duplex + BQ', size: 300, price: 25400000, status: 'available', code: 'AUR-300SQM', image: 'aurum-300-semi-detached.jpeg' },
+  { id: 'aurum-400', estate: 'Aurum Residence', location: 'Katampe Extension, Abuja', unitType: 'Five Bedroom Fully-Detached Duplex + BQ', size: 400, price: 33700000, status: 'available', code: 'AUR-400SQM', image: 'aurum-400-fully-detached.jpeg' },
 
   /* ---- Belgrove Peninsula — Kabusa-ketti north (New Price Alert) ---- */
   { id: 'peninsula-150', estate: 'Belgrove Peninsula', location: 'Kabusa-Ketti North, Abuja', unitType: '3-Bedroom Terrace Duplex', size: 150, price: 5800000, status: 'available', code: 'PEN-150SQM', image: 'peninsula-150-terrace.jpeg' },
