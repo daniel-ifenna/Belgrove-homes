@@ -1,5 +1,4 @@
 import Link from "next/link";
-import StatusBadge from "@/components/admin/StatusBadge";
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/currency";
 import { auth } from "@/auth";
@@ -7,6 +6,7 @@ import { isInternalRole } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import AdminPagination from "@/components/admin/AdminPagination";
 import AdminListCard from "@/components/admin/AdminListCard";
+import ClickableRow from "@/components/admin/ClickableRow";
 import { getTransactionOverviews } from "@/lib/finance";
 import type { TransactionOverview } from "@/lib/finance";
 import { formatDate } from "@/lib/booking-ui";
@@ -32,10 +32,18 @@ function daysPhrase(ov: TransactionOverview): string | null {
   return `in ${ov.daysUntilDue} days`;
 }
 
+// Derived row chip (draft v2 language): Paid in full / Behind / On track.
+// Computed from confirmed money via the finance service — never the stored
+// status label. The behind amount lives on the detail page.
+function stateChip(ov: TransactionOverview) {
+  if (ov.isFullyPaid) return <span className="chip green">Paid in full</span>;
+  if (ov.isOverdue) return <span className="chip red">Behind</span>;
+  return <span className="chip lg">On track</span>;
+}
+
 // "Next payment due" line beneath Outstanding: amount + due date from the
 // shared helper (first unpaid installment after carry-forward), or
-// "Fully paid" once cleared. Outright plans have a single installment, so
-// this degrades to the full-balance due date / "Paid" naturally.
+// "Fully paid" once cleared.
 function nextDueLine(ov: TransactionOverview) {
   if (ov.isFullyPaid || !ov.nextInstallment) {
     return <div className="mono text-[10px] text-[#065F46]">Fully paid</div>;
@@ -120,102 +128,62 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+      <div className="max-w-[1180px] mx-auto px-6 lg:px-7 py-6">
+        <div className="ph">
           <div>
-            <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Transactions</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">Source of truth for property sales: payment plans, schedules, and outstanding balances.</p>
-            <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} transactions · Page {page} of {totalPages}</p>
+            <h1>Transactions</h1>
+            <p>Every sale, what has been paid and what is left. · {total} transactions · Page {page} of {totalPages}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/admin/transactions/new" className="mono text-[11px] tracking-wide uppercase bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 hover:bg-[var(--ops-deep)]">+ New Transaction</Link>
-            <a href={`/api/admin/transactions/ledger${buildQuery({ page: undefined })}`} className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Ledger PDF</a>
-            <Link href="/admin/receipts" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Receipts</Link>
+          <div className="acts">
+            <Link href="/admin/transactions/new" className="btn pri">+ New transaction</Link>
+            <a href={`/api/admin/transactions/ledger${buildQuery({ page: undefined })}`} className="btn">Ledger PDF</a>
+            <Link href="/admin/receipts" className="btn">Receipts</Link>
           </div>
         </div>
 
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4 shadow-[var(--ops-shadow-sm)] mb-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex flex-wrap gap-1.5">
-              {[{ label: "All", value: "" }, { label: "Active", value: "ACTIVE" }, { label: "Paid Full", value: "PAID_IN_FULL" }, { label: "Draft", value: "DRAFT" }].map((f) => {
-                const active = (status ?? "") === f.value;
-                return <Link key={f.label} href={`/admin/transactions${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}>{f.label}</Link>;
-              })}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[{ label: "All Plans", value: "" }, ...plans.map((p) => ({ label: p.name, value: p.id }))].map((f) => {
-                const active = (plan ?? "") === f.value;
-                return <Link key={f.label} href={`/admin/transactions${buildQuery({ plan: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}>{f.label}</Link>;
-              })}
-            </div>
-            <form className="flex-1 flex gap-2" action="/admin/transactions" method="get">
+        <div className="card">
+          <div className="filters">
+            {[{ label: "All", value: "" }, { label: "Active", value: "ACTIVE" }, { label: "Paid in full", value: "PAID_IN_FULL" }, { label: "Draft", value: "DRAFT" }].map((f) => {
+              const active = (status ?? "") === f.value;
+              return <Link key={f.label} href={`/admin/transactions${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`fp${active ? " on" : ""}`}>{f.label}</Link>;
+            })}
+            {[{ label: "All plans", value: "" }, ...plans.map((p) => ({ label: p.name, value: p.id }))].map((f) => {
+              const active = (plan ?? "") === f.value;
+              return <Link key={f.label} href={`/admin/transactions${buildQuery({ plan: f.value || undefined, page: "1" })}`} className={`fp${active ? " on" : ""}`}>{f.label}</Link>;
+            })}
+            <form className="fs" action="/admin/transactions" method="get" style={{ flex: 1 }}>
               {status && <input type="hidden" name="status" value={status} />}
               {plan && <input type="hidden" name="plan" value={plan} />}
-              <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg></span>
-                <input name="q" defaultValue={q} placeholder="Search ref, customer, email, property…" className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-9 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)]" />
-              </div>
-              <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2">Search</button>
-              {(q || status || plan) && <Link href="/admin/transactions" className="text-xs text-[var(--ops-muted)] self-center underline">Clear</Link>}
+              <input name="q" defaultValue={q} placeholder="Search reference, client, property" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: "12.5px" }} />
+              {(q || status || plan) && <Link href="/admin/transactions" className="lnk">Clear</Link>}
             </form>
           </div>
-        </div>
-
-        <div className="hidden lg:block bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm admin-table">
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="t">
               <thead>
-                <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left">
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Transaction</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Customer</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Property</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Plan</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Total Payable</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Outstanding</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Status</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)] text-right">Actions</th>
-                </tr>
+                <tr><th>Transaction</th><th>Client</th><th>Property</th><th>Plan</th><th className="r">Total</th><th className="r">Outstanding</th><th>Status</th><th></th></tr>
               </thead>
-              <tbody className="divide-y divide-[var(--ops-border)]/60">
+              <tbody>
                 {transactions.map((t) => {
                   const ov = overviews.get(t.id);
                   if (!ov) return null;
                   const outstanding = ov.outstanding;
                   return (
-                    <tr key={t.id} className="hover:bg-[var(--ops-bg)]/50">
-                      <td className="px-4 py-3">
-                        <Link href={`/admin/transactions/${t.id}`} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline">{t.ref}</Link>
-                        <div className="mono text-[10px] text-[var(--ops-muted)]">{t.plotCode ?? ""} {t.sqm ? `· ${t.sqm}sqm` : ""}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-[13px] font-medium leading-none break-words">{t.customerName}</div>
-                        <div className="text-[12px] text-[var(--ops-muted)] break-words">{t.customerEmail}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-[13px] leading-tight break-words max-w-[160px]">{t.estate} {t.unitType ? `· ${t.unitType}` : ""}</div>
-                        <div className="mono text-[10px] text-[var(--ops-muted)]">{t.plotQuantity} plot{t.plotQuantity > 1 ? "s" : ""} · {formatNaira(t.unitPrice)} each</div>
-                      </td>
-                      <td className="px-4 py-3 mono text-[11px]">{t.paymentPlan.name}</td>
-                      <td className="px-4 py-3 mono text-[12px] font-medium price">{formatNaira(t.totalPayable)}</td>
-                      <td className="px-4 py-3">
-                        <div className={`mono text-[12px] font-bold price ${outstandingClass(ov)}`}>{formatNaira(outstanding)}</div>
-                        {nextDueLine(ov)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={t.status} />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link href={`/admin/transactions/${t.id}`} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 hover:bg-[var(--ops-bg)]">View</Link>
-                      </td>
-                    </tr>
+                    <ClickableRow key={t.id} href={`/admin/transactions/${t.id}`}>
+                      <td className="num"><Link href={`/admin/transactions/${t.id}`} className="row-lead font-medium text-[var(--ops-text)] hover:underline">{t.ref}</Link><small>{t.plotCode ?? ""} {t.sqm ? `· ${t.sqm}sqm` : ""}</small></td>
+                      <td><b>{t.customerName}</b><small>{t.customerEmail}</small></td>
+                      <td>{t.estate}<small>{t.unitType ?? ""} {t.plotCode ?? ""}</small></td>
+                      <td>{t.paymentPlan.name}</td>
+                      <td className="r num">{formatNaira(t.totalPayable)}</td>
+                      <td className="r num"><span className={outstandingClass(ov)}>{formatNaira(outstanding)}</span><small>{ov.isFullyPaid ? "Fully paid" : ov.nextInstallment ? `${formatNaira(ov.nextInstallment.amountDue)} · ${daysPhrase(ov) ?? ""}` : ""}</small></td>
+                      <td>{stateChip(ov)}</td>
+                      <td className="r">›</td>
+                    </ClickableRow>
                   );
                 })}
                 {transactions.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-16 text-center">
-                      <p className="public text-[14px] font-medium">No transactions</p>
-                      <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Create a transaction from a booking or manually.</p>
-                    </td>
+                    <td colSpan={8}><div className="empty">No transactions. Create one from a booking or manually.</div></td>
                   </tr>
                 )}
               </tbody>
@@ -234,7 +202,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 refText={t.ref}
                 name={t.customerName}
                 email={t.customerEmail}
-                badges={<StatusBadge status={t.status} />}
+                badges={stateChip(ov)}
                 rows={[
                   { label: "Property", value: t.estate },
                   {

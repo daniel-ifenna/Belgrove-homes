@@ -5,6 +5,7 @@ import { statusLabels } from "@/lib/booking-ui";
 import { actionLabels, type BookingAction } from "@/lib/booking-transitions";
 import { formatDateTime } from "@/lib/booking-ui";
 import PanelHeader from "@/components/admin/PanelHeader";
+import { CheckIcon } from "@/components/admin/icons";
 
 type Activity = {
   id: string;
@@ -155,7 +156,7 @@ export default function UnifiedTimeline({
                   <span className="mono text-[11px] text-[var(--ops-muted)] shrink-0">{formatDateTime(a.createdAt)}</span>
                 </div>
                 {a.note && <p className="text-[13px] text-[var(--ops-muted)] mt-1 whitespace-pre-wrap bg-white border border-[var(--ops-border)] rounded-lg px-3 py-2">{a.note}</p>}
-                {a.emailSent === true && <p className="mono text-[11px] text-[#1F6B3E] mt-1.5">✓ Email sent</p>}
+                {a.emailSent === true && <p className="mono text-[11px] text-[#1F6B3E] mt-1.5 flex items-center gap-1"><CheckIcon size={11} /> Email sent</p>}
                 {a.emailSent === false && <p className="mono text-[11px] text-[#A6402F] mt-1.5">Email failed: {a.emailError}</p>}
               </li>
             );

@@ -98,99 +98,86 @@ export default async function PaymentsLedgerPage({ searchParams }: { searchParam
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+      <div className="max-w-[1180px] mx-auto px-6 lg:px-7 py-6">
+        <div className="ph">
           <div>
-            <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Payments Ledger</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All confirmed and pending payments: financial truth from the payment ledger.</p>
-            <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} payments · Page {page} of {totalPages}</p>
-            <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">Collected <span className="text-[var(--ops-text)] font-medium price">{formatNaira(collected)}</span> · {pendingCount} awaiting verification</p>
-            <div className="mt-2">
-              <Link href={`/admin/payments${buildQuery({ showSuperseded: showSuperseded ? undefined : "1", page: "1" })}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline underline-offset-4">
-                {showSuperseded ? "Hide superseded entries" : "Show superseded entries"}
-              </Link>
-            </div>
+            <h1>Payments</h1>
+            <p>Money received across all transactions. · {total} payments · Page {page} of {totalPages}</p>
+          </div>
+          <div className="acts">
+            <span className="mono text-[11px] text-[var(--ops-muted)]">Collected <span className="price text-[var(--ops-text)]">{formatNaira(collected)}</span> · {pendingCount} awaiting verification</span>
           </div>
         </div>
+        <div className="mb-4">
+          <Link href={`/admin/payments${buildQuery({ showSuperseded: showSuperseded ? undefined : "1", page: "1" })}`} className="lnk">
+            {showSuperseded ? "Hide superseded entries" : "Show superseded entries"}
+          </Link>
+        </div>
 
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4 shadow-[var(--ops-shadow-sm)] mb-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { label: "All", value: "" },
-                { label: "Pending", value: "PENDING_VERIFICATION" },
-                { label: "Confirmed", value: "CONFIRMED" },
-                { label: "Failed", value: "FAILED" },
-              ].map((f) => {
-                const active = (status ?? "") === f.value;
-                const n = f.value ? (statusCounts.find((c) => c.status === f.value)?._count.status ?? 0) : total;
-                return <Link key={f.label} href={`/admin/payments${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}>{f.label} ({n})</Link>;
-              })}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { label: "All Methods", value: "" },
-                { label: "Bank Transfer", value: "Bank Transfer" },
-                { label: "Cash", value: "Cash" },
-                { label: "Card", value: "Card" },
-              ].map((f) => {
-                const active = (method ?? "") === f.value;
-                return <Link key={f.label} href={`/admin/payments${buildQuery({ method: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}>{f.label}</Link>;
-              })}
-            </div>
-            <form className="flex-1 flex gap-2" action="/admin/payments" method="get">
+        <div className="card">
+          <div className="filters">
+            {[
+              { label: "All", value: "" },
+              { label: "Pending", value: "PENDING_VERIFICATION" },
+              { label: "Confirmed", value: "CONFIRMED" },
+              { label: "Failed", value: "FAILED" },
+            ].map((f) => {
+              const active = (status ?? "") === f.value;
+              const n = f.value ? (statusCounts.find((c) => c.status === f.value)?._count.status ?? 0) : total;
+              return <Link key={f.label} href={`/admin/payments${buildQuery({ status: f.value || undefined, page: "1" })}`} className={`fp${active ? " on" : ""}`}>{f.label} ({n})</Link>;
+            })}
+            {[
+              { label: "All methods", value: "" },
+              { label: "Bank Transfer", value: "Bank Transfer" },
+              { label: "Cash", value: "Cash" },
+              { label: "Card", value: "Card" },
+            ].map((f) => {
+              const active = (method ?? "") === f.value;
+              return <Link key={f.label} href={`/admin/payments${buildQuery({ method: f.value || undefined, page: "1" })}`} className={`fp${active ? " on" : ""}`}>{f.label}</Link>;
+            })}
+            <form className="fs" style={{ flex: 1 }} action="/admin/payments" method="get">
               {status && <input type="hidden" name="status" value={status} />}
               {method && <input type="hidden" name="method" value={method} />}
-              <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg></span>
-                <input name="q" defaultValue={q} placeholder="Search payment ref, bank ref, customer, transaction, property…" className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-9 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)]" />
-              </div>
-              <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2">Search</button>
-              {(q || status || method) && <Link href="/admin/payments" className="text-xs text-[var(--ops-muted)] self-center underline">Clear</Link>}
+              <input name="q" defaultValue={q} placeholder="Search payment ref, bank ref, customer…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: "12.5px" }} />
+              {(q || status || method) && <Link href="/admin/payments" className="lnk">Clear</Link>}
             </form>
           </div>
-        </div>
-
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm admin-table">
+            <table className="t">
               <thead>
-                <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
-                  <th className="px-4 py-3">Payment Ref</th>
-                  <th className="px-4 py-3">Bank Ref</th>
-                  <th className="px-4 py-3">Receipt</th>
-                  <th className="px-4 py-3">Transaction</th>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Installment</th>
-                  <th className="px-4 py-3 text-right">Amount</th>
-                  <th className="px-4 py-3">Method</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Confirmed By</th>
+                <tr>
+                  <th>Payment Ref</th>
+                  <th>Bank Ref</th>
+                  <th>Receipt</th>
+                  <th>Transaction</th>
+                  <th>Customer</th>
+                  <th>Installment</th>
+                  <th className="r">Amount</th>
+                  <th>Method</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Confirmed By</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--ops-border)]/60">
+              <tbody>
                 {payments.map((p: any) => (
                   <ClickableRow key={p.id} href={`/admin/transactions/${p.transactionId}#payment-${p.id}`}>
-                    <td className="px-4 py-3 font-mono text-[11px] row-lead"><Link href={`/admin/transactions/${p.transactionId}#payment-${p.id}`} className="text-[var(--ops-primary)] hover:underline">{p.paymentReference}</Link></td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-[var(--ops-muted)]">{p.bankReference ?? "-"}</td>
-                    <td className="px-4 py-3 font-mono text-[11px]">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "-"}</td>
-                    <td className="px-4 py-3 font-mono text-[11px]"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><div className="mono text-[10px] text-[var(--ops-muted)]">{p.transaction.estate}</div></td>
-                    <td className="px-4 py-3"><div className="text-[13px] leading-none break-words">{p.transaction.customerName}</div><div className="mono text-[11px] text-[var(--ops-muted)] break-words">{p.transaction.customerEmail}</div></td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.allocations?.length ? p.allocations.map((a: any) => `${a.installment.type === "INITIAL" ? "Initial" : `Month ${a.installment.installmentNumber}`}`).join(", ") : p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "-"}</td>
-                    <td className="px-4 py-3 mono text-[12px] font-medium text-right price">{formatNaira(p.amount)}</td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.paymentMethod ?? "-"}</td>
-                    <td className="px-4 py-3"><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" />{p.correctsPaymentId ? <span className="ml-1 mono text-[10px] px-2 py-1 rounded-full bg-[#E0F2F1] text-[#0D3328] border border-[#B2DFDB]">Corrected</span> : null}</td>
-                    <td className="px-4 py-3 mono text-[11px]">{formatDate(p.paymentDate)}</td>
-                    <td className="px-4 py-3 mono text-[11px]">{p.confirmedBy?.name ?? "-"}</td>
+                    <td className="num"><Link href={`/admin/transactions/${p.transactionId}#payment-${p.id}`} className="row-lead font-medium text-[var(--ops-text)] hover:underline">{p.paymentReference}</Link></td>
+                    <td className="num">{p.bankReference ?? "-"}</td>
+                    <td className="num">{p.receipt ? <Link href={`/admin/receipts/${p.receipt.id}`} className="text-[var(--ops-primary)] hover:underline">{p.receipt.ref}</Link> : "-"}</td>
+                    <td className="num"><Link href={`/admin/transactions/${p.transactionId}`} className="text-[var(--ops-primary)] hover:underline">{p.transaction.ref}</Link><small>{p.transaction.estate}</small></td>
+                    <td><b>{p.transaction.customerName}</b><small>{p.transaction.customerEmail}</small></td>
+                    <td>{p.allocations?.length ? p.allocations.map((a: any) => `${a.installment.type === "INITIAL" ? "Initial" : `Month ${a.installment.installmentNumber}`}`).join(", ") : p.installment ? `${p.installment.type === "INITIAL" ? "Initial" : `Month ${p.installment.installmentNumber}`} #${p.installment.installmentNumber}` : "-"}</td>
+                    <td className="r num">{formatNaira(p.amount)}</td>
+                    <td>{p.paymentMethod ?? "-"}</td>
+                    <td><StatusBadge status={p.status} className="px-2 py-1 text-[10px]" />{p.correctsPaymentId ? <span className="ml-1 mono text-[10px] px-2 py-1 rounded-full bg-[#E0F2F1] text-[#0D3328] border border-[#B2DFDB]">Corrected</span> : null}</td>
+                    <td>{formatDate(p.paymentDate)}</td>
+                    <td>{p.confirmedBy?.name ?? "-"}</td>
                   </ClickableRow>
                 ))}
                 {payments.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-4 py-16 text-center">
-                      <p className="public text-[14px] font-medium">No payments</p>
-                      <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Payments appear here after recording and confirmation.</p>
-                    </td>
+                    <td colSpan={11}><div className="empty">No payments. They appear here after recording and confirmation.</div></td>
                   </tr>
                 )}
               </tbody>

@@ -105,120 +105,106 @@ export default async function AdminReceiptsPage({ searchParams }: { searchParams
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+      <div className="max-w-[1180px] mx-auto px-6 lg:px-7 py-6">
+        <div className="ph">
           <div>
-            <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Receipts</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">All receipts issued from sales: audit trail, resend, and PDF access.</p>
-            <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} receipts · Page {page} of {totalPages}</p>
+            <h1>Receipts</h1>
+            <p>All receipts issued from sales. · {total} receipts · Page {page} of {totalPages}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/admin/inspections" className="mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Inspections conducted</Link>
+          <div className="acts">
+            <Link href="/admin/inspections" className="btn">Inspections conducted</Link>
           </div>
         </div>
 
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4 shadow-[var(--ops-shadow-sm)] mb-4">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex flex-wrap gap-1.5">
-                {[{ label: "All Sources", value: "" }, { label: "Payment", value: "PAYMENT_CONFIRMATION" }, { label: "Booking", value: "BOOKING_FLOW" }, { label: "Manual", value: "ADMIN_MANUAL" }].map((f) => {
-                  const active = (source ?? "") === f.value;
-                  return (
-                    <Link key={f.label} href={`/admin/receipts${buildQuery({ source: f.value || undefined, page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${active ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)]"}`}>{f.label}</Link>
-                  );
-                })}
-                <Link href={`/admin/receipts${buildQuery({ voided: voidedOnly ? undefined : "1", page: "1" })}`} className={`px-3 py-1.5 rounded-full text-xs font-medium border ${voidedOnly ? "bg-red-700 text-white border-red-700" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)]"}`}>Voided</Link>
-              </div>
-            <form className="flex-1 flex gap-2" action="/admin/receipts" method="get">
-              <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
-                  </span>
-                  <input name="q" defaultValue={q} placeholder="Search receipt #, customer, email, property, SKU…" className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-9 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10" />
-                </div>
-                <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)]">Search</button>
-                {(q || source || params.from || params.to || voidedOnly) && <Link href="/admin/receipts" className="text-xs text-[var(--ops-muted)] self-center underline underline-offset-4">Clear</Link>}
-              </form>
-            </div>
-            <form className="flex flex-wrap gap-2 items-center" action="/admin/receipts" method="get">
-              {q && <input type="hidden" name="q" value={q} />}
-              {source && <input type="hidden" name="source" value={source} />}
-              <span className="mono text-[11px] text-[var(--ops-muted)]">Issued from</span>
-              <input type="date" name="from" defaultValue={params.from ?? ""} className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white" />
-              <span className="mono text-[11px] text-[var(--ops-muted)]">to</span>
-              <input type="date" name="to" defaultValue={params.to ?? ""} className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white" />
-              <button type="submit" className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Filter dates</button>
+        <div className="card">
+          <div className="filters">
+            {[{ label: "All sources", value: "" }, { label: "Payment", value: "PAYMENT_CONFIRMATION" }, { label: "Booking", value: "BOOKING_FLOW" }, { label: "Manual", value: "ADMIN_MANUAL" }].map((f) => {
+              const active = (source ?? "") === f.value;
+              return (
+                <Link key={f.label} href={`/admin/receipts${buildQuery({ source: f.value || undefined, page: "1" })}`} className={`fp${active ? " on" : ""}`}>{f.label}</Link>
+              );
+            })}
+            <Link href={`/admin/receipts${buildQuery({ voided: voidedOnly ? undefined : "1", page: "1" })}`} className={`fp${voidedOnly ? " on" : ""}`}>Voided</Link>
+            <form className="fs" style={{ flex: 1 }} action="/admin/receipts" method="get">
+              <input name="q" defaultValue={q} placeholder="Search receipt #, customer, email, property, SKU…" style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: "12.5px" }} />
+              {(q || source || params.from || params.to || voidedOnly) && <Link href="/admin/receipts" className="lnk">Clear</Link>}
             </form>
           </div>
+          <form className="filters" style={{ borderTop: "none", paddingTop: 0 }} action="/admin/receipts" method="get">
+            {q && <input type="hidden" name="q" value={q} />}
+            {source && <input type="hidden" name="source" value={source} />}
+            <span className="mono text-[11px] text-[var(--ops-muted)]">Issued from</span>
+            <input type="date" name="from" defaultValue={params.from ?? ""} className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white" />
+            <span className="mono text-[11px] text-[var(--ops-muted)]">to</span>
+            <input type="date" name="to" defaultValue={params.to ?? ""} className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white" />
+            <button type="submit" className="btn sm">Filter dates</button>
+          </form>
         </div>
 
-        <div className="hidden lg:block bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
+        <div className="hidden lg:block card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm admin-table">
+            <table className="t">
               <thead>
-                <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left">
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Receipt #</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Customer</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Property</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Transaction</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Amount</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Issued</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Emailed</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Source</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)] text-right">Actions</th>
+                <tr>
+                  <th>Receipt #</th>
+                  <th>Customer</th>
+                  <th>Property</th>
+                  <th>Transaction</th>
+                  <th>Amount</th>
+                  <th>Issued</th>
+                  <th>Emailed</th>
+                  <th>Source</th>
+                  <th className="r">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--ops-border)]/60">
+              <tbody>
                 {receipts.map((r) => (
-                  <tr key={r.id} className="hover:bg-[var(--ops-bg)]/50">
-                    <td className="px-4 py-3">
-                      <Link href={`/admin/receipts/${r.id}`} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline">{r.ref}</Link>
-                      <div className="mono text-[10px] text-[var(--ops-muted)]">{r.plotCode ?? ""}</div>
-                      {(r as any).voidedAt ? <span className="mono text-[10px] px-1.5 py-0.5 rounded-full bg-red-700 text-white">VOID</span> : ""}
+                  <tr key={r.id} className="clk">
+                    <td>
+                      <Link href={`/admin/receipts/${r.id}`} className="row-lead num font-medium text-[var(--ops-primary)] hover:underline">{r.ref}</Link>
+                      <small>{r.plotCode ?? ""}</small>
+                      {(r as any).voidedAt ? <span className="chip red">VOID</span> : ""}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-words">{r.customerName}</div>
-                      <div className="text-[12px] text-[var(--ops-muted)] break-words">{r.customerEmail}</div>
-                      {r.customerPhone && <div className="text-[11px] text-[var(--ops-muted)]">{r.customerPhone}</div>}
+                    <td>
+                      <b>{r.customerName}</b>
+                      <small>{r.customerEmail}</small>
+                      {r.customerPhone && <small>{r.customerPhone}</small>}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-[13px] text-[var(--ops-text)] leading-tight break-words max-w-[180px]">{r.property}</div>
-                      <div className="mono text-[10px] text-[var(--ops-muted)]">{r.estate ?? ""}{r.estate && r.plotCode ? " · " + r.plotCode : r.plotCode ?? ""}</div>
+                    <td>
+                      <div className="break-words max-w-[180px]">{r.property}</div>
+                      <small>{r.estate ?? ""}{r.estate && r.plotCode ? " · " + r.plotCode : r.plotCode ?? ""}</small>
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       {(r as any).transactionId ? (
-                        <Link href={`/admin/transactions/${(r as any).transactionId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).transaction?.ref ?? "-"}</Link>
+                        <Link href={`/admin/transactions/${(r as any).transactionId}`} className="num text-[var(--ops-primary)] hover:underline">{(r as any).transaction?.ref ?? "-"}</Link>
                       ) : r.bookingId ? (
-                        <Link href={`/admin/bookings/${r.bookingId}`} className="font-mono text-[11px] text-[var(--ops-primary)] hover:underline">{(r as any).booking?.ref ?? "-"}</Link>
+                        <Link href={`/admin/bookings/${r.bookingId}`} className="num text-[var(--ops-primary)] hover:underline">{(r as any).booking?.ref ?? "-"}</Link>
                       ) : (
                         <span className="mono text-[11px] text-[var(--ops-muted)]">-</span>
                       )}
-                      <div className="mono text-[10px] text-[var(--ops-muted)]">{r.source === "ADMIN_MANUAL" ? "Manual" : "Booking"}</div>
+                      <small>{r.source === "ADMIN_MANUAL" ? "Manual" : "Booking"}</small>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="mono text-[12px] font-medium text-[var(--ops-text)] price">{formatNaira(r.finalAmount)}</div>
-                      {r.discount > 0 && <div className="mono text-[10px] text-[var(--ops-muted)]">Discount {formatNaira(r.discount)}</div>}
-                      <div className="mono text-[10px] text-[var(--ops-muted)]">Before {formatNaira(r.amountBeforeDiscount)}</div>
+                    <td>
+                      <div className="num price">{formatNaira(r.finalAmount)}</div>
+                      {r.discount > 0 && <small>Discount {formatNaira(r.discount)}</small>}
+                      <small>Before {formatNaira(r.amountBeforeDiscount)}</small>
                     </td>
-                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{formatDate(r.issuedAt)}</td>
-                    <td className="px-4 py-3 mono text-[11px] text-[var(--ops-muted)]">{r.sentAt ? formatDateTime(r.sentAt) : <span className="text-[#92400E]">Not emailed</span>}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-medium border ${r.source === "ADMIN_MANUAL" ? "bg-[#16281F] text-[#D4B368] border-[#16281F]" : "bg-[#E0F2F1] text-[#0D3328] border-[#B2DFDB]"}`}>{r.source === "ADMIN_MANUAL" ? "Manual" : r.source === "PAYMENT_CONFIRMATION" ? "Payment" : "Booking"}</span>
+                    <td>{formatDate(r.issuedAt)}</td>
+                    <td>{r.sentAt ? formatDateTime(r.sentAt) : <span className="chip gold">Not emailed</span>}</td>
+                    <td>
+                      <span className={`chip ${r.source === "ADMIN_MANUAL" ? "dark" : "lg"}`}>{r.source === "ADMIN_MANUAL" ? "Manual" : r.source === "PAYMENT_CONFIRMATION" ? "Payment" : "Booking"}</span>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="r">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Link href={`/admin/receipts/${r.id}`} className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 hover:bg-[var(--ops-bg)]">View</Link>
-                        <a href={`/api/admin/receipts/${r.ref}/pdf`} target="_blank" className="text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-1.5 hover:bg-[var(--ops-bg)]">PDF</a>
+                        <Link href={`/admin/receipts/${r.id}`} className="btn sm">View</Link>
+                        <a href={`/api/admin/receipts/${r.ref}/pdf`} target="_blank" className="btn sm">PDF</a>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {receipts.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-16 text-center">
-                      <p className="public text-[14px] font-medium text-[var(--ops-text)]">No receipts found</p>
-                      <p className="mono text-[11px] text-[var(--ops-muted)] mt-1">Receipts appear here after you mark an inspection as Sold and the receipt is issued.</p>
-                    </td>
+                    <td colSpan={9}><div className="empty">No receipts found. Receipts appear here after you mark an inspection as Sold and the receipt is issued.</div></td>
                   </tr>
                 )}
               </tbody>

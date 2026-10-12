@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import StatusBadge from "@/components/admin/StatusBadge";
+import { WarnIcon } from "@/components/admin/icons";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
@@ -36,12 +37,16 @@ export default async function TransactionDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ history?: string }>;
+  searchParams?: Promise<{ history?: string; tab?: string }>;
 }) {
   const session = await auth();
   if (!isInternalRole(session?.user?.role)) redirect("/admin/login");
   const { id } = await params;
-  const showAll = (await searchParams)?.history === "all";
+  const sp = await searchParams;
+  const showAll = sp?.history === "all";
+  const tab = ["overview", "payments", "documents", "ledger", "activity"].includes(sp?.tab ?? "")
+    ? (sp?.tab as string)
+    : "overview";
   const transaction = await prisma.transaction.findUnique({
     where: { id },
     include: {
@@ -67,7 +72,16 @@ export default async function TransactionDetailPage({
   // Money figures come from the finance service (rule 3) — same numbers as
   // the dashboard and sidebar. Stored columns are display cache only.
   // Detail pages audit any row (includeTest); lists/metrics hide fixtures.
-  const summary = await getTransactionSummary(transaction.id, undefined, undefined, { includeTest: true });
+  // Independent reads run together: each DB round trip costs a full RTT, so
+  // awaiting them one by one adds seconds to this page.
+  const [summary, correctAudits, preview] = await Promise.all([
+    getTransactionSummary(transaction.id, undefined, undefined, { includeTest: true }),
+    prisma.auditEvent.findMany({
+      where: { entityId: { in: transaction.payments.map((p: any) => p.id) }, action: "payment.correct" },
+      select: { entityId: true, actorName: true, createdAt: true, after: true },
+    }),
+    buildStatementModel(prisma as never, { transactionId: transaction.id, draft: true }),
+  ]);
   if (!summary) notFound();
   const overdueCount = summary.overdueCount;
   const progress = summary.progressPct.toFixed(2);
@@ -85,10 +99,6 @@ export default async function TransactionDetailPage({
   const confirmedSum = effectivePayments
     .filter((p: any) => p.status === "CONFIRMED")
     .reduce((s: number, p: any) => s + p.amount, 0);
-  const correctAudits = await prisma.auditEvent.findMany({
-    where: { entityId: { in: transaction.payments.map((p: any) => p.id) }, action: "payment.correct" },
-    select: { entityId: true, actorName: true, createdAt: true, after: true },
-  });
   const correctAuditByPayment = new Map(correctAudits.map((a) => [a.entityId, a]));
 
   const instLabelOf = (n: number, type: string) => installmentAppliedLabel(n, type);
@@ -156,68 +166,90 @@ export default async function TransactionDetailPage({
   // (buildStatementModel: ledger service only, contract fallback, shared
   // ordering, exclusions) with the SAME formatters — page and PDF can never
   // disagree. The internal table below shows the full unfiltered ledger.
-  const preview = await buildStatementModel(prisma as never, { transactionId: transaction.id, draft: true });
+  // (Built in the Promise.all above, alongside the summary and audits.)
+  const unmatchedCount = effectivePayments.filter(
+    (p) => !(p.verificationNote ?? "").includes("Reconciled:")
+  ).length;
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        <div className="flex items-center gap-2 mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mb-4">
-          <Link href="/admin/transactions" className="hover:text-[var(--ops-text)] flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg> Transactions</Link>
-          <span className="text-[var(--ops-border)]">/</span>
-          <span className="text-[var(--ops-text)] font-medium tracking-normal normal-case mono text-[11px]">{transaction.ref}</span>
+      <div className="max-w-[1180px] mx-auto px-6 lg:px-7 py-6">
+        <Link href="/admin/transactions" className="back">← TRANSACTIONS</Link>
+
+        <div className="card hdr">
+          <div className="hdr-top">
+            <div>
+              <h1>{formatDisplayName(transaction.customerName)} <StatusBadge status={transaction.status} className="px-3 py-1 text-xs" /></h1>
+              <div className="sub mono">{transaction.ref} · {transaction.estate}{transaction.unitType ? ` · ${transaction.unitType}` : ""}{transaction.plotCode ? ` · ${transaction.plotCode}` : ""}{transaction.booking ? <> · <Link href={`/admin/bookings/${transaction.booking.id}`} className="text-[var(--ops-primary)] hover:underline">Booking {transaction.booking.ref} ↗</Link></> : transaction.manualReason ? ` · Manual: ${transaction.manualReason}` : ""}</div>
+            </div>
+            <div className="acts">
+              <a href="#schedule" className="btn pri">Record payment</a>
+            </div>
+          </div>
+          <div className="stats">
+            <div className="stat"><small>Total price</small><b className="price">{formatNaira(transaction.totalPayable)}</b><span>{transaction.plotQuantity} plot{transaction.plotQuantity > 1 ? "s" : ""}</span></div>
+            <div className="stat"><small>Paid</small><b className="price">{formatNaira(totalPaid)}</b><span>{effectivePayments.length} payments</span></div>
+            <div className="stat dk"><small>Outstanding</small><b className="price">{outstanding < 0 ? `Credit ${formatNaira(-outstanding)}` : formatNaira(outstanding)}</b><span>{progress}% paid</span></div>
+            <div className="stat"><small>Next due</small><b className="price">{nextDue ? formatNaira(nextDue.amountDue) : "—"}</b><span>{nextDue ? `${nextDue.type === "INITIAL" ? "Initial" : `Month ${nextDue.number}`} · ${formatDate(nextDue.dueDate)}${nextDueDays ? ` · ${nextDueDays}` : ""}` : "Fully paid"}</span></div>
+          </div>
+          <div className="bar"><i style={{ width: `${Math.min(100, Number(progress))}%` }} /></div>
+          <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Created {formatDateTime(transaction.createdAt)} · {transaction.installments.length} installments · {overdueCount} overdue</div>
         </div>
 
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 lg:p-7 shadow-[var(--ops-shadow-sm)]">
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-            <div className="min-w-0 flex-1">
-              <div className="mono text-[11px] tracking-[0.14em] uppercase text-[var(--ops-muted)]">Transaction</div>
-              <div className="flex flex-wrap items-baseline gap-3 mt-1">
-                <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{transaction.ref}</h1>
-                <StatusBadge status={transaction.status} className="px-3 py-1.5 text-xs" />
-                {transaction.booking && <Link href={`/admin/bookings/${transaction.booking.id}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">Booking {transaction.booking.ref} ↗</Link>}
-                {!transaction.booking && transaction.manualReason && <span className="mono text-[11px] text-[var(--ops-muted)]">Manual: {transaction.manualReason}</span>}
-              </div>
-              <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">Created {formatDateTime(transaction.createdAt)} · {transaction.installments.length} installments · {overdueCount} overdue</div>
-            </div>
-          </div>
-
-          <div className="mt-6 grid lg:grid-cols-3 gap-6">
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-4">
-              <div className="mono text-[10px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Client</div>
-              <div className="font-medium mt-1">{formatDisplayName(transaction.customerName)}</div>
-              <div className="mono text-[12px] text-[var(--ops-muted)]">{transaction.customerEmail}</div>
-              {transaction.customerPhone && <div className="mono text-[12px] text-[var(--ops-muted)]">{transaction.customerPhone}</div>}
-              <Link href={`/admin/search?q=${encodeURIComponent(transaction.customerEmail)}`} className="mono text-[11px] text-[var(--ops-primary)] hover:underline">Customer ↗</Link>
-            </div>
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-4">
-              <div className="mono text-[10px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Property</div>
-              <div className="font-medium mt-1">{transaction.estate} {transaction.unitType ? `· ${transaction.unitType}` : ""}</div>
-              <div className="mono text-[12px] text-[var(--ops-muted)]">{transaction.plotCode ?? ""} {transaction.sqm ? `· ${transaction.sqm}sqm` : ""} · {transaction.plotQuantity} plot{transaction.plotQuantity > 1 ? "s" : ""} · {formatNaira(transaction.unitPrice)} each</div>
-            </div>
-            <div className="bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-xl p-4">
-              <div className="mono text-[10px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment Plan</div>
-              <div className="font-medium mt-1">{transaction.paymentPlan.name}</div>
-              <div className="mono text-[12px] text-[var(--ops-muted)]">{Number(transaction.interestRate) > 0 ? `${Number(transaction.interestRate)}% interest` : "0%"} · {transaction.paymentPlan.initialPaymentPercentage}% initial · {transaction.paymentPlan.remainingInstallments} monthly</div>
-            </div>
-          </div>
-
-          {/* Summary strip: one place for the money — total · paid · outstanding · progress · next due */}
-          <div className="mt-6 bg-[#16281F] rounded-xl p-4 lg:p-5 text-white">
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div><div className="mono text-[10px] uppercase text-[#D4B368]">Total price</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(transaction.totalPayable)}</div></div>
-              <div><div className="mono text-[10px] uppercase text-[#D4B368]">Paid</div><div className="price fraunces text-[18px] font-bold mt-1">{formatNaira(totalPaid)}</div></div>
-              <div><div className="mono text-[10px] uppercase text-white">Outstanding</div><div className="price fraunces text-[18px] font-bold mt-1">{outstanding < 0 ? `Credit ${formatNaira(-outstanding)}` : formatNaira(outstanding)}</div></div>
-            </div>
-            <div className="mt-3 h-[6px] rounded-full bg-white/15 overflow-hidden">
-              <div className="h-full rounded-full bg-[#D4B368]" style={{ width: `${Math.min(100, Number(progress))}%` }} />
-            </div>
-            <div className="mono text-[11px] text-white/70 mt-2">{progress}% paid{nextDue ? ` · Next due: ${nextDue.type === "INITIAL" ? "Initial" : `Month ${nextDue.number}`} ${formatNaira(nextDue.amountDue)} on ${formatDate(nextDue.dueDate)}${nextDueDays ? ` · ${nextDueDays}` : ""}` : " · Fully paid"}</div>
-          </div>
+        <div className="tabs sticky top-16 z-10" style={{ overflowX: "auto" }}>
+          {(
+            [
+              ["overview", "Overview", null],
+              ["payments", "Payments", effectivePayments.length],
+              ["documents", "Documents", null],
+              ["ledger", "Ledger", null],
+              ["activity", "Activity", null],
+            ] as [string, string, number | null][]
+          ).map(([v, label, n]) => (
+            <Link key={v} href={`/admin/transactions/${transaction.id}?tab=${v}${showAll ? "&history=all" : ""}`} className={`tab${tab === v ? " on" : ""}`}>
+              {label}{n !== null ? <em>{n}</em> : ""}
+            </Link>
+          ))}
+          <div className="sp" />
+          <a href="#schedule" className="btn pri sm" style={{ marginBottom: 6, flexShrink: 0 }}>Record payment</a>
         </div>
 
-        <div className="mt-6 grid lg:grid-cols-[1.6fr_1fr] gap-6 items-start">
-          <div className="space-y-6">
-            <PaymentSchedule
+        {tab === "overview" && (
+          <div className="space-y-4">
+            {preview.contractAssumed && (
+              <div className="attn"><WarnIcon size={14} /><span><b>Contract date is assumed from the first payment ({preview.contractDate}).</b> The sale itself may be older — a payment date only says when money arrived. Set the real sale date so the statement starts in the right place.</span><span className="sp" /><a href="#corrections" className="btn sm">Set date</a></div>
+            )}
+            {unmatchedCount > 0 && (
+              <div className="attn"><WarnIcon size={14} /><span><b>{unmatchedCount} payment date{unmatchedCount === 1 ? "" : "s"} not matched to the bank statement.</b></span><span className="sp" /><Link href={`/admin/transactions/${transaction.id}?tab=payments`} className="btn sm">Review payments</Link></div>
+            )}
+            <CorrectionsPanel
+              transactionId={transaction.id}
+              transactionRef={transaction.ref}
+              customerEmail={transaction.customerEmail}
+              contractDate={transaction.contractDate}
+              payments={transaction.payments.map((p: any) => ({
+                id: p.id,
+                amount: p.amount,
+                paymentDate: p.paymentDate,
+                paymentReference: p.paymentReference,
+                status: p.status,
+                notes: p.notes,
+                verificationNotes: p.verificationNotes,
+                verificationNote: p.verificationNote,
+                correctsPaymentId: p.correctsPaymentId,
+              }))}
+              receipts={transaction.receipts.map((r: any) => ({
+                id: r.id,
+                ref: r.ref,
+                paymentId: r.paymentId,
+                voidedAt: r.voidedAt,
+                sentAt: r.sentAt,
+                replacedBy: r.replacedBy ?? null,
+              }))}
+              latestStatementNumber={transaction.statements[0]?.number ?? null}
+              draft={`Dear ${formatDisplayName(transaction.customerName).split(" ")[0]}, while reconciling your account we corrected how some of your payments were recorded. Your total payments of ${formatNaira(confirmedSum)} are unchanged. The attached receipts replace the earlier ones which showed different amounts, and the corrected statement shows your full position. Please disregard the earlier receipts. Your outstanding balance is ${outstanding < 0 ? `a credit of ${formatNaira(-outstanding)}` : formatNaira(outstanding)}. Contact us on +234 8103760063 if anything looks different from your records.`}
+            />
+            <div id="schedule" className="scroll-mt-24">            <PaymentSchedule
               transactionId={transaction.id}
               installments={summary.installments.map((i) => ({
                 id: i.id,
@@ -246,100 +278,25 @@ export default async function TransactionDetailPage({
               receipts={transaction.receipts.map((r: any) => ({ id: r.id, paymentId: r.paymentId }))}
               outstanding={outstanding}
               totals={{ totalPaid, totalPayable: transaction.totalPayable }}
-            />
-
-            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Statement preview (effective — matches the PDF)</h2>
-              {preview.contractAssumed && (
-                <p className="mono text-[11px] text-[#92400E] mt-2">Contract date assumed ({preview.contractDate}, earliest payment) — set the real sale date.</p>
-              )}
-              {preview.rows.length === 0 ? (
-                <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No ledger entries yet.</p>
-              ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm min-w-[560px]">
-                    <thead>
-                      <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
-                        <th className="px-3 py-2">Date</th><th className="px-3 py-2">Details</th><th className="px-3 py-2 text-right">Charges</th><th className="px-3 py-2 text-right">Payments</th><th className="px-3 py-2 text-right">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--ops-border)]/60">
-                      {preview.rows.map((r, i) => (
-                        <tr key={i} className="hover:bg-[var(--ops-bg)]/30">
-                          <td className="px-3 py-2 mono text-[11px]">{r.date}</td>
-                          <td className="px-3 py-2 text-[13px]">{r.line1}{r.line2 ? <div className="mono text-[10px] text-[var(--ops-muted)]">{r.line2}</div> : null}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{statementFmt.cell(r.charge)}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{statementFmt.cell(r.payment)}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{statementFmt.money(r.balance)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <p className="mono text-[11px] text-[var(--ops-muted)] mt-2">
-                Closing {statementFmt.money(preview.closing.balance)} · Total charges {statementFmt.cell(preview.totals.charges)} · Total paid {statementFmt.cell(preview.totals.payments)}
-              </p>
-              <p className="mono text-[10px] text-[var(--ops-muted)] mt-1">Client view: superseded entries excluded, no corrections note — exactly what the issued PDF shows. Generate a statement below for the PDF.</p>
+            /></div>
+            <div className="card">
+              <div className="card-h"><h3>Latest payments</h3><Link href={`/admin/transactions/${transaction.id}?tab=payments`} className="lnk">All {effectivePayments.length} →</Link></div>
+            {[...effectivePayments].slice(-3).reverse().map((p) => (
+              <div key={p.id} className="row">
+                <div className="tx"><b className="price">{formatNaira(p.amount)}</b><small>{formatDate(p.paymentDate)} · {p.paymentMethod ?? "Bank transfer"}</small></div>
+                <StatusBadge status={p.status} className="px-2 py-0.5 text-[10px]" />
+              </div>
+            ))}
             </div>
-
-            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Internal ledger (full history)</h2>
-              {transaction.ledgerEntries.length === 0 ? (
-                <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No ledger entries yet.</p>
-              ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm min-w-[560px]">
-                    <thead>
-                      <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
-                        <th className="px-3 py-2">Date</th><th className="px-3 py-2">Details</th><th className="px-3 py-2 text-right">Charges</th><th className="px-3 py-2 text-right">Payments</th><th className="px-3 py-2 text-right">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--ops-border)]/60">
-                      {buildStatementRows(transaction.ledgerEntries.map((e) => ({
-                        id: e.id,
-                        type: e.type,
-                        amount: e.amount,
-                        direction: e.direction,
-                        effectiveDate: e.effectiveDate,
-                        createdAt: e.createdAt,
-                        method: e.method,
-                        bankReference: e.bankReference,
-                      }))).rows.map((r, i) => (
-                        <tr key={i} className="hover:bg-[var(--ops-bg)]/30">
-                          <td className="px-3 py-2 mono text-[11px]">{r.date}</td>
-                          <td className="px-3 py-2 text-[13px]">{r.details}{r.line2 ? <div className="mono text-[10px] text-[var(--ops-muted)]">{r.line2}</div> : null}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{r.debit != null ? formatNaira(r.debit) : "-"}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{r.credit != null ? formatNaira(r.credit) : "-"}</td>
-                          <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(r.balance)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <p className="mono text-[10px] text-[var(--ops-muted)] mt-2">Internal view: includes reversed entries. The client statement shows the effective ledger only.</p>
-            </div>
-
-            <StatementsPanel
-              transactionId={transaction.id}
-              transactionRef={transaction.ref}
-              statements={transaction.statements.map((s: any) => ({
-                id: s.id,
-                number: s.number,
-                asAt: formatDate(s.asAt),
-                closingBalance: s.closingBalance,
-                emailed: s.emailSentAt ? { at: formatDateTime(s.emailSentAt), to: s.emailRecipient ?? "-" } : null,
-                defaultTo: transaction.customerEmail,
-              }))}
-            />
-
+          </div>
+        )}
+        {tab === "payments" && (
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Payment History</h2>
                 {supersededPayments.length > 0 && (
                   <Link
-                    href={showAll ? `/admin/transactions/${transaction.id}` : `/admin/transactions/${transaction.id}?history=all`}
+                    href={showAll ? `/admin/transactions/${transaction.id}?tab=payments` : `/admin/transactions/${transaction.id}?tab=payments&history=all`}
                     className="mono text-[11px] text-[var(--ops-primary)] hover:underline underline-offset-4"
                   >
                     {showAll ? "Hide superseded entries" : `Show superseded entries (${supersededPayments.length})`}
@@ -437,36 +394,10 @@ export default async function TransactionDetailPage({
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="space-y-6">
-            <CorrectionsPanel
-              transactionId={transaction.id}
-              transactionRef={transaction.ref}
-              customerEmail={transaction.customerEmail}
-              contractDate={transaction.contractDate}
-              payments={transaction.payments.map((p: any) => ({
-                id: p.id,
-                amount: p.amount,
-                paymentDate: p.paymentDate,
-                paymentReference: p.paymentReference,
-                status: p.status,
-                notes: p.notes,
-                verificationNotes: p.verificationNotes,
-                verificationNote: p.verificationNote,
-                correctsPaymentId: p.correctsPaymentId,
-              }))}
-              receipts={transaction.receipts.map((r: any) => ({
-                id: r.id,
-                ref: r.ref,
-                paymentId: r.paymentId,
-                voidedAt: r.voidedAt,
-                sentAt: r.sentAt,
-                replacedBy: r.replacedBy ?? null,
-              }))}
-              latestStatementNumber={transaction.statements[0]?.number ?? null}
-              draft={`Dear ${formatDisplayName(transaction.customerName).split(" ")[0]}, while reconciling your account we corrected how some of your payments were recorded. Your total payments of ${formatNaira(confirmedSum)} are unchanged. The attached receipts replace the earlier ones which showed different amounts, and the corrected statement shows your full position. Please disregard the earlier receipts. Your outstanding balance is ${outstanding < 0 ? `a credit of ${formatNaira(-outstanding)}` : formatNaira(outstanding)}. Contact us on +234 8103760063 if anything looks different from your records.`}
-            />
+        )}
+        {tab === "documents" && (
+          <div className="space-y-4">
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
               {transaction.receipts.length === 0 ? (
                 <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No receipts yet.</p>
@@ -486,9 +417,104 @@ export default async function TransactionDetailPage({
                 </div>
               )}
             </div>
+
+            <StatementsPanel
+              transactionId={transaction.id}
+              transactionRef={transaction.ref}
+              statements={transaction.statements.map((s: any) => ({
+                id: s.id,
+                number: s.number,
+                asAt: formatDate(s.asAt),
+                closingBalance: s.closingBalance,
+                emailed: s.emailSentAt ? { at: formatDateTime(s.emailSentAt), to: s.emailRecipient ?? "-" } : null,
+                defaultTo: transaction.customerEmail,
+              }))}
+            />
+          </div>
+        )}
+        {tab === "ledger" && (
+          <div className="space-y-4">
+            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Statement preview (effective — matches the PDF)</h2>
+              {preview.contractAssumed && (
+                <p className="mono text-[11px] text-[#92400E] mt-2">Contract date assumed ({preview.contractDate}, earliest payment) — set the real sale date.</p>
+              )}
+              {preview.rows.length === 0 ? (
+                <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No ledger entries yet.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
+                        <th className="px-3 py-2">Date</th><th className="px-3 py-2">Details</th><th className="px-3 py-2 text-right">Charges</th><th className="px-3 py-2 text-right">Payments</th><th className="px-3 py-2 text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--ops-border)]/60">
+                      {preview.rows.map((r, i) => (
+                        <tr key={i} className="hover:bg-[var(--ops-bg)]/30">
+                          <td className="px-3 py-2 mono text-[11px]">{r.date}</td>
+                          <td className="px-3 py-2 text-[13px]">{r.line1}{r.line2 ? <div className="mono text-[10px] text-[var(--ops-muted)]">{r.line2}</div> : null}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{statementFmt.cell(r.charge)}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{statementFmt.cell(r.payment)}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{statementFmt.money(r.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="mono text-[11px] text-[var(--ops-muted)] mt-2">
+                Closing {statementFmt.money(preview.closing.balance)} · Total charges {statementFmt.cell(preview.totals.charges)} · Total paid {statementFmt.cell(preview.totals.payments)}
+              </p>
+              <p className="mono text-[10px] text-[var(--ops-muted)] mt-1">Client view: superseded entries excluded, no corrections note — exactly what the issued PDF shows. Generate a statement below for the PDF.</p>
+            </div>
+
+            <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
+              <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Internal ledger (full history)</h2>
+              {transaction.ledgerEntries.length === 0 ? (
+                <p className="mono text-[11px] text-[var(--ops-muted)] mt-3">No ledger entries yet.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead>
+                      <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left mono text-[10px] uppercase text-[var(--ops-muted)]">
+                        <th className="px-3 py-2">Date</th><th className="px-3 py-2">Details</th><th className="px-3 py-2 text-right">Charges</th><th className="px-3 py-2 text-right">Payments</th><th className="px-3 py-2 text-right">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--ops-border)]/60">
+                      {buildStatementRows(transaction.ledgerEntries.map((e) => ({
+                        id: e.id,
+                        type: e.type,
+                        amount: e.amount,
+                        direction: e.direction,
+                        effectiveDate: e.effectiveDate,
+                        createdAt: e.createdAt,
+                        method: e.method,
+                        bankReference: e.bankReference,
+                      }))).rows.map((r, i) => (
+                        <tr key={i} className="hover:bg-[var(--ops-bg)]/30">
+                          <td className="px-3 py-2 mono text-[11px]">{r.date}</td>
+                          <td className="px-3 py-2 text-[13px]">{r.details}{r.line2 ? <div className="mono text-[10px] text-[var(--ops-muted)]">{r.line2}</div> : null}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{r.debit != null ? formatNaira(r.debit) : "-"}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{r.credit != null ? formatNaira(r.credit) : "-"}</td>
+                          <td className="px-3 py-2 mono text-[11px] text-right price">{formatNaira(r.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="mono text-[10px] text-[var(--ops-muted)] mt-2">Internal view: includes reversed entries. The client statement shows the effective ledger only.</p>
+            </div>
+
+
+          </div>
+        )}
+        {tab === "activity" && (
+          <div className="card pad">
             <ActivitySection entityType="transaction" entityId={transaction.id} />
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { allOutcomes, allStatuses, allTemperatures, formatDate } from "@/lib/boo
 import AdminPagination from "@/components/admin/AdminPagination";
 import AdminListCard from "@/components/admin/AdminListCard";
 import StatusBadge from "@/components/admin/StatusBadge";
+import { WarnIcon } from "@/components/admin/icons";
 import { lagosDayKey, lagosTodayInput } from "@/lib/time";
 import { phonesMatch } from "@/lib/phone";
 
@@ -44,7 +45,7 @@ function AgentCell({ agent, customerEmail, customerPhone }: { agent: { name: str
           </span>
           {selfAssigned && (
             <span className="mt-1 inline-flex w-fit px-1.5 py-0.5 rounded-full text-[10px] leading-none border font-medium bg-[#FEF2F2] text-[#9F1239] border-[#FECACA]">
-              ⚠ Same as customer
+              <span className="inline-flex items-center gap-1"><WarnIcon size={10} /> Same as customer</span>
             </span>
           )}
         </div>
@@ -193,193 +194,166 @@ export default async function AdminBookingsPage({
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        {/* Header — command center */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+      <div className="max-w-[1180px] mx-auto px-6 lg:px-7 py-6">
+        <div className="ph">
           <div>
-            <h1 className="font-serif text-[28px] lg:text-[32px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">Inspection Bookings</h1>
-            <p className="public text-[13px] leading-[1.5] text-[var(--ops-muted)] mt-2">Manage inspections, appointments, leads and booking activity.</p>
-            <p className="mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mt-1">{total} bookings · Page {page} of {totalPages}</p>
+            <h1>Bookings</h1>
+            <p>Inspection requests, from first contact to outcome. · {total} bookings · Page {page} of {totalPages}</p>
           </div>
-          <div className="flex items-center gap-2.5">
-            <Link href="/admin/inspections" className="hidden lg:inline-flex items-center gap-1.5 mono text-[11px] tracking-wide uppercase bg-white border border-[var(--ops-border)] text-[var(--ops-text)] rounded-full px-4 py-2.5 hover:bg-[var(--ops-bg)]">
-              Inspections conducted →
-            </Link>
+          <div className="acts">
+            <Link href="/admin/inspections" className="btn">Inspections conducted →</Link>
             <a
               href={`/api/admin/bookings/export${buildQuery({ page: undefined })}`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium bg-white border border-[var(--ops-border)] text-[var(--ops-text)] rounded-full px-4 py-2.5 hover:bg-[var(--ops-bg)] hover:border-[var(--ops-border-strong)] transition-colors"
+              className="btn"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/></svg>
               Export
             </a>
             <Link
               href="/book-inspection"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 hover:bg-[var(--ops-deep)] transition-colors shadow-sm"
+              className="btn pri"
             >
               <span className="text-[16px] leading-none">+</span> New Booking
             </Link>
           </div>
         </div>
 
-        {/* Filter Bar — premium */}
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-4 shadow-[var(--ops-shadow-sm)] mb-4">
-          <div className="flex flex-col xl:flex-row gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap gap-1.5">
-                {statusFilters.map((f) => {
-                  const active = (params.status ?? "") === f.value;
-                  return (
-                    <Link
-                      key={f.label}
-                      href={`/admin/bookings${buildQuery({ status: f.value || undefined, page: "1" })}`}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)] hover:border-[var(--ops-border-strong)] hover:text-[var(--ops-text)]"}`}
-                    >
-                      {f.label}
-                    </Link>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] self-center mr-1">Lead:</span>
-                {[
-                  { label: "All", value: "" },
-                  { label: "Hot", value: "hot" },
-                  { label: "Warm", value: "warm" },
-                  { label: "Cold", value: "cold" },
-                ].map((f) => {
-                  const active = (params.leadTemperature ?? "") === f.value;
-                  return (
-                    <Link
-                      key={f.label}
-                      href={`/admin/bookings${buildQuery({ leadTemperature: f.value || undefined, page: "1" })}`}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : f.value === "hot" ? "bg-[#FEF2F2] text-[#9F1239] border-[#FECACA] hover:bg-[#FEE2E2]" : f.value === "warm" ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A] hover:bg-[#FEF3C7]" : f.value === "cold" ? "bg-[#F1F3F2] text-[#4B5563] border-[#E3E6E1] hover:bg-[#E8ECEE]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}
-                    >
-                      {f.label}
-                    </Link>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] self-center mr-1">Outcome:</span>
-                {[
-                  { label: "All", value: "" },
-                  { label: "Sold", value: "sold" },
-                  { label: "Interested", value: "interested" },
-                  { label: "Not sold", value: "not_sold" },
-                ].map((f) => {
-                  const active = (params.outcome ?? "") === f.value;
-                  return (
-                    <Link
-                      key={f.label}
-                      href={`/admin/bookings${buildQuery({ outcome: f.value || undefined, page: "1" })}`}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${active ? "bg-[var(--ops-primary)] text-white border-[var(--ops-primary)]" : f.value === "sold" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0] hover:bg-[#D1FAE5]" : f.value === "interested" ? "bg-[#C89B3C] text-white border-[#C89B3C] hover:bg-[#B08A35]" : f.value === "not_sold" ? "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB] hover:bg-[#E5E7EB]" : "bg-white border-[var(--ops-border)] text-[var(--ops-muted)]"}`}
-                    >
-                      {f.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-
-            <form className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start xl:justify-end" action="/admin/bookings" method="get">
-              {params.status && <input type="hidden" name="status" value={params.status} />}
-              {params.leadTemperature && <input type="hidden" name="leadTemperature" value={params.leadTemperature} />}
-              {params.outcome && <input type="hidden" name="outcome" value={params.outcome} />}
-              <select
-                name="agentId"
-                defaultValue={params.agentId ?? ""}
-                className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white w-full sm:w-auto sm:min-w-[140px] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10"
-              >
-                <option value="">All agents</option>
-                {agentsForFilter.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-1.5 text-xs bg-white border border-[var(--ops-border)] rounded-full px-3 py-2 cursor-pointer hover:bg-[var(--ops-bg)] w-full sm:w-auto">
-                <input type="checkbox" name="missingAgent" value="1" defaultChecked={params.missingAgent === "1"} className="rounded border-[var(--ops-border)]" />
-                <span className="text-[var(--ops-text)]">Missing agent</span>
-              </label>
-              <button type="submit" className="text-xs bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)] transition-colors w-full sm:w-auto">
-                Apply
-              </button>
-              {(params.status || params.leadTemperature || params.outcome || params.missingAgent || params.agentId || params.q) && (
-                <Link href="/admin/bookings" className="text-xs text-[var(--ops-muted)] self-start sm:self-center underline underline-offset-4 hover:text-[var(--ops-text)]">
-                  Clear
+        <div className="card">
+          <div className="filters">
+            {statusFilters.map((f) => {
+              const active = (params.status ?? "") === f.value;
+              return (
+                <Link
+                  key={f.label}
+                  href={`/admin/bookings${buildQuery({ status: f.value || undefined, page: "1" })}`}
+                  className={`fp${active ? " on" : ""}`}
+                >
+                  {f.label}
                 </Link>
-              )}
-            </form>
-          </div>
-
-          <div className="mt-4 flex flex-col sm:flex-row gap-3">
-            <form className="flex-1 relative" action="/admin/bookings" method="get">
+              );
+            })}
+            <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] self-center ml-1">Lead:</span>
+            {[
+              { label: "All", value: "" },
+              { label: "Hot", value: "hot" },
+              { label: "Warm", value: "warm" },
+              { label: "Cold", value: "cold" },
+            ].map((f) => {
+              const active = (params.leadTemperature ?? "") === f.value;
+              return (
+                <Link
+                  key={f.label}
+                  href={`/admin/bookings${buildQuery({ leadTemperature: f.value || undefined, page: "1" })}`}
+                  className={`fp${active ? " on" : ""}`}
+                >
+                  {f.label}
+                </Link>
+              );
+            })}
+            <span className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] self-center ml-1">Outcome:</span>
+            {[
+              { label: "All", value: "" },
+              { label: "Sold", value: "sold" },
+              { label: "Interested", value: "interested" },
+              { label: "Not sold", value: "not_sold" },
+            ].map((f) => {
+              const active = (params.outcome ?? "") === f.value;
+              return (
+                <Link
+                  key={f.label}
+                  href={`/admin/bookings${buildQuery({ outcome: f.value || undefined, page: "1" })}`}
+                  className={`fp${active ? " on" : ""}`}
+                >
+                  {f.label}
+                </Link>
+              );
+            })}
+            <form className="fs" style={{ flex: 1 }} action="/admin/bookings" method="get">
               {params.status && <input type="hidden" name="status" value={params.status} />}
               {params.leadTemperature && <input type="hidden" name="leadTemperature" value={params.leadTemperature} />}
               {params.outcome && <input type="hidden" name="outcome" value={params.outcome} />}
               {params.agentId && <input type="hidden" name="agentId" value={params.agentId} />}
               {params.missingAgent && <input type="hidden" name="missingAgent" value={params.missingAgent} />}
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-              </span>
               <input
                 name="q"
                 defaultValue={params.q ?? ""}
                 placeholder="Search by name, email, reference..."
-                className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-9 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10 focus:border-[var(--ops-primary)]/20"
+                style={{ border: "none", outline: "none", background: "transparent", flex: 1, fontSize: "12.5px" }}
               />
             </form>
           </div>
+          <form className="filters" style={{ borderTop: "none", paddingTop: 0 }} action="/admin/bookings" method="get">
+            <select
+              name="agentId"
+              defaultValue={params.agentId ?? ""}
+              className="border border-[var(--ops-border)] rounded-full px-3 py-2 text-xs bg-white focus:outline-none"
+            >
+              <option value="">All agents</option>
+              {agentsForFilter.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <label className="fp" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input type="checkbox" name="missingAgent" value="1" defaultChecked={params.missingAgent === "1"} />
+              <span>Missing agent</span>
+            </label>
+            <button type="submit" className="btn sm">Apply</button>
+            {(params.status || params.leadTemperature || params.outcome || params.missingAgent || params.agentId || params.q) && (
+              <Link href="/admin/bookings" className="lnk">Clear</Link>
+            )}
+          </form>
         </div>
 
         {/* Table — desktop */}
-        <div className="hidden lg:block bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] overflow-hidden shadow-[var(--ops-shadow-sm)]">
+        <div className="hidden lg:block card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm admin-table admin-table-compact">
+            <table className="t">
               <thead>
-                <tr className="bg-[var(--ops-bg)]/60 border-b border-[var(--ops-border)] text-left">
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Booking Reference</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Customer</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Property</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Inspection</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Status</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Lead</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Agent</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Outcome</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)]">Updated</th>
-                  <th className="px-4 py-3 mono text-[10px] tracking-[0.08em] uppercase font-medium text-[var(--ops-muted)] text-right">Actions</th>
+                <tr>
+                  <th>Booking Reference</th>
+                  <th>Customer</th>
+                  <th>Property</th>
+                  <th>Inspection</th>
+                  <th>Status</th>
+                  <th>Lead</th>
+                  <th>Agent</th>
+                  <th>Outcome</th>
+                  <th>Updated</th>
+                  <th className="r">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--ops-border)]/60">
+              <tbody>
                 {sorted.map((b) => (
-                  <tr key={b.id} className="hover:bg-[var(--ops-bg)]/50 transition-colors group">
-                    <td className="px-4 py-3.5 align-middle">
-                      <Link href={`/admin/bookings/${b.id}`} className="row-lead font-mono text-[12px] font-medium text-[var(--ops-primary)] hover:underline group-hover:text-[var(--ops-deep)] whitespace-nowrap">
+                  <tr key={b.id} className="clk group">
+                    <td>
+                      <Link href={`/admin/bookings/${b.id}`} className="row-lead num font-medium text-[var(--ops-primary)] hover:underline group-hover:text-[var(--ops-deep)] whitespace-nowrap">
                         {b.ref}
                       </Link>
-                      <div className="mono text-[10px] text-[var(--ops-muted)] mt-0.5">{new Date(b.createdAt).toLocaleDateString("en-GB")}</div>
+                      <small>{formatDate(b.createdAt)}</small>
                       {dupMap.has(b.id) && (
                         <div className="mt-1">
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-50 text-amber-800 border border-amber-200">⚠ Duplicate</span>
+                          <span className="chip gold inline-flex items-center gap-1"><WarnIcon size={10} /> Duplicate</span>
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 align-middle">
-                      <div className="text-[13px] font-medium text-[var(--ops-text)] leading-none break-words">{b.name}</div>
-                      <div className="text-[12px] text-[var(--ops-muted)] break-words">{b.email}</div>
-                      {b.phone && <div className="text-[11px] text-[var(--ops-muted)]">{b.phone}</div>}
+                    <td>
+                      <b>{b.name}</b>
+                      <small>{b.email}</small>
+                      {b.phone && <small>{b.phone}</small>}
                     </td>
-                    <td className="px-4 py-3 align-middle min-w-[240px]">
-                      <div className="text-[13px] font-semibold text-[var(--ops-text)] leading-snug">
+                    <td className="min-w-[240px]">
+                      <b>
                         {b.estate ? `${b.estate}${b.unitType ? ` · ${b.unitType}` : ""}` : b.location}
-                      </div>
+                      </b>
                       {(b.plotCode || b.sqm) && (
-                        <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">
+                        <small>
                           {[b.plotCode, b.sqm ? `${b.sqm}sqm` : null].filter(Boolean).join(" · ")}
-                        </div>
+                        </small>
                       )}
                       {b.agentName && (
-                        <div className="mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mt-0.5">Via {b.agentName}</div>
+                        <small>Via {b.agentName}</small>
                       )}
                       {(b as any).selectionType === "unit" && (b as any).plotCode ? (
                         <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">Unit selected · {(b as any).plotCode}</span>
@@ -389,7 +363,7 @@ export default async function AdminBookingsPage({
                         <span className="mt-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-white text-[#4B5563] border border-[#E5E7EB]">{(b as any).estate}</span>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 align-middle">
+                    <td>
                       {b.rescheduledDate ? (
                         <div>
                           <div className="text-[13px] font-medium text-[var(--ops-text)]">{formatDate(b.rescheduledDate)}</div>
@@ -405,25 +379,25 @@ export default async function AdminBookingsPage({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 align-middle">
+                    <td>
                       <StatusBadge status={b.status === "closed" && b.outcome ? "closed" : b.status} />{b.status === "closed" && b.outcome ? <span className="ml-1"><StatusBadge status={b.outcome} /></span> : null}
                     </td>
-                    <td className="px-4 py-3 align-middle">
+                    <td>
                       <StatusBadge status={b.leadTemperature} />
                     </td>
-                    <td className="px-4 py-3 align-middle">
+                    <td>
                       <AgentCell agent={(b as any).agent} customerEmail={b.email} customerPhone={b.phone} />
                     </td>
-                    <td className="px-4 py-3 align-middle">
+                    <td>
                       {b.outcome ? (
                         <StatusBadge status={b.outcome} />
                       ) : (
                         <span className="text-[12px] text-[var(--ops-muted)]">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 align-middle mono text-[11px] text-[var(--ops-muted)] whitespace-nowrap">{new Date(b.updatedAt).toLocaleDateString("en-GB")}</td>
-                    <td className="px-4 py-3 align-middle text-right">
-                      <Link href={`/admin/bookings/${b.id}`} className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ops-primary)] hover:text-[var(--ops-deep)] border border-[var(--ops-border)] rounded-full px-3 py-1.5 bg-white hover:bg-[var(--ops-bg)] transition-colors">
+                    <td className="mono text-[11px] text-[var(--ops-muted)] whitespace-nowrap">{formatDate(b.updatedAt)}</td>
+                    <td className="r">
+                      <Link href={`/admin/bookings/${b.id}`} className="btn sm">
                         View
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 18l6-6-6-6"/></svg>
                       </Link>
@@ -432,16 +406,7 @@ export default async function AdminBookingsPage({
                 ))}
                 {bookings.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-16 text-center">
-                      <div className="max-w-[320px] mx-auto">
-                        <div className="h-10 w-10 rounded-full bg-[var(--ops-bg)] border border-[var(--ops-border)] grid place-items-center mx-auto text-[var(--ops-muted)]">
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                        </div>
-                        <p className="public text-[14px] font-medium text-[var(--ops-text)] mt-3">No bookings match these filters</p>
-                        <p className="public text-[12px] text-[var(--ops-muted)] mt-1">Try adjusting your filters or search terms, or create a new booking.</p>
-                        <Link href="/admin/bookings" className="inline-flex mt-4 text-xs bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Clear filters</Link>
-                      </div>
-                    </td>
+                    <td colSpan={10}><div className="empty">No bookings match these filters. Try adjusting your filters or search terms, or create a new booking.</div></td>
                   </tr>
                 )}
               </tbody>

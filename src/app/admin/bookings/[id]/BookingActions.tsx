@@ -5,8 +5,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { isTransitionAllowed, temperatureRank } from "@/lib/booking-transitions";
 import { timeSlots } from "@/lib/content";
-import { formatLagos } from "@/lib/time";
 import PanelHeader from "@/components/admin/PanelHeader";
+import { CheckIcon, LockIcon, StarIcon, WarnTriangle } from "@/components/admin/icons";
 import type { BookingStatus, LeadTemperature } from "@/generated/prisma/client";
 
 type Booking = {
@@ -27,8 +27,6 @@ type Booking = {
 
 type StaffUser = { id: string; name: string; email: string; role?: string };
 type CompanyAgent = { id: string; name: string; email: string; phone: string; category: "staff" | "hire_purchase" };
-type BookingMessage = { id: string; authorName: string; message: string; createdAt: string | Date };
-type InternalNote = { id: string; authorName: string; body: string; createdAt: string | Date };
 
 const temperatureOrder: LeadTemperature[] = ["cold", "warm", "hot"];
 
@@ -37,15 +35,11 @@ export default function BookingActions({
   // staffUsers kept for compat but unused in single-admin mode
   staffUsers: _staffUsers,
   agents,
-  initialMessages = [],
-  internalNotes = [],
   isLocked = false,
 }: {
   booking: Booking;
   staffUsers: StaffUser[];
   agents: CompanyAgent[];
-  initialMessages?: BookingMessage[];
-  internalNotes?: InternalNote[];
   isLocked?: boolean;
   userRole?: string;
 }) {
@@ -77,25 +71,12 @@ export default function BookingActions({
   const [coolTarget, setCoolTarget] = useState<LeadTemperature>("warm");
   const [coolReason, setCoolReason] = useState("");
 
-  // Internal note append
-  const [newNoteBody, setNewNoteBody] = useState("");
-
   // Reopen
   const [reopenReason, setReopenReason] = useState("");
-
-  // Messages
-  const [messages, setMessages] = useState<BookingMessage[]>(initialMessages);
-  const [messageText, setMessageText] = useState("");
-  const [messageSending, setMessageSending] = useState(false);
-  const [messageError, setMessageError] = useState<string | null>(null);
 
   // Descoped: single-Admin no approver gating required
   const canApprove = true;
   const [showInterestedPreview, setShowInterestedPreview] = useState(false);
-
-  useEffect(() => {
-    setMessages(initialMessages);
-  }, [initialMessages]);
 
   const bookingAgentId = (booking as any).agentId ?? null;
   const [syncedUpdatedAt, setSyncedUpdatedAt] = useState(booking.updatedAt.toISOString());
@@ -165,7 +146,6 @@ export default function BookingActions({
       setReopenReason("");
       setCoolReason("");
       setEscalateNote("");
-      setNewNoteBody("");
       setAssignNote("");
       setActiveNote("");
       setShowInterestedPreview(false);
@@ -174,29 +154,6 @@ export default function BookingActions({
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setBusy(null);
-    }
-  }
-
-  async function sendMessage() {
-    if (!messageText.trim() || messageSending) return;
-    setMessageSending(true);
-    setMessageError(null);
-    try {
-      const res = await fetch(`/api/admin/bookings/${booking.id}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messageText }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Failed to send message");
-      if (!data.message) throw new Error("Failed to send message");
-      setMessages((m) => [...m, data.message]);
-      setMessageText("");
-      router.refresh();
-    } catch (err) {
-      setMessageError(err instanceof Error ? err.message : "Failed to send");
-    } finally {
-      setMessageSending(false);
     }
   }
 
@@ -226,7 +183,7 @@ export default function BookingActions({
           </div>
         )}
         <div className="bg-white border border-[var(--line)] rounded-2xl p-6">
-          <h2 className="text-sm font-semibold text-[var(--ink)] mb-2">🔒 Booking locked</h2>
+          <h2 className="text-sm font-semibold text-[var(--ink)] mb-2 flex items-center gap-1.5"><LockIcon size={13} /> Booking locked</h2>
           <p className="text-sm text-[var(--ink-muted)]">This booking is closed. Use Reopen to make changes requires a reason and is logged.</p>
           <div className="mt-4">
               <label className="block text-xs text-[var(--ink-muted)] mb-1">Reason to reopen (required)</label>
@@ -361,7 +318,7 @@ export default function BookingActions({
                   {busy === "reschedule" ? "Rescheduling…" : "Reschedule"}
                 </button>
               </div>
-              <p className="text-xs text-[var(--ink-muted)] mt-2">⚠ If the assigned agent has another inspection within ±2h, you’ll be warned. Client email is on by default.</p>
+              <p className="text-xs text-[var(--ink-muted)] mt-2 flex items-start gap-1.5"><WarnTriangle size={12} /> If the assigned agent has another inspection within ±2h, you’ll be warned. Client email is on by default.</p>
             </div>
           )}
         </div>
@@ -425,7 +382,7 @@ export default function BookingActions({
                   <li key={s.label} className="flex items-center gap-1.5">
                     {i > 0 && <span className="w-4 h-px bg-[var(--ops-border)]" aria-hidden="true" />}
                     <span className={`inline-flex items-center gap-1.5 mono text-[10px] tracking-wide uppercase px-2.5 py-1 rounded-full border ${s.done ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : "bg-white text-[var(--ops-muted)] border-[var(--ops-border)]"}`}>
-                      {s.done ? "✓ " : `${i + 1} · `}{s.label}
+                      {s.done ? <><CheckIcon size={11} /> </> : `${i + 1} · `}{s.label}
                     </span>
                   </li>
                 ))}
@@ -436,7 +393,7 @@ export default function BookingActions({
             booking.formConfirmedAt ? (
             <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
               <div className="flex items-center gap-2">
-                <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
+                <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]"><StarIcon size={11} /></span>
                 <span className="text-[13px] font-medium text-[#92400E]">Interested: Hot lead • Awaiting final decision</span>
                 <span className="ml-auto px-2 py-1 rounded-full text-[11px] font-medium bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span>
               </div>
@@ -462,7 +419,7 @@ export default function BookingActions({
             ) : (
               <div className="mt-4 p-4 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
                 <div className="flex items-center gap-2">
-                  <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]">★</span>
+                  <span className="h-6 w-6 rounded-full bg-[#C8A04A] text-white grid place-items-center text-[11px]"><StarIcon size={11} /></span>
                   <span className="text-[13px] font-medium text-[#92400E]">Interested: Hot lead • Subscription form sent</span>
                   <span className="ml-auto px-2 py-1 rounded-full text-[11px] font-medium bg-[#FEF2F2] text-[#9F1239] border border-[#FECACA]">HOT</span>
                 </div>
@@ -681,98 +638,6 @@ export default function BookingActions({
         )}
           </>
         )}
-      </div>
-
-      {/* Messaging follow-up with assigned agent */}
-      <div className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-        <div className="flex items-start justify-between gap-3">
-          <PanelHeader
-            title="Messaging"
-            description="Follow-ups are emailed to the assigned agent and logged to the timeline."
-            icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-            }
-          />
-          <span className="mono text-[11px] px-2.5 py-1 rounded-full bg-[var(--ops-bg)] border border-[var(--ops-border)] text-[var(--ops-muted)] shrink-0">{messages.length} messages</span>
-        </div>
-        {messages.length === 0 ? (
-          <div className="mt-4 py-6 text-center border border-dashed border-[var(--line)] rounded-xl bg-[var(--cream)]/50">
-            <p className="text-sm text-[var(--ink-muted)]">No messages yet</p>
-          </div>
-        ) : (
-          <div className="mt-4 space-y-3 max-h-72 overflow-y-auto pr-1">
-            {messages.map((m) => (
-              <div key={m.id} className="flex gap-3 p-3 rounded-xl border border-[var(--line)] bg-[var(--cream)]/60">
-                <div className="h-8 w-8 rounded-full bg-[var(--forest-800)] text-white grid place-items-center text-xs shrink-0 font-medium">
-                  {m.authorName.split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-medium text-[var(--ink)]">{m.authorName}</span>
-                    <span className="text-xs text-[var(--ink-muted)]">{formatLagos(m.createdAt, "datetime")}</span>
-                  </div>
-                  <p className="text-sm text-[var(--ink)] mt-1 whitespace-pre-wrap break-words">{m.message}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="mt-4">
-          <label className="block mono text-[10px] tracking-wide uppercase text-[var(--ops-muted)] mb-1">Follow-up message: emailed to assigned agent and logged to timeline</label>
-          <textarea
-            value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
-            placeholder="Post a follow-up note… e.g. Client called, wants to reschedule to next week, hot lead"
-            rows={3}
-            className="w-full border border-[var(--ops-border)] rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10 resize-none"
-          />
-          <p className="mono text-[10px] text-[var(--ops-muted)] mt-1.5">This will be saved as a message, added to the activity timeline, and emailed to the assigned agent (if any).</p>
-          <div className="flex items-center justify-between mt-3">
-            <span className="mono text-[11px] text-[var(--ops-muted)]">{messageText.length}/5000</span>
-            <button onClick={sendMessage} disabled={!messageText.trim() || messageSending} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-5 py-2.5 font-medium disabled:opacity-50 hover:bg-[var(--ops-deep)] transition-colors">
-              {messageSending ? "Sending…" : "Send message →"}
-            </button>
-          </div>
-          {messageError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-2">{messageError}</p>}
-        </div>
-      </div>
-
-      {/* Internal notes append-only */}
-      <div id="internal-notes" className="bg-[var(--cream-elevated)] border border-[var(--line)] rounded-2xl p-6">
-        <PanelHeader
-          title="Internal notes"
-          description="Append-only and attributed. Visible to staff only."
-          icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
-          }
-        />
-        {internalNotes.length > 0 ? (
-          <div className="mt-4 space-y-2 max-h-48 overflow-y-auto pr-1 mb-3">
-            {internalNotes.map((n) => (
-              <div key={n.id} className="p-2.5 rounded-xl bg-[var(--cream)] border border-[var(--line)] text-sm">
-                    <div className="text-xs text-[var(--ink-muted)]">{n.authorName} · {formatLagos(n.createdAt, "datetime")}</div>
-                <div className="text-[var(--ink)] whitespace-pre-wrap">{n.body}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-[var(--ink-muted)] mb-3">No internal notes yet.</p>
-        )}
-        <div className="flex gap-2">
-          <input
-            value={newNoteBody}
-            onChange={(e) => setNewNoteBody(e.target.value)}
-            placeholder="Add an internal note…"
-            className="flex-1 border border-[var(--line)] rounded-xl px-3 py-2 text-sm bg-white"
-          />
-          <button
-            onClick={() => run("add_note", { body: newNoteBody })}
-            disabled={!newNoteBody.trim() || busy !== null}
-            className="text-sm bg-white border border-[var(--line)] rounded-full px-4 py-2 font-medium disabled:opacity-50"
-          >
-            Add
-          </button>
-        </div>
       </div>
 
       {/* Lead temperature */}

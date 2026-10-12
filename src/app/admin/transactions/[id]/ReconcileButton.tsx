@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CheckIcon } from "@/components/admin/icons";
 
 // Bank-reconciliation tick: confirm one payment against a bank statement
 // line. Appends to the verification note (who, when) — never overwrites.
@@ -46,7 +47,7 @@ export default function ReconcileButton({
   }
 
   if (reconciled) {
-    return <span className="mono text-[10px] px-2 py-0.5 rounded-full bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">Reconciled ✓</span>;
+    return <span className="mono text-[10px] px-2 py-0.5 rounded-full bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] inline-flex items-center gap-1">Reconciled <CheckIcon size={10} /></span>;
   }
 
   return (

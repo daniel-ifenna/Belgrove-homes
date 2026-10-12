@@ -62,19 +62,16 @@ function TopBarInner({ onOpenNav }: { onOpenNav?: () => void }) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
       </button>
       {/* Global Search */}
-      <form onSubmit={onSearch} className="flex-1 min-w-0 max-w-[640px] relative">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
+      <form onSubmit={onSearch} className="flex-1 min-w-0 max-w-[400px] relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ops-muted)]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         </span>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by name, email, reference..."
-          className="w-full bg-[var(--ops-bg)] border border-[var(--ops-border)] rounded-full pl-10 pr-4 py-2.5 text-[13px] placeholder:text-[var(--ops-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ops-primary)]/10 focus:border-[var(--ops-primary)]/20 transition-colors"
+          className="w-full bg-[var(--ops-soft)] border border-[var(--ops-border)] rounded-[9px] pl-10 pr-4 py-2 text-[13px] placeholder:text-[var(--ops-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ops-gold)]/20 focus:border-[var(--ops-gold)]/40 transition-colors"
         />
-        <span className="absolute right-2 top-1/2 -translate-y-1/2 hidden lg:flex items-center gap-1">
-          <span className="text-[11px] tracking-wide uppercase text-[var(--ops-muted)] bg-white border border-[var(--ops-border)] rounded-md px-1.5 py-0.5">↵</span>
-        </span>
       </form>
 
       <div className="flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
@@ -255,27 +252,22 @@ function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () 
         />
       )}
       <aside
-        className={`w-[252px] shrink-0 bg-[var(--ops-deep)] text-white flex flex-col h-dvh border-r border-white/[0.06] fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:z-auto lg:translate-x-0 lg:sticky lg:top-0 ${open ? "translate-x-0" : ""}`}
+        className={`w-[236px] shrink-0 bg-[var(--ops-primary)] text-white flex flex-col h-dvh fixed inset-y-0 left-0 z-40 -translate-x-full transition-transform duration-200 lg:z-auto lg:translate-x-0 lg:sticky lg:top-0 ${open ? "translate-x-0" : ""}`}
       >
-      <div className="px-6 pt-7 pb-6">
-        <Link href="/admin" className="block">
-          <div className="flex items-baseline gap-1">
-            <span className="font-serif text-[22px] tracking-[-0.02em] text-white font-semibold">Belgrove</span>
-            <span className="font-serif text-[22px] tracking-[-0.02em] text-[var(--ops-gold)] font-semibold">Homes</span>
-          </div>
-          <span className="block mono text-[10px] tracking-[0.18em] uppercase text-white/40 -mt-1">Operations</span>
+      <div className="px-6 pt-5 pb-2">
+        <Link href="/admin" className="block px-2">
+          <span className="fraunces text-[19px] text-[#F5EFE2]">Belgrove <span className="text-[var(--ops-gold)]">Homes</span></span>
+          <span className="block mono text-[10px] tracking-[0.12em] text-white/55 pt-0.5 pb-5">OPERATIONS</span>
         </Link>
       </div>
 
-      <nav className="flex-1 px-3 space-y-5 overflow-y-auto pb-4">
-        {groups.map((group, gi) => (
+      <nav className="flex-1 px-3.5 space-y-4 overflow-y-auto pb-4">
+        {groups.map((group) => (
           <div key={group.label}>
-            <div
-              className={`mono text-[11px] tracking-[0.08em] uppercase text-white/40 px-3 mb-3 ${gi > 0 ? "mt-5" : ""}`}
-            >
+            <div className="mono text-[10.5px] tracking-[0.1em] uppercase text-white/45 px-2.5 mb-1.5">
               {group.label}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = item.active;
@@ -285,14 +277,12 @@ function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () 
                     key={item.label}
                     href={item.href}
                     onClick={onClose}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[13px] transition-colors min-h-[44px] ${active ? "bg-white text-[var(--ops-primary)] font-medium shadow-sm" : "text-white/65 hover:bg-white/[0.06] hover:text-white"}`}
+                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors ${active ? "bg-white text-[var(--ops-text)] font-medium" : "text-[#B9C4B8] hover:bg-white/[0.06]"}`}
                   >
-                    <span className={`h-8 w-8 rounded-[9px] grid place-items-center shrink-0 border ${active ? "bg-[var(--ops-primary)] text-white border-transparent" : "bg-white/[0.06] border-white/5 text-white/70"}`}>
-                      <Icon active={active} />
-                    </span>
+                    <Icon active={active} />
                     {item.label}
                     {badge > 0 && (
-                      <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--ops-gold)] text-[var(--ops-deep)] text-[11px] font-medium grid place-items-center">
+                      <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--ops-gold)] text-white text-[11px] font-medium grid place-items-center">
                         {badge > 99 ? "99+" : badge}
                       </span>
                     )}
@@ -311,14 +301,14 @@ function SidebarInner({ open = false, onClose }: { open?: boolean; onClose?: () 
 // Thin-line icons 1.5px
 function DashboardIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="8" rx="1.5" /><rect x="3" y="13" width="8" height="8" rx="1.5" /><rect x="13" y="13" width="8" height="8" rx="1.5" />
     </svg>
   );
 }
 function BookingsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" />
     </svg>
   );
@@ -339,35 +329,35 @@ function ClientsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
 }
 function AgentsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /><path d="M5 20a7 7 0 0 1 14 0" /><path d="M12 12v4" />
     </svg>
   );
 }
 function InspectionsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9" />
     </svg>
   );
 }
 function ReceiptsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
     </svg>
   );
 }
 function TransactionsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" />
     </svg>
   );
 }
 function PaymentsIcon({ active, dim }: { active?: boolean; dim?: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "white" : "rgba(255,255,255,0.7)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dim ? "rgba(255,255,255,0.3)" : active ? "currentColor" : "#B9C4B8"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
     </svg>
   );

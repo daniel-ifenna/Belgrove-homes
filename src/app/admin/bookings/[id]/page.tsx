@@ -4,18 +4,27 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
-import { statusColors, statusLabels, temperatureColors, formatDate, formatDateTime } from "@/lib/booking-ui";
+import { temperatureColors, formatDate, formatDateTime } from "@/lib/booking-ui";
 import BookingActions from "./BookingActions";
 import UnifiedTimeline from "./UnifiedTimeline";
 import QuickActionsBar from "@/components/admin/QuickActionsBar";
+import StatusBadge from "@/components/admin/StatusBadge";
+import { CheckIcon, DiamondIcon, DotIcon, LockIcon, RefreshIcon, StarIcon, WarnIcon } from "@/components/admin/icons";
 import PanelHeader from "@/components/admin/PanelHeader";
+
+import BookingMessageThread from "./BookingMessageThread";
+import BookingInternalNotes from "./BookingInternalNotes";
 
 export default async function AdminBookingDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const rawTab = (await searchParams)?.tab ?? "overview";
+  const tab = rawTab === "messages" || rawTab === "activity" ? rawTab : "overview";
   const session = await auth();
 
   const [booking, staffUsers, agents, activities, messages, internalNotes, receipt, linkedTransaction] = await Promise.all([
@@ -84,76 +93,44 @@ export default async function AdminBookingDetailPage({
 
   return (
     <div className="min-h-screen bg-[var(--ops-bg)]">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 mono text-[11px] tracking-wide uppercase text-[var(--ops-muted)] mb-4">
-          <Link href="/admin/bookings" className="hover:text-[var(--ops-text)] flex items-center gap-1.5">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
-            Bookings
-          </Link>
-          <span className="text-[var(--ops-border)]">/</span>
-          <span className="text-[var(--ops-text)] font-medium tracking-normal normal-case mono text-[11px]">{booking.ref}</span>
-          <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 pl-2 border-l border-[var(--ops-border)] mono text-[10px] text-[var(--ops-muted)]">
-            Updated {formatDateTime(booking.updatedAt)}
-          </span>
-        </div>
+      <div className="max-w-[1180px] mx-auto px-6 lg:px-7 py-6">
+        <Link href="/admin/bookings" className="back">← BOOKINGS</Link>
 
         {isLocked && (
-          <div className="mb-4 rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="h-6 w-6 rounded-full bg-amber-500 text-white grid place-items-center text-xs">🔒</span>
-              <span className="font-medium text-amber-900">Closed & locked</span>
-              <span className="text-amber-700 hidden sm:inline">Read-only. Use Reopen to make changes.</span>
-              {booking.lockedAt && <span className="mono text-[11px] text-amber-700 ml-2">{formatDateTime(booking.lockedAt)}</span>}
-            </div>
+          <div className="attn">
+            <LockIcon size={13} />
+            <span><b>Closed & locked.</b> Read-only. Use Reopen to make changes.</span>
+            {booking.lockedAt && <span className="mono text-[11px] ml-2">{formatDateTime(booking.lockedAt)}</span>}
           </div>
         )}
 
         {duplicates.length > 0 && (
-          <div className="mb-4 rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-900">
-              <span className="h-5 w-5 rounded-full bg-amber-500 text-white grid place-items-center text-[10px]">⚠</span>
-              Possible duplicate: same contact within 3 days
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
+          <div className="attn">
+            <WarnIcon size={13} />
+            <span><b>Possible duplicate:</b> same contact within 3 days.</span>
+            <span className="sp" />
+            <span className="flex flex-wrap gap-2">
               {duplicates.map((d) => (
-                <Link key={d.id} href={`/admin/bookings/${d.id}`} className="text-xs bg-white border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-50">
+                <Link key={d.id} href={`/admin/bookings/${d.id}`} className="btn sm">
                   {d.ref} · {d.name} · {formatDate(d.preferredDate)} · {d.status}
                 </Link>
               ))}
-            </div>
+            </span>
           </div>
         )}
 
         {/* Header — BOOKING */}
-        <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 lg:p-7 shadow-[var(--ops-shadow-sm)]">
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-            <div className="min-w-0 flex-1">
-              <div className="mono text-[11px] tracking-[0.14em] uppercase text-[var(--ops-muted)]">Booking</div>
-              <div className="flex flex-wrap items-baseline gap-3 mt-1">
-                <h1 className="font-serif text-[26px] lg:text-[30px] tracking-[-0.02em] text-[var(--ops-text)] leading-none">{booking.ref}</h1>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-[15px] font-medium text-[var(--ops-text)]">{booking.name}</span>
-                <span className="h-1 w-1 rounded-full bg-[var(--ops-border)] hidden sm:block" />
-                <a href={`mailto:${booking.email}`} className="text-[13px] text-[var(--ops-muted)] hover:text-[var(--ops-text)] underline decoration-[var(--ops-border)] underline-offset-2">{booking.email}</a>
-                {booking.phone && (
-                  <>
-                    <span className="h-1 w-1 rounded-full bg-[var(--ops-border)] hidden sm:block" />
-                    <a href={`tel:${booking.phone}`} className="text-[13px] text-[var(--ops-muted)] hover:text-[var(--ops-text)]">{booking.phone}</a>
-                  </>
-                )}
-              </div>
+        <div className="card hdr">
+          <div className="hdr-top">
+            <div>
+              <h1>{booking.name} <StatusBadge status={booking.status} /> <StatusBadge status={booking.leadTemperature} /></h1>
+              <div className="sub mono">{booking.ref} · {booking.estate ?? booking.location}{booking.plotCode ? ` · ${booking.plotCode}` : ""} · Inspection {formatDate(booking.rescheduledDate ?? booking.preferredDate)}, {booking.rescheduledTime ?? booking.preferredTime}</div>
               <div className="mono text-[11px] text-[var(--ops-muted)] mt-2">
                 Submitted {formatDateTime(booking.createdAt)} · Updated {formatDateTime(booking.updatedAt)}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${statusColors[booking.status]}`}>{statusLabels[booking.status]}</span>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${temperatureColors[booking.leadTemperature]}`}>Lead: {booking.leadTemperature.toUpperCase()}</span>
-              {booking.outcome && (
-                <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium border ${booking.outcome === "sold" ? "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]" : booking.outcome === "interested" ? "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]"}`}>{booking.outcome}</span>
-              )}
+            <div className="acts">
+              {booking.outcome && <StatusBadge status={booking.outcome} />}
             </div>
           </div>
 
@@ -175,7 +152,7 @@ export default async function AdminBookingDetailPage({
             <div className="mt-4 rounded-xl border bg-white px-4 py-4 shadow-sm" style={{ borderColor: receipt.sentAt ? "#A7F3D0" : "#E3E6E1", background: receipt.sentAt ? "#ECFDF5" : "#FFFFFF" }}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] ${receipt.sentAt ? "bg-[#065F46] text-white" : "bg-amber-500 text-white"}`}>{receipt.sentAt ? "✓" : "•"}</span>
+                  <span className={`h-6 w-6 rounded-full grid place-items-center text-[10px] ${receipt.sentAt ? "bg-[#065F46] text-white" : "bg-amber-500 text-white"}`}>{receipt.sentAt ? <CheckIcon size={10} /> : <DotIcon size={6} />}</span>
                   <div>
                     <div className="text-sm font-medium" style={{ color: receipt.sentAt ? "#065F46" : "#10231E" }}>
                       Receipt {receipt.ref} ({receipt.sentAt ? "EMAILED" : "NOT EMAILED"})
@@ -200,9 +177,9 @@ export default async function AdminBookingDetailPage({
           ) : (booking as any).receiptSentAt && (booking as any).receiptUrl ? (
             <div className="mt-4 rounded-xl border border-[#A7F3D0] bg-[#ECFDF5] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="h-6 w-6 rounded-full bg-[#065F46] text-white grid place-items-center text-[10px]">✓</span>
+                <span className="h-6 w-6 rounded-full bg-[#065F46] text-white grid place-items-center text-[10px]"><CheckIcon size={10} /></span>
                 <span className="text-sm font-medium text-[#065F46]">Sold: receipt sent (legacy)</span>
-                <span className="mono text-[11px] text-[#065F46]/80">{new Date((booking as any).receiptSentAt as any).toLocaleString("en-GB")}</span>
+                <span className="mono text-[11px] text-[#065F46]/80">{formatDateTime((booking as any).receiptSentAt as any)}</span>
               </div>
               <div className="flex items-center gap-2">
                 {(booking as any).receiptUrl ? (
@@ -216,7 +193,7 @@ export default async function AdminBookingDetailPage({
           {linkedTransaction ? (
             <div className="mt-4 rounded-xl border border-[var(--ops-border)] bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="h-6 w-6 rounded-full bg-[var(--ops-primary)] text-white grid place-items-center text-[10px]">◈</span>
+                <span className="h-6 w-6 rounded-full bg-[var(--ops-primary)] text-white grid place-items-center text-[10px]"><DiamondIcon size={10} /></span>
                 <span className="text-sm font-medium text-[var(--ops-text)]">Transaction {linkedTransaction.ref}</span>
                 <span className="mono text-[11px] text-[var(--ops-muted)]">{linkedTransaction.status.replace("_", " ")}</span>
               </div>
@@ -227,7 +204,7 @@ export default async function AdminBookingDetailPage({
           ) : (booking.outcome === "interested" || booking.outcome === "sold") ? (
             <div className="mt-4 rounded-xl border border-[#C89B3C] bg-[#FFFBEB] px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="h-6 w-6 rounded-full bg-[#C89B3C] text-white grid place-items-center text-[10px]">★</span>
+                <span className="h-6 w-6 rounded-full bg-[#C89B3C] text-white grid place-items-center text-[10px]"><StarIcon size={10} /></span>
                 <div>
                   {booking.outcome === "sold" ? (
                     <>
@@ -251,44 +228,45 @@ export default async function AdminBookingDetailPage({
 
         {/* Two-column body — the split holds for the full page height:
             left is the working area, right rail is at-a-glance status. */}
-        <div className="mt-6 grid lg:grid-cols-[2.1fr_0.9fr] gap-6 items-start">
-          <div className="space-y-6 min-w-0">
+        <div className="tabs sticky top-16 z-10" style={{ overflowX: "auto" }}>
+          <Link href={`/admin/bookings/${booking.id}?tab=overview`} className={`tab${tab === "overview" ? " on" : ""}`}>Overview</Link>
+          <Link href={`/admin/bookings/${booking.id}?tab=messages`} className={`tab${tab === "messages" ? " on" : ""}`}>Messages & notes{(messages.length + internalNotes.length) > 0 ? <em>{messages.length + internalNotes.length}</em> : ""}</Link>
+          <Link href={`/admin/bookings/${booking.id}?tab=activity`} className={`tab${tab === "activity" ? " on" : ""}`}>Activity</Link>
+        </div>
+        {tab === "overview" && (
+          <div className="mt-6 grid lg:grid-cols-[2.1fr_0.9fr] gap-6 items-start">
+            <div className="space-y-6 min-w-0">
+
             {/* Booking Summary — two-column */}
-            <div id="booking-summary" className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
-              <PanelHeader
-                title="Booking Summary"
-                description="Client, property and schedule as submitted."
-                icon={
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
-                }
-              />
-              <div className="mt-5 grid sm:grid-cols-2 gap-x-8 gap-y-5 text-sm">
+            <div id="booking-summary" className="card">
+              <div className="card-h"><h3>Booking summary</h3></div>
+              <div className="kv">
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Customer</div>
-                  <div className="mt-1 font-medium text-[var(--ops-text)]">{booking.name}</div>
+                  <small>Customer</small>
+                  <b>{booking.name}</b>
                   <div className="text-[12px] text-[var(--ops-muted)] mt-0.5">{booking.email}</div>
                   <div className="text-[12px] text-[var(--ops-muted)]">{booking.phone ?? "No phone"}</div>
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Booking Reference</div>
+                  <small>Booking Reference</small>
                   <div className="mt-1 font-mono text-[13px] font-medium text-[var(--ops-primary)]">{booking.ref}</div>
                   <div className="mono text-[11px] text-[var(--ops-muted)] mt-0.5">Created {formatDate(booking.createdAt)}</div>
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Property</div>
-                  <div className="mt-1 font-medium text-[var(--ops-text)]">{(booking as any).estate ?? booking.location}</div>
+                  <small>Property</small>
+                  <b>{(booking as any).estate ?? booking.location}</b>
                   <div className="text-[12px] text-[var(--ops-muted)] mt-0.5">
                     {(booking as any).plotCode ? `${(booking as any).plotCode}${(booking as any).unitType ? ` · ${(booking as any).unitType}` : ""} · ${(booking as any).selectionType === "unit" ? "Unit selected" : ""}` : booking.agentName ? `Agent on file: ${booking.agentName}` : "No agent name on file"}
                     {(booking as any).selectionType === "sqm_needed" && (booking as any).sqmNeeded ? <span className="ml-2 inline-flex px-1.5 py-0.5 rounded-full text-[10px] bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">Sizing: {(booking as any).sqmNeeded}sqm requested</span> : (booking as any).sqm ? <span className="ml-1 mono text-[11px] text-[#6B6656]">· {(booking as any).sqm}sqm</span> : null}
                   </div>
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Location / Company</div>
+                  <small>Location / Company</small>
                   <div className="mt-1 text-[13px] text-[var(--ops-text)]">{booking.location}</div>
                   <div className="text-[12px] text-[var(--ops-muted)] mt-0.5">-</div>
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Inspection Date & Time</div>
+                  <small>Inspection Date & Time</small>
                   <div className="mt-1 font-medium text-[var(--ops-text)]">{formatDate(booking.preferredDate)} at {booking.preferredTime}</div>
                   {booking.rescheduledDate && (
                       <div className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#1E3A5F] bg-transparent border border-[#C7D2E0] rounded-full px-2.5 py-1">
@@ -297,7 +275,7 @@ export default async function AdminBookingDetailPage({
                   )}
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Assigned Agent</div>
+                  <small>Assigned Agent</small>
                   <div className="mt-1">
                     {booking.agent ? (
                       <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--ops-text)]">
@@ -312,16 +290,16 @@ export default async function AdminBookingDetailPage({
                   <div className="mono text-[11px] text-[var(--ops-muted)] mt-1">{booking.agentConfirmedAt ? `Confirmed ${formatDate(booking.agentConfirmedAt)}` : "Not confirmed"}</div>
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Booking Status</div>
-                  <div className="mt-1"><span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium border ${statusColors[booking.status]}`}>{statusLabels[booking.status]}</span></div>
+                  <small>Booking Status</small>
+                  <div className="mt-1"><StatusBadge status={booking.status} /></div>
                 </div>
                 <div>
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Lead Temperature</div>
-                  <div className="mt-1"><span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium border ${temperatureColors[booking.leadTemperature]}`}>{booking.leadTemperature.toUpperCase()}</span></div>
+                  <small>Lead Temperature</small>
+                  <div className="mt-1"><StatusBadge status={booking.leadTemperature} /></div>
                 </div>
                 <div className="sm:col-span-2">
-                  <div className="mono text-[10px] tracking-[0.1em] uppercase text-[var(--ops-muted)]">Lead Outcome</div>
-                  <div className="mt-1">{booking.outcome ? <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium border bg-white">{booking.outcome}</span> : <span className="text-[13px] text-[var(--ops-muted)]">No lead outcome recorded.</span>}</div>
+                  <small>Lead Outcome</small>
+                  <div className="mt-1">{booking.outcome ? <StatusBadge status={booking.outcome} /> : <span className="text-[13px] text-[var(--ops-muted)]">No lead outcome recorded.</span>}</div>
                 </div>
               </div>
             </div>
@@ -353,7 +331,7 @@ export default async function AdminBookingDetailPage({
                     <div className="space-y-2">
                       {rescheduleHistory.map((a: any) => (
                         <div key={a.id} className="flex gap-3 p-3 rounded-[10px] bg-white border border-[var(--ops-border)]">
-                          <span className="h-6 w-6 rounded-full bg-[#F5F0FF] border border-[#DDD6FE] text-[#5B21B6] grid place-items-center text-[10px] shrink-0">↻</span>
+                          <span className="h-6 w-6 rounded-full bg-[#F5F0FF] border border-[#DDD6FE] text-[#5B21B6] grid place-items-center text-[10px] shrink-0"><RefreshIcon size={10} /></span>
                           <div className="flex-1 min-w-0">
                             <div className="text-[12px] font-medium text-[var(--ops-text)]">Rescheduled by {a.actorName}</div>
                             <div className="mono text-[11px] text-[var(--ops-muted)]">{formatDateTime(a.createdAt)}</div>
@@ -392,18 +370,11 @@ export default async function AdminBookingDetailPage({
               }}
               staffUsers={staffUsers as any}
               agents={agents as any}
-              initialMessages={messages as any}
-              internalNotes={internalNotes as any}
               isLocked={isLocked}
               userRole={session?.user?.role as any}
             />
-
-            <div id="timeline" className="scroll-mt-24">
-              <UnifiedTimeline activities={activities as any} messages={messages as any} internalNotes={internalNotes as any} />
             </div>
-          </div>
-
-          <div className="space-y-6 lg:sticky lg:top-[88px] self-start">
+            <div className="space-y-6 lg:sticky lg:top-[88px] self-start">
             {/* Agent assignment history */}
             <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]" id="assign-agent">
               <PanelHeader
@@ -493,9 +464,22 @@ export default async function AdminBookingDetailPage({
               <a href="#lead-temp" className="mono text-[11px] text-[var(--ops-primary)] underline underline-offset-4 mt-3 inline-block">
                 Manage below →
               </a>
+  
             </div>
           </div>
         </div>
+        )}
+        {tab === "messages" && (
+          <div className="space-y-4" style={{ maxWidth: 720 }}>
+            <BookingMessageThread bookingId={booking.id} initialMessages={messages as any} isLocked={isLocked} />
+            <BookingInternalNotes bookingId={booking.id} initialNotes={internalNotes as any} isLocked={isLocked} />
+          </div>
+        )}
+        {tab === "activity" && (
+<div id="timeline" className="scroll-mt-24">
+              <UnifiedTimeline activities={activities as any} messages={messages as any} internalNotes={internalNotes as any} />
+            </div>
+        )}
       </div>
     </div>
   );

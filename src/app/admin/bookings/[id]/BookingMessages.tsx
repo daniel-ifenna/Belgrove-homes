@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { LockIcon } from "@/components/admin/icons";
 
 type Message = {
   id: string;
@@ -117,7 +118,7 @@ export default function BookingMessages({
           </div>
         ) : (
           <div className="mt-5 p-3 bg-stone-100 border border-stone-200 rounded-lg text-xs text-stone-500 text-center">
-            🔒 Closed bookings are read-only. Outcome and timeline remain for audit.
+            <span className="inline-flex items-center gap-1.5 justify-center"><LockIcon size={11} /> Closed bookings are read-only. Outcome and timeline remain for audit.</span>
           </div>
         )}
       </div>
