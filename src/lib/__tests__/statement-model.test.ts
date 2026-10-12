@@ -244,4 +244,31 @@ describe("edge fixtures", () => {
     );
     expect(m.rows[1].date).toBe("31-08-2026");
   });
+
+  it("same-day charge (noon) sorts before payment (midnight): TXN-2026-87153", async () => {
+    // The payment is stored date-only (midnight) while the charge carries a
+    // noon instant on the same calendar day. Calendar-day ordering must tie
+    // them so type priority (charge first) decides — full-timestamp ordering
+    // put the payment first and drove the balance negative.
+    const m = await buildStatementModel(
+      fakeDb({
+        txn: { contractDate: new Date("2026-10-08T12:00:00.000Z") },
+        ledger: [
+          ledgerRow({ id: "c", type: "CHARGE_BASE", amount: 4_950_000, direction: "DEBIT", effectiveDate: new Date("2026-10-08T12:00:00.000Z"), createdAt: new Date("2026-10-12T02:16:15.000Z") }),
+          ledgerRow({ id: "i", type: "CHARGE_INTEREST", amount: 247_500, direction: "DEBIT", effectiveDate: new Date("2026-10-08T12:00:00.000Z"), createdAt: new Date("2026-10-12T02:16:16.000Z") }),
+          ledgerRow({ id: "p", amount: 2_598_750, effectiveDate: new Date("2026-10-08T00:00:00.000Z"), createdAt: new Date("2026-10-12T02:16:16.000Z"), paymentId: "p", payment: { paymentReference: "PAY-1" } }),
+        ],
+        payments: [PAY("p", "2026-10-08T00:00:00.000Z")],
+      }),
+      { transactionId: "t1", draft: true }
+    );
+    expect(m.contractAssumed).toBe(false);
+    expect(m.rows.map((r) => r.line1)).toEqual([
+      "Contract price",
+      "Interest (one-time charge)",
+      "Payment received, Bank Transfer",
+    ]);
+    expect(m.rows.map((r) => r.balance)).toEqual([4_950_000, 5_197_500, 2_598_750]);
+    expect(m.dataCheckErrors).toEqual([]);
+  });
 });

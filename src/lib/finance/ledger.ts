@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { createHash } from "node:crypto";
+import { lagosDayKey } from "@/lib/time";
 
 // Single ledger service (Step 2): the ONLY code allowed to write money
 // entries (LedgerEntry) and allocation rows (PaymentAllocation), and to
@@ -186,8 +187,15 @@ export type OrderableEntry = {
 export function compareLedgerEntries(a: OrderableEntry, b: OrderableEntry): number {
   const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
   const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  // Calendar-day ordering in the business zone: a payment stored as a
+  // date-only midnight and a charge stored as a noon instant on the SAME day
+  // must tie here, so the type priority below (charge before payment) decides
+  // instead of the storage clock. Full-timestamp comparison misordered such
+  // ties and produced negative running balances (TXN-2026-87153).
+  const aDay = lagosDayKey(a.effectiveDate);
+  const bDay = lagosDayKey(b.effectiveDate);
   return (
-    new Date(a.effectiveDate).getTime() - new Date(b.effectiveDate).getTime() ||
+    (aDay < bDay ? -1 : aDay > bDay ? 1 : 0) ||
     (TYPE_RANK[a.type] ?? 9) - (TYPE_RANK[b.type] ?? 9) ||
     aCreated - bCreated ||
     (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
