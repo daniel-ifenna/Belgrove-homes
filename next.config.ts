@@ -5,15 +5,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
-  // @sparticuz/chromium's browser binaries (.br) are loaded by the package
-  // at runtime through paths no tracer can follow, so production bundles
-  // ship without them and every statement render fails. Force-include them
-  // in the three functions that render PDFs.
-  outputFileTracingIncludes: {
-    "/api/admin/transactions/[id]/statement/preview": ["./node_modules/@sparticuz/chromium/bin/*.br"],
-    "/api/admin/transactions/[id]/statements": ["./node_modules/@sparticuz/chromium/bin/*.br"],
-    "/api/admin/transactions/[id]/corrections/email": ["./node_modules/@sparticuz/chromium/bin/*.br"],
-  },
+  // NOTE: outputFileTracingIncludes is intentionally NOT used for the
+  // Chromium binaries — Turbopack builds skip that step, so the config is
+  // silently ignored. The binaries ship instead as public/chromium-pack.tar
+  // (scripts/pack-chromium.ts, run in `next build`) and download once per
+  // cold instance through the package's own URL input. See
+  // src/lib/statement-chromium-pack.ts.
   // Admin pages and APIs must never be cached by the browser (Back button
   // after sign-out must hit the server guard, not a stored copy). Applies
   // to page, API and redirect responses under /admin/* and /api/admin/*.

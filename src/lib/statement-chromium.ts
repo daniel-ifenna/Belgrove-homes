@@ -1,14 +1,22 @@
 import fs from "node:fs";
 import puppeteer, { type Browser } from "puppeteer-core";
+import { getAppUrl } from "@/lib/app-url";
+import { chromiumPackUrl } from "@/lib/statement-chromium-pack";
 
 // Headless Chromium for statement PDFs (HTML template → A4 PDF). Executable
 // resolution order:
 //   1. CHROME_PATH env (local dev / CI with a system browser).
 //   2. macOS system Chrome (dev convenience only).
-//   3. @sparticuz/chromium serverless build (Linux production).
-// Anything else throws loudly — a statement must never render through a
-// surprise engine. Approach (A) per the build spec; production host still
-// unconfirmed (see diagnosis), so (B)/(C) stay open pending that answer.
+//   3. chromium-pack.tar served from our own CDN (serverless production):
+//      downloaded once per cold instance through the package's own URL
+//      input, then cached in /tmp for warm invocations. This is the primary
+//      production path — function bundles cannot ship the .br binaries by
+//      tracing (verified absent), and outputFileTracingIncludes is skipped
+//      by Turbopack builds, so neither mechanism can deliver them.
+//   4. The package's bundled bin dir (last resort: works wherever the full
+//      node_modules ships, e.g. containers).
+// Anything else throws a coded error — a statement must never render through
+// a surprise engine. Production host still unconfirmed (see diagnosis).
 
 const MACOS_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
@@ -58,23 +66,42 @@ export async function resolveChromeExecutable(): Promise<{
     const mod = await import("@sparticuz/chromium");
     const chromium = (mod as { default: never }).default as unknown as {
       args: string[];
-      executablePath(): Promise<string>;
+      executablePath(input?: string): Promise<string>;
     };
-    let executablePath: string;
+    // Prefer the CDN pack: deterministic regardless of what the bundler
+    // shipped. Falls back to the bundled bin dir when APP_URL is unusable
+    // (local non-macOS dev without CHROME_PATH).
+    let packUrl: string | null = null;
     try {
-      executablePath = await chromium.executablePath();
-    } catch (e) {
-      throw new ChromiumError(
-        "BINARY_MISSING",
-        `browser binaries not in the function bundle: ${e instanceof Error ? e.message : e}`
-      );
+      packUrl = chromiumPackUrl(getAppUrl());
+    } catch {
+      packUrl = null;
     }
-    return {
-      executablePath,
-      args: chromium.args,
-      headless: true,
-      source: "sparticuz",
-    };
+    const attempts: { label: string; run: () => Promise<string> }[] = [];
+    if (packUrl) {
+      attempts.push({
+        label: "cdn-pack",
+        run: () => chromium.executablePath(packUrl as string),
+      });
+    }
+    attempts.push({ label: "bundled-bin", run: () => chromium.executablePath() });
+    let lastError: unknown = null;
+    for (const attempt of attempts) {
+      try {
+        return {
+          executablePath: await attempt.run(),
+          args: chromium.args,
+          headless: true,
+          source: "sparticuz",
+        };
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw new ChromiumError(
+      "BINARY_MISSING",
+      `browser binaries unavailable (cdn-pack + bundled bin both failed): ${lastError instanceof Error ? lastError.message : lastError}`
+    );
   } catch (e) {
     if (e instanceof ChromiumError) throw e;
     throw new ChromiumError(

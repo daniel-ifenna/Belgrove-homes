@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && tsx scripts/embed-assets.ts && next build",
+    "build": "prisma generate && tsx scripts/embed-assets.ts && tsx scripts/pack-chromium.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
