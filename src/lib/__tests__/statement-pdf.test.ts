@@ -7,7 +7,7 @@ import {
   statementFmt,
   buildStatementAssets,
 } from "../statement-pdf";
-import { resolveChromeExecutable } from "../statement-chromium";
+import { resolveChromeExecutable, ChromiumError, chromiumErrorCode } from "../statement-chromium";
 import { generateQrSvg } from "../receipts/qr";
 import { statementVerifyUrl } from "../statements";
 import type { StatementModel } from "../statement-model";
@@ -68,8 +68,17 @@ describe("draft layout marker (no browser needed)", () => {
   });
 });
 
-describe("QR payload", () => {
-  it("encodes the production verify URL for the statement token", async () => {
+describe("chromium error codes (support diagnostics, no internals in UI)", () => {
+  it("distinguishes missing package, missing binary and launch crashes", () => {
+    expect(chromiumErrorCode(new ChromiumError("DEP_MISSING", "x"))).toBe("DEP_MISSING");
+    expect(chromiumErrorCode(new ChromiumError("BINARY_MISSING", "x"))).toBe("BINARY_MISSING");
+    expect(chromiumErrorCode(new Error("Failed to launch the browser process!"))).toBe("RENDER_FAILED");
+    expect(chromiumErrorCode(new Error("Statement asset missing: fonts"))).toBe("ASSET_MISSING");
+    expect(chromiumErrorCode(new Error("weird"))).toBe("BUILD_FAILED");
+  });
+});
+
+describe("QR payload", () => {  it("encodes the production verify URL for the statement token", async () => {
     const prev = process.env.APP_URL;
     process.env.APP_URL = "https://www.belgrovehomes.com";
     try {

@@ -32,12 +32,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     });
   } catch (e) {
     logLedgerError(`statement download ${id}`, e);
-    const msg = e instanceof Error ? e.message : String(e);
-    const code = /chromium|chrome|launch|browser|executable/i.test(msg)
-      ? "RENDER_FAILED"
-      : /asset missing|U\+20A6|font/i.test(msg)
-        ? "ASSET_MISSING"
-        : "BUILD_FAILED";
-    return NextResponse.json({ error: toUserFacingLedgerError(e), code }, { status: 500 });
+    const { chromiumErrorCode } = await import("@/lib/statement-chromium");
+    return NextResponse.json({ error: toUserFacingLedgerError(e), code: chromiumErrorCode(e) }, { status: 500 });
   }
 }

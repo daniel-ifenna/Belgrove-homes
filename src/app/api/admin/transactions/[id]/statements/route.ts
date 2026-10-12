@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { isInternalRole } from "@/lib/authz";
 import { issueStatement, StatementDataError } from "@/lib/statements";
 import { buildStatementModel } from "@/lib/statement-model";
+import { chromiumErrorCode } from "@/lib/statement-chromium";
 import { toUserFacingLedgerError, logLedgerError } from "@/lib/finance/ledger";
 
 export const maxDuration = 60;
@@ -51,15 +52,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     }
     logLedgerError(`issue statement ${id}`, e);
     return NextResponse.json(
-      { error: toUserFacingLedgerError(e), code: statementErrorCode(e) },
+      { error: toUserFacingLedgerError(e), code: chromiumErrorCode(e) },
       { status: 500 }
     );
   }
-}
-
-function statementErrorCode(e: unknown): "RENDER_FAILED" | "ASSET_MISSING" | "BUILD_FAILED" {
-  const msg = e instanceof Error ? e.message : String(e);
-  if (/chromium|chrome|launch|browser|executable/i.test(msg)) return "RENDER_FAILED";
-  if (/asset missing|U\+20A6|font/i.test(msg)) return "ASSET_MISSING";
-  return "BUILD_FAILED";
 }

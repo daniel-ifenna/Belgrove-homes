@@ -12,6 +12,26 @@ import puppeteer, { type Browser } from "puppeteer-core";
 
 const MACOS_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
+// Typed launch failures so admin support can tell "package not bundled"
+// apart from "binary missing" apart from "browser crashed", without ever
+// surfacing paths or stack traces in the UI.
+export class ChromiumError extends Error {
+  readonly code: "DEP_MISSING" | "BINARY_MISSING";
+  constructor(code: "DEP_MISSING" | "BINARY_MISSING", detail: string) {
+    super(`${code}: ${detail}`);
+    this.name = "ChromiumError";
+    this.code = code;
+  }
+}
+
+export function chromiumErrorCode(e: unknown): "DEP_MISSING" | "BINARY_MISSING" | "RENDER_FAILED" | "ASSET_MISSING" | "BUILD_FAILED" {
+  if (e instanceof ChromiumError) return e.code;
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/chromium|chrome|launch|browser|executable/i.test(msg)) return "RENDER_FAILED";
+  if (/asset missing|U\+20A6|font/i.test(msg)) return "ASSET_MISSING";
+  return "BUILD_FAILED";
+}
+
 export async function resolveChromeExecutable(): Promise<{
   executablePath: string;
   args: string[];
@@ -40,15 +60,26 @@ export async function resolveChromeExecutable(): Promise<{
       args: string[];
       executablePath(): Promise<string>;
     };
+    let executablePath: string;
+    try {
+      executablePath = await chromium.executablePath();
+    } catch (e) {
+      throw new ChromiumError(
+        "BINARY_MISSING",
+        `browser binaries not in the function bundle: ${e instanceof Error ? e.message : e}`
+      );
+    }
     return {
-      executablePath: await chromium.executablePath(),
+      executablePath,
       args: chromium.args,
       headless: true,
       source: "sparticuz",
     };
   } catch (e) {
-    throw new Error(
-      `No Chromium available for statement rendering (set CHROME_PATH): ${e instanceof Error ? e.message : e}`
+    if (e instanceof ChromiumError) throw e;
+    throw new ChromiumError(
+      "DEP_MISSING",
+      `@sparticuz/chromium not bundled (set CHROME_PATH): ${e instanceof Error ? e.message : e}`
     );
   }
 }
