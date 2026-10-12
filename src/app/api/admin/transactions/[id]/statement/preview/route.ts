@@ -32,6 +32,16 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     });
   } catch (e) {
     logServerError(`statement preview ${id}`, e);
-    return NextResponse.json({ error: "Couldn't build the preview right now. Please try again." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Couldn't build the preview right now. Please try again.", code: statementErrorCode(e) },
+      { status: 500 }
+    );
   }
+}
+
+function statementErrorCode(e: unknown): "RENDER_FAILED" | "ASSET_MISSING" | "BUILD_FAILED" {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/chromium|chrome|launch|browser|executable/i.test(msg)) return "RENDER_FAILED";
+  if (/asset missing|U\+20A6|font/i.test(msg)) return "ASSET_MISSING";
+  return "BUILD_FAILED";
 }

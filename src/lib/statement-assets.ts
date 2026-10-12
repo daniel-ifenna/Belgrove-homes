@@ -1,6 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { NOTO_BOLD_B64, NOTO_REGULAR_B64 } from "@/lib/receipts/embedded-assets";
 
 // Server-only statement assets for the Chromium HTML template: Noto Sans as
 // base64 @font-face CSS (Regular/Medium/SemiBold/Bold — no fallback families
@@ -85,32 +83,12 @@ function hasGlyphFormat12(ttf: Buffer, at: number, cp: number): boolean {
   return false;
 }
 
-function assetPath(...parts: string[]): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.join(here, ...parts),
-    path.join(process.cwd(), "src", "lib", ...parts),
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {
-      // try next candidate
-    }
-  }
-  throw new Error(`Statement asset missing: ${parts.join("/")} (checked module-relative and cwd paths)`);
-}
-
-function notoTtf(weightFile: "NotoSans-Regular.ttf" | "NotoSans-Bold.ttf"): Buffer {
-  return fs.readFileSync(assetPath("receipts", "fonts", weightFile));
-}
-
 // @font-face CSS with embedded Noto Sans. Only Regular and Bold files ship,
 // so Medium aliases Regular and SemiBold aliases Bold — still Noto Sans only,
 // never Helvetica or another family. Throws when U+20A6 is missing.
 export function statementFontFaceCss(): string {
-  const regular = notoTtf("NotoSans-Regular.ttf").toString("base64");
-  const bold = notoTtf("NotoSans-Bold.ttf").toString("base64");
+  const regular = NOTO_REGULAR_B64;
+  const bold = NOTO_BOLD_B64;
   for (const [label, buf] of [["Regular", regular], ["Bold", bold]] as const) {
     const raw = Buffer.from(buf, "base64");
     if (!fontHasCodepoint(raw, NAIRA_CODEPOINT)) {

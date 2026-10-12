@@ -31,12 +31,14 @@ export default function StatementsPanel({
   const [err, setErr] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[] | null>(null);
   const [problems, setProblems] = useState<string[] | null>(null);
+  const [errCode, setErrCode] = useState<string | null>(null);
   const [ack, setAck] = useState(false);
 
   async function generate(acknowledgeWarnings = false) {
     setBusy(true);
     setMsg(null);
     setErr(null);
+    setErrCode(null);
     let gated = false;
     try {
       const res = await fetch(`/api/admin/transactions/${transactionId}/statements`, {
@@ -61,6 +63,7 @@ export default function StatementsPanel({
           setAck(false);
           throw new Error(data.error ?? "This statement has warnings.");
         }
+        if (data.code) setErrCode(data.code);
         throw new Error(data.error ?? "Generate failed");
       }
       setWarnings(null);
@@ -78,7 +81,7 @@ export default function StatementsPanel({
     <div className="bg-[var(--ops-surface)] border border-[var(--ops-border)] rounded-[var(--ops-radius)] p-6 shadow-[var(--ops-shadow-sm)]">
       <h2 className="mono text-[11px] tracking-[0.12em] uppercase text-[var(--ops-muted)]">Statements</h2>
       {msg && <div className="mt-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl px-3 py-2">{msg}</div>}
-      {err && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">{err}</div>}
+      {err && <div className="mt-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl px-3 py-2">{err}{errCode ? ` (ref: ${errCode})` : ""}</div>}
       <div className="mt-3 flex flex-wrap gap-2">
         <a href={`/api/admin/transactions/${transactionId}/statement/preview`} target="_blank" className="mono text-[11px] bg-white border border-[var(--ops-border)] rounded-full px-4 py-2 hover:bg-[var(--ops-bg)]">Preview (DRAFT)</a>
         <button onClick={() => generate(false)} disabled={busy} className="mono text-[11px] bg-[var(--ops-primary)] text-white rounded-full px-4 py-2 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">
