@@ -381,23 +381,24 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.receipts).toHaveLength(1); // no second receipt
   });
 
-  it("rejects confirmation beyond the scheduled amount without moving anything", async () => {    const state = seed2900();
+  it("confirms beyond the scheduled amount: capped allocation, excess parked as credit", async () => {    const state = seed2900();
     state.installments[0].paidAmount = 2_000_000;
     state.installments[0].status = "PARTIALLY_PAID";
     state.payments.push({ ...pendingPayment("pay-2"), amount: 1_500_000 });
     const tx = makeMockTx(state);
 
-    await expect(
-      applyConfirmationDbUnit(tx, { paymentId: "pay-2", transactionId: "txn-1", ...REF_BASE })
-    ).rejects.toBeInstanceOf(OverScheduleError);
+    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-2", transactionId: "txn-1", ...REF_BASE });
 
-    // Nothing applied: no totals moved, no installment change, no receipt.
-    // (In production the throw rolls back the whole transaction, including
-    // the PENDING→CONFIRMED claim; the mock has no rollback, so only the
-    // no-partial-write guarantees are asserted here.)
-    expect(state.transactions[0].totalPaid).toBe(0);
-    expect(state.installments[0].paidAmount).toBe(2_000_000);
-    expect(state.receipts).toHaveLength(0);
+    // 900k of schedule capacity filled, 600k parked as visible credit.
+    expect(result.newTotalPaid).toBe(1_500_000);
+    expect(result.newOutstanding).toBe(1_400_000);
+    expect(result.isPaidInFull).toBe(false);
+    expect(state.installments[0].paidAmount).toBe(2_900_000);
+    expect(state.installments[0].status).toBe("PAID");
+    expect(state.payments.find((p) => p.id === "pay-2")).toMatchObject({ isCredit: true, creditAmount: 600_000 });
+    expect(state.receipts).toHaveLength(1);
+    const allocSum = state.allocs.reduce((s, a) => s + ((a as { amount: number }).amount), 0);
+    expect(allocSum).toBe(900_000);
   });
 
   it("explicit credit confirms: capped allocation, parked remainder, negative balance allowed", async () => {
@@ -419,15 +420,21 @@ describe("applyConfirmationDbUnit", () => {
     expect(state.ledger[0]).toMatchObject({ type: "PAYMENT", amount: 3_400_000 });
   });
 
-  it("non-credit overpayment is rejected at the transaction gate", async () => {
+  it("non-credit overpayment confirms with the excess auto-parked as credit", async () => {
     const state = seed2900();
     state.payments.push({ ...pendingPayment("pay-9"), amount: 3_400_000, isCredit: false });
     const tx = makeMockTx(state);
 
-    await expect(
-      applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE })
-    ).rejects.toBeInstanceOf(OverScheduleError);
-    expect(state.ledger).toHaveLength(0);
+    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE });
+
+    expect(result.newTotalPaid).toBe(3_400_000);
+    expect(result.newOutstanding).toBe(-500_000);
+    expect(result.isPaidInFull).toBe(true);
+    expect(state.payments.find((p) => p.id === "pay-9")).toMatchObject({ isCredit: true, creditAmount: 500_000 });
+    expect(state.ledger).toHaveLength(1);
+    expect(state.ledger[0]).toMatchObject({ type: "PAYMENT", amount: 3_400_000 });
+    const allocSum = state.allocs.reduce((s, a) => s + ((a as { amount: number }).amount), 0);
+    expect(allocSum).toBe(2_900_000);
   });
 });
 
@@ -643,19 +650,20 @@ describe("waterfall allocation", () => {
     expect(state.transactions[0].status).toBe("PAID_IN_FULL");
   });
 
-  it("excess past the final installment still throws with nothing written", async () => {
+  it("excess past the final installment confirms with the remainder as credit", async () => {
     const state = seedSplit();
     state.payments.push({ ...pendingPayment("pay-1"), amount: 11_000_000 });
     const tx = makeMockTx(state);
 
-    await expect(
-      applyConfirmationDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1", ...REF_BASE })
-    ).rejects.toBeInstanceOf(OverScheduleError);
+    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1", ...REF_BASE });
 
-    expect(state.installments[0].paidAmount).toBe(0);
-    expect(state.installments[1].paidAmount).toBe(0);
-    expect(state.transactions[0].totalPaid).toBe(0);
-    expect(state.receipts).toHaveLength(0);
+    expect(result.newTotalPaid).toBe(11_000_000);
+    expect(result.newOutstanding).toBe(-1_000_000);
+    expect(result.isPaidInFull).toBe(true);
+    expect(state.installments[0].paidAmount).toBe(4_000_000);
+    expect(state.installments[1].paidAmount).toBe(6_000_000);
+    expect(state.payments.find((p) => p.id === "pay-1")).toMatchObject({ isCredit: true, creditAmount: 1_000_000 });
+    expect(state.receipts).toHaveLength(1);
   });
 
   it("reversing a waterfall payment restores both buckets and Active status", async () => {

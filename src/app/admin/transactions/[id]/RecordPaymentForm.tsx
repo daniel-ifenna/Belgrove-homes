@@ -12,7 +12,9 @@ const labelOf = (inst: Installment) => (inst.type === "INITIAL" ? "Initial payme
 
 // Free-amount record form: the schedule is a guide, never a gate. The admin
 // types whatever the client actually paid; the suggested next amount is a
-// hint only, and a live preview shows exactly what confirming will do.
+// hint only, a live preview shows exactly what confirming will do, and any
+// amount above the outstanding balance auto-parks as a visible credit
+// balance at confirm time.
 export default function RecordPaymentForm({
   transactionId,
   installments,
@@ -47,7 +49,6 @@ export default function RecordPaymentForm({
   });
   const [bankReference, setBankReference] = useState("");
   const [notes, setNotes] = useState("");
-  const [asCredit, setAsCredit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -76,10 +77,6 @@ export default function RecordPaymentForm({
       setError("Enter a valid amount");
       return;
     }
-    if (isOver && !asCredit) {
-      setError(`Amount exceeds the outstanding balance by ${formatNaira(overBy)}. Tick "record excess as credit" to proceed.`);
-      return;
-    }
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -104,7 +101,6 @@ export default function RecordPaymentForm({
       setAmount("");
       setNotes("");
       setBankReference("");
-      setAsCredit(false);
       setIdemKey(crypto.randomUUID());
       router.refresh();
       if (onDone) setTimeout(onDone, 1200);
@@ -151,11 +147,7 @@ export default function RecordPaymentForm({
         )}
         {isOver && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
-            <div className="text-[12px] text-amber-900">Exceeds outstanding by {formatNaira(overBy)}. The excess is only recorded as an explicit, visible credit balance.</div>
-            <label className="mt-1.5 flex items-center gap-2 text-[12px] text-amber-900">
-              <input type="checkbox" checked={asCredit} onChange={(e) => setAsCredit(e.target.checked)} className="rounded" />
-              Record excess of {formatNaira(overBy)} as credit
-            </label>
+            <div className="text-[12px] text-amber-900">Exceeds outstanding by {formatNaira(overBy)}. The excess will be recorded as a visible credit balance on confirm.</div>
           </div>
         )}
         <div className="grid md:grid-cols-2 gap-3">
@@ -173,7 +165,7 @@ export default function RecordPaymentForm({
           </div>
         </div>
         <div className="flex justify-end">
-          <button type="submit" disabled={busy || amountNum <= 0 || (isOver && !asCredit)} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-6 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">{busy ? "Recording…" : "Record Payment for Verification"}</button>
+          <button type="submit" disabled={busy || amountNum <= 0} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-6 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">{busy ? "Recording…" : "Record Payment for Verification"}</button>
         </div>
       </form>
     </div>

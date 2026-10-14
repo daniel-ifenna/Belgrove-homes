@@ -14,7 +14,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
   // Free amount: the schedule is a guide, never a gate. No installment picker
-  // — confirmation waterfalls from the oldest unpaid installment.
+  // — confirmation waterfalls from the oldest unpaid installment, and any
+  // amount above the outstanding balance auto-parks as visible credit.
   const { amount, paymentDate, paymentMethod, bankReference, notes, idempotencyKey, asCredit } = body;
   // Money is integer naira (schema Int) — reject floats, not just non-numbers.
   const amt = Number(amount);
@@ -41,14 +42,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (!transaction) return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     if (transaction.status === "CANCELLED") return NextResponse.json({ error: "Transaction is cancelled" }, { status: 400 });
 
+    // No amount gate (owner decision 2026-10-14): any positive whole-naira
+    // amount is recordable. An amount above the outstanding balance is
+    // auto-marked as credit — the excess parks as a visible credit balance
+    // at confirm time instead of blocking the record.
     const overBy = amt - transaction.outstandingBalance;
-    const wantsCredit = asCredit === true && overBy > 0;
-    if (overBy > 0 && !wantsCredit) {
-      return NextResponse.json(
-        { error: `Amount exceeds the outstanding balance by ${overBy.toLocaleString("en-NG")}. Tick "record excess as credit" to record it as a visible credit balance.` },
-        { status: 400 }
-      );
-    }
+    const wantsCredit = overBy > 0 || asCredit === true;
 
     // Idempotent replay: same key returns the existing row, never a second one.
     const existing = await prisma.payment.findUnique({ where: { idempotencyKey: key } });

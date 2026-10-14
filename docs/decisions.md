@@ -19,6 +19,11 @@ Conservative option chosen wherever the owner was silent. Updated as answers arr
    (`manualReason` transactions → same payment-confirm path) verified working first.
 4. **Overpayment**: reject above outstanding unless admin explicitly records the extra
    as credit (Step 3). Never silently truncate.
+   **Overridden 2026-10-14 (owner request):** no amount gate anywhere. Any positive
+   whole-naira amount records and confirms; schedule excess auto-parks as a visible
+   credit balance (`isCredit + creditAmount`, negative outstanding shown as credit).
+   Still never truncated — but no longer explicitly ticked. `OverScheduleError` /
+   `wouldExceedSchedule` remain exported for backward compatibility only.
 5. **Payment idempotency**: `Payment.idempotencyKey` wired up properly; 60s guard
    retired once enforced (Step 3). Email sends: same key + byte-identical body for
    retries of one logical send; fresh key per user-initiated resend (Step 1).

@@ -32,10 +32,9 @@ export async function recordPaymentAndGenerateReceipt(params: {
   });
   if (!transaction) throw new Error("Transaction not found");
   if (transaction.status === "CANCELLED") throw new Error("Transaction is cancelled");
-  if (transaction.outstandingBalance <= 0) throw new Error("Transaction already paid in full");
-  if (params.amount > transaction.outstandingBalance) {
-    throw new Error(`Amount exceeds outstanding balance of ${transaction.outstandingBalance}`);
-  }
+  // No amount gate (owner decision 2026-10-14): any positive whole-naira
+  // amount is accepted. Schedule excess auto-parks as visible credit at
+  // confirm time (see applyConfirmationDbUnit).
 
   const installment =
     params.installmentId != null
@@ -43,9 +42,8 @@ export async function recordPaymentAndGenerateReceipt(params: {
       : (transaction.installments.find((i) => i.status !== "PAID" && i.status !== "WAIVED") ?? null);
   if (!installment) throw new Error("No unpaid installment available for this transaction");
   // No installment-level cap here: a payment may legitimately span several
-  // installments — confirmation waterfalls any excess forward. The
-  // transaction-outstanding check above plus the in-transaction recheck at
-  // confirm time are what prevent over-crediting.
+  // installments — confirmation waterfalls any excess forward and parks any
+  // remainder past the final installment as visible credit.
 
   const receiptRef = await generateUniqueReceiptRef();
   const paymentRef = await generateUniquePaymentRef();

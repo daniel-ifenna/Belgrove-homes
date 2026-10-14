@@ -83,15 +83,14 @@ describe("POST record payment", () => {
     expect(store.payments).toHaveLength(0);
   });
 
-  it("rejects over-outstanding amounts without the credit flag", async () => {
+  it("auto-marks over-outstanding amounts as credit instead of rejecting", async () => {
     const res = await POST(
       recordRequest({ ...base, amount: 1_400_000, idempotencyKey: "over-key-1" }),
       ctx
     );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toMatch(/exceeds the outstanding balance by 400,000/);
-    expect(store.payments).toHaveLength(0);
+    expect(res.status).toBe(201);
+    expect(store.payments).toHaveLength(1);
+    expect(store.payments[0]).toMatchObject({ amount: 1_400_000, isCredit: true });
   });
 
   it("records a free (non-scheduled) amount with no installment link", async () => {

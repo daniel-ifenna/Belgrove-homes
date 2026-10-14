@@ -2,12 +2,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { amountToWords } from "./receipts/amountToWords";
 import { formatDateDMY } from "./time";
 import {
-  planAllocation,
   planAllocationCapped,
   postPaymentEntry,
   postAllocations,
   postLedgerEntry,
-  LedgerError,
 } from "./finance/ledger";
 
 // Shared payment-confirmation core: database work ONLY. No PDF rendering,
@@ -36,6 +34,9 @@ export class PaymentAlreadyHandledError extends Error {
   }
 }
 
+// Legacy guard, kept for backward compatibility (routes still catch it and
+// pure-function tests still cover it). Nothing in the record/confirm flow
+// throws it anymore — over-schedule money auto-parks as visible credit.
 export class OverScheduleError extends Error {
   readonly paidAmount: number;
   readonly amount: number;
@@ -72,10 +73,9 @@ export function deriveInstallmentStatus(
   return dueDate.toDateString() === now.toDateString() ? "DUE" : "PENDING";
 }
 
-// Server-side duplicate/overpayment guard: the sum of what is already on an
-// installment (confirmed paidAmount + still-pending payments) plus a new
-// amount must not exceed the scheduled amount. This is what stops N
-// identical pending payments from over-crediting one installment.
+// Legacy predicate, kept for backward compatibility (tests still cover it).
+// It is no longer used as a gate anywhere: any positive whole-naira amount
+// records and confirms, with schedule excess parked as visible credit.
 export function wouldExceedSchedule(
   confirmedPaid: number,
   pendingSum: number,
@@ -157,8 +157,10 @@ export type ConfirmDbResult = {
 
 // Atomic DB unit for confirmation: claim the payment, move the installment,
 // recompute totals, create the receipt row (delivery PENDING — the PDF and
-// email happen post-commit). Throws PaymentAlreadyHandledError /
-// OverScheduleError on conflicts. Everything here is tx.* only.
+// email happen post-commit). Throws PaymentAlreadyHandledError when the
+// payment is no longer pending. Any positive whole-naira amount confirms —
+// schedule excess parks as visible credit, never blocks. Everything here is
+// tx.* only.
 export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInput): Promise<ConfirmDbResult> {
   const now = new Date();
 
@@ -184,17 +186,11 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   if (!payment) throw new PaymentCorruptStateError("Confirmed payment row disappeared mid-transaction");
 
   const transaction = payment.transaction;
-  const isCredit = payment.isCredit === true;
-  if (!isCredit && transaction.outstandingBalance < payment.amount) {
-    // Genuinely over-paid at the transaction level (totals moved under us).
-    // Explicit credit payments skip this gate — the excess becomes a visible
-    // credit balance (capped allocation below), never truncated.
-    throw new OverScheduleError(
-      transaction.totalPaid,
-      payment.amount,
-      transaction.totalPayable
-    );
-  }
+  // No schedule gate (owner decision 2026-10-14): any positive whole-naira
+  // amount confirms. Whatever does not fit the remaining schedule is parked
+  // as the payment's visible credit balance (capped allocation below) —
+  // never truncated, never rejected.
+  const wasExplicitCredit = payment.isCredit === true;
 
   // Resolve the installment: the payment's own, else the next unpaid one.
   let installment =
@@ -213,64 +209,34 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
     }
   }
 
+  let creditAmountThisPayment = 0;
   if (installment) {
     // Waterfall allocation (owned by the ledger service): confirmed money
     // fills the targeted installment, and any excess rolls forward into
-    // successive installments (never backward). planAllocation throws
-    // LedgerError when the suffix capacity is insufficient — mapped to
-    // OverScheduleError below so routes keep their friendly message.
-    // Nothing is written yet at that point, so the unit aborts cleanly.
-    const ordered = [...transaction.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
-    const freshRows = [];
+    // successive installments (never backward). Any remainder past the final
+    // installment is parked as this payment's visible credit balance
+    // (recorded on the payment row below) — never truncated, never rejected.
+    const ordered = [...transaction.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);    const freshRows = [];
     for (const inst of ordered) {
       const fresh = await tx.installment.findUnique({ where: { id: inst.id } });
       if (!fresh) throw new PaymentCorruptStateError("Installment row disappeared mid-transaction");
       freshRows.push(fresh);
     }
-    let plan: { installmentId: string; amount: number }[];
-    let creditAmount = 0;
-    if (!isCredit) {
-      try {
-        plan = planAllocation(
-          freshRows.map((f) => ({
-            id: f.id,
-            installmentNumber: f.installmentNumber,
-            scheduledAmount: f.scheduledAmount,
-            paidAmount: f.paidAmount ?? 0,
-          })),
-          installment.id,
-          payment.amount
-        );
-      } catch (e) {
-        if (e instanceof LedgerError) {
-          const startIdx = ordered.findIndex((i) => i.id === installment.id);
-          const suffixRows = startIdx >= 0 ? freshRows.slice(startIdx) : freshRows;
-          throw new OverScheduleError(
-            suffixRows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
-            payment.amount,
-            suffixRows.reduce((s, r) => s + r.scheduledAmount, 0)
-          );
-        }
-        throw e;
-      }
-    } else {
-      // Explicit overpayment: allocate what fits, park the remainder as the
-      // visible credit balance (recorded on the payment row below).
-      const capped = planAllocationCapped(
-        freshRows.map((f) => ({
-          id: f.id,
-          installmentNumber: f.installmentNumber,
-          scheduledAmount: f.scheduledAmount,
-          paidAmount: f.paidAmount ?? 0,
-        })),
-        installment.id,
-        payment.amount
-      );
-      plan = capped.plan;
-      creditAmount = capped.remainder;
-      if (creditAmount > 0) {
-        await tx.payment.update({ where: { id: payment.id }, data: { creditAmount } });
-      }
+    const capped = planAllocationCapped(
+      freshRows.map((f) => ({
+        id: f.id,
+        installmentNumber: f.installmentNumber,
+        scheduledAmount: f.scheduledAmount,
+        paidAmount: f.paidAmount ?? 0,
+      })),
+      installment.id,
+      payment.amount
+    );
+    const plan = capped.plan;
+    const creditAmount = capped.remainder;
+    creditAmountThisPayment = creditAmount;
+    if (creditAmount > 0) {
+      await tx.payment.update({ where: { id: payment.id }, data: { isCredit: true, creditAmount } });
     }
     for (const step of plan) {
       const fresh = freshRows.find((r) => r.id === step.installmentId)!;
@@ -297,6 +263,12 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
       recordedById: input.confirmedById ?? null,
     });
     await postAllocations(tx, payment.id, plan);
+  } else {
+    // No installment to allocate against (creation always builds a schedule,
+    // so this should not happen): the full amount parks as visible credit
+    // rather than blocking the confirmation.
+    creditAmountThisPayment = payment.amount;
+    await tx.payment.update({ where: { id: payment.id }, data: { isCredit: true, creditAmount: payment.amount } });
   }
 
   // Totals derive from CONFIRMED payments only — recomputed, never incremented.
@@ -306,11 +278,14 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   const newTotalPaid = confirmed.reduce((sum, p) => sum + p.amount, 0);
   const newOutstanding = transaction.totalPayable - newTotalPaid;
   if (newOutstanding < 0) {
-    // Negative outstanding is legitimate only with an explicitly recorded
-    // credit on this transaction (this payment or an earlier one) — it is
-    // the visible credit balance. Anything else is corruption.
+    // Negative outstanding is the visible credit balance. It is legitimate
+    // whenever this payment parked schedule excess as credit (auto-marked
+    // above), was recorded as explicit credit, or an earlier credit exists.
+    // Anything else is corruption.
     const hasCredit =
-      isCredit || (await tx.payment.findFirst({ where: { transactionId: transaction.id, status: "CONFIRMED", isCredit: true }, select: { id: true } })) !== null;
+      creditAmountThisPayment > 0 ||
+      wasExplicitCredit ||
+      (await tx.payment.findFirst({ where: { transactionId: transaction.id, status: "CONFIRMED", isCredit: true }, select: { id: true } })) !== null;
     if (!hasCredit) {
       throw new PaymentCorruptStateError("Confirmed payments exceed the transaction total");
     }
