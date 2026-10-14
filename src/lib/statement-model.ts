@@ -119,17 +119,22 @@ export async function buildStatementModel(
   const verifiedByPayment = new Map(confirmed.map((p) => [p.id, p.verificationNote ?? ""]));
   const creditExists = confirmed.some((p) => p.isCredit === true);
 
-  // Contract date: explicit date wins; otherwise the earliest confirmed
-  // payment date (never the creation date — that sorts the charge last and
-  // drives balances negative); otherwise creation (no payments at all).
+  // Contract date: explicit date wins; otherwise the earliest RECORDED
+  // payment date — confirmed or still pending (a pending payment never prints
+  // on the statement; it only dates the opening charge so a backdated record
+  // doesn't sort the charge last and drive balances negative); otherwise
+  // creation (no payments at all).
   // The fallback is internal-only: the client statement never prints "assumed".
   let contractDateUsed: Date;
   let contractAssumed = false;
+  const datedPayments = payments.filter(
+    (p) => p.status === "CONFIRMED" || p.status === "PENDING_VERIFICATION"
+  );
   if (txn.contractDate) {
     contractDateUsed = new Date(txn.contractDate);
-  } else if (confirmed.length > 0) {
+  } else if (datedPayments.length > 0) {
     contractDateUsed = new Date(
-      Math.min(...confirmed.map((p) => new Date(p.paymentDate).getTime()))
+      Math.min(...datedPayments.map((p) => new Date(p.paymentDate).getTime()))
     );
     contractAssumed = true;
   } else {
@@ -150,13 +155,23 @@ export async function buildStatementModel(
   const ordered = [...entries].sort(
     (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)
   );
+  // A statement of account opens with the contract price. Charges always
+  // lead, then everything else in ledger (date) order — so a payment whose
+  // recorded date predates the charge date follows the opening charge with
+  // its real date instead of blocking generation. The first-row guard below
+  // then fires only when charge entries are genuinely missing.
+
+  const statementOrder = [
+    ...ordered.filter((e) => e.type.startsWith("CHARGE")),
+    ...ordered.filter((e) => !e.type.startsWith("CHARGE")),
+  ];
 
   const rows: StatementModelRow[] = [];
   const kinds: string[] = [];
   let balance = 0;
   let totalCharges = 0;
   let totalPaid = 0;
-  for (const e of ordered) {
+  for (const e of statementOrder) {
     if (e.type.startsWith("CHARGE")) {
       balance += e.amount;
       totalCharges += e.amount;
@@ -232,6 +247,9 @@ export async function buildStatementModel(
   const summary = { contractPrice: totalCharges, totalPaid, outstanding: closing };
 
   // Invariants: failures render a red banner on drafts and BLOCK Generate.
+  // The first-row guard fires only when no charge entries exist at all
+  // (genuinely missing opening — e.g. backfill never ran); charges always
+  // lead the statement, so a backdated payment can never trip it.
   const dataCheckErrors: string[] = [];
   if (rows.length === 0 || kinds[0] !== "charge") {
     dataCheckErrors.push("First row is not the contract price charge.");
@@ -252,7 +270,7 @@ export async function buildStatementModel(
   const warnings: string[] = [];
   if (contractAssumed) {
     warnings.push(
-      `Contract date assumed (${formatDateDMY(contractDateUsed)}${confirmed.length > 0 ? ", earliest payment" : ""}) — set the real sale date.`
+      `Contract date assumed (${formatDateDMY(contractDateUsed)}${datedPayments.length > 0 ? ", earliest recorded payment" : ""}) — set the real sale date.`
     );
   }
   const effectiveIds = new Set(entries.map((e) => e.paymentId).filter((v): v is string => !!v));

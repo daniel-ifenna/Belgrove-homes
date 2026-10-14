@@ -157,7 +157,7 @@ describe("edge fixtures", () => {
     expect(m.dataCheckErrors).toEqual([]);
   });
 
-  it("a row predating the fallback charge trips the first-row invariant", async () => {
+  it("a row predating the assumed charge no longer blocks: the contract price opens", async () => {
     const m = await buildStatementModel(
       fakeDb({
         ledger: [
@@ -167,8 +167,68 @@ describe("edge fixtures", () => {
       }),
       { transactionId: "t1", draft: true }
     );
-    // No payments: fallback is creation (Oct), so the August discount sorts
-    // first — the guard must fire instead of printing a bad ledger.
+    // No payments: fallback is creation (Oct), so the August discount keeps
+    // its real date — but the statement still opens with the contract price
+    // instead of blocking. The assumed-date warning tells the admin to set
+    // the real sale date.
+    expect(m.rows[0]).toMatchObject({ line1: "Contract price" });
+    expect(m.rows[1]).toMatchObject({ line1: "Discount", charge: -500_000, date: "09-08-2026" });
+    expect(m.dataCheckErrors).toEqual([]);
+    expect(m.warnings.join(" | ")).toContain("assumed");
+  });
+
+  it("a backdated payment before the explicit contract date follows the opening charge", async () => {
+    const m = await buildStatementModel(
+      fakeDb({
+        txn: { contractDate: new Date("2026-10-01T12:00:00.000Z") },
+        ledger: [
+          ledgerRow({ id: "c", type: "CHARGE_BASE", amount: 4_000_000, direction: "DEBIT", effectiveDate: new Date("2026-10-01T12:00:00.000Z") }),
+          ledgerRow({ id: "p", amount: 1_000_000, effectiveDate: new Date("2026-08-15T12:00:00.000Z"), paymentId: "p", payment: { paymentReference: "PAY-1" } }),
+        ],
+        receipts: [{ paymentId: "p", ref: "RCT-1" }],
+        payments: [PAY("p", "2026-08-15T12:00:00.000Z")],
+      }),
+      { transactionId: "t1", draft: true }
+    );
+    expect(m.contractAssumed).toBe(false);
+    expect(m.rows.map((r) => r.line1)).toEqual(["Contract price", "Payment received, Bank Transfer"]);
+    expect(m.rows[0].date).toBe("01-10-2026");
+    expect(m.rows[1].date).toBe("15-08-2026");
+    expect(m.rows.map((r) => r.balance)).toEqual([4_000_000, 3_000_000]);
+    expect(m.dataCheckErrors).toEqual([]);
+  });
+
+  it("a pending backdated payment dates the assumed contract date", async () => {
+    const m = await buildStatementModel(
+      fakeDb({
+        ledger: [
+          ledgerRow({ id: "c", type: "CHARGE_BASE", amount: 4_000_000, direction: "DEBIT" }),
+        ],
+        payments: [
+          { id: "pend", status: "PENDING_VERIFICATION", paymentDate: new Date("2026-08-15T12:00:00.000Z"), verificationNote: null, isCredit: false },
+        ],
+      }),
+      { transactionId: "t1", draft: true }
+    );
+    // The pending payment never prints — it only dates the opening charge.
+    expect(m.contractAssumed).toBe(true);
+    expect(m.contractDate).toBe("15-08-2026");
+    expect(m.rows).toHaveLength(1);
+    expect(m.rows[0]).toMatchObject({ line1: "Contract price", date: "15-08-2026" });
+    expect(m.dataCheckErrors).toEqual([]);
+    expect(m.warnings.join(" | ")).toContain("awaiting verification");
+  });
+
+  it("genuinely missing charges still block generation", async () => {
+    const m = await buildStatementModel(
+      fakeDb({
+        ledger: [
+          ledgerRow({ id: "p", amount: 1_000_000, paymentId: "p", payment: { paymentReference: "PAY-1" } }),
+        ],
+        payments: [{ id: "p", status: "CONFIRMED", paymentDate: new Date(DAY), verificationNote: "Reconciled: x", isCredit: true }],
+      }),
+      { transactionId: "t1", draft: true }
+    );
     expect(m.dataCheckErrors.join(" ")).toContain("First row is not the contract price charge");
   });
 
