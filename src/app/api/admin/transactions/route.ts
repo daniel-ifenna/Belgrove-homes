@@ -218,9 +218,9 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json({ transaction, payment: result.payment, receipt: result.receipt, confirmationEmail, receiptEmail: result.email }, { status: 201 });
       } catch (e) {
-        const { toUserFacingError, logServerError, OverScheduleError } = await import("@/lib/paymentConfirmation");
+        const { toUserFacingError, logServerError, OverScheduleError, TotalBalanceExceededError } = await import("@/lib/paymentConfirmation");
         logServerError("initial payment failed", e);
-        if (e instanceof OverScheduleError) {
+        if (e instanceof OverScheduleError || e instanceof TotalBalanceExceededError) {
           return NextResponse.json({ error: toUserFacingError(e, "record") }, { status: 400 });
         }
         return NextResponse.json({ error: toUserFacingError(e, "record") }, { status: 500 });

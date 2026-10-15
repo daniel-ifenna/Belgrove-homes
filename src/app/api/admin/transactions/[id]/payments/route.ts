@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   // Free amount: the schedule is a guide, never a gate. No installment picker
   // — confirmation waterfalls from the oldest unpaid installment, and any
   // amount above the outstanding balance auto-parks as visible credit.
-  const { amount, paymentDate, paymentMethod, bankReference, notes, idempotencyKey, asCredit } = body;
+  const { amount, paymentDate, paymentMethod, bankReference, notes, idempotencyKey } = body;
   // Money is integer naira (schema Int) — reject floats, not just non-numbers.
   const amt = Number(amount);
   if (!Number.isInteger(amt) || amt <= 0) return NextResponse.json({ error: "Enter a whole-naira amount" }, { status: 400 });
@@ -42,12 +42,21 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     if (!transaction) return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     if (transaction.status === "CANCELLED") return NextResponse.json({ error: "Transaction is cancelled" }, { status: 400 });
 
-    // No amount gate (owner decision 2026-10-14): any positive whole-naira
-    // amount is recordable. An amount above the outstanding balance is
-    // auto-marked as credit — the excess parks as a visible credit balance
-    // at confirm time instead of blocking the record.
+    // The ONLY gate (same rule as confirm time): cumulative recorded
+    // payments must not exceed the account's total balance. Any amount at or
+    // below the outstanding balance records freely — no per-installment
+    // checks. The confirm step re-checks atomically inside its transaction,
+    // so this fail-fast read can never be bypassed by a race.
     const overBy = amt - transaction.outstandingBalance;
-    const wantsCredit = overBy > 0 || asCredit === true;
+    if (overBy > 0) {
+      return NextResponse.json(
+        {
+          error: `This payment of ₦${amt.toLocaleString("en-NG")} exceeds the outstanding balance of ₦${transaction.outstandingBalance.toLocaleString("en-NG")}. Reduce the amount — payments above the outstanding balance are rejected.`,
+        },
+        { status: 400 }
+      );
+    }
+    const wantsCredit = false;
 
     // Idempotent replay: same key returns the existing row, never a second one.
     const existing = await prisma.payment.findUnique({ where: { idempotencyKey: key } });

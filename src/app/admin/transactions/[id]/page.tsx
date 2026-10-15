@@ -144,7 +144,7 @@ export default async function TransactionDetailPage({
           })
           .join(", ")}`;
       } catch {
-        return "Exceeds schedule — needs explicit credit";
+        return "Exceeds the outstanding balance — reduce the amount";
       }
     }
     return "—";

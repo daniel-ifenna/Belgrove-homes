@@ -3,7 +3,7 @@ import { generateUniquePaymentRef, generateUniqueReceiptRef } from "@/lib/ref";
 import { getAppUrl, getReceiptAccessUrl, generateReceiptAccessToken } from "@/lib/app-url";
 import { generateReceiptPdf } from "@/lib/receipts/generateReceiptPdf";
 import { generateQrDataUrl } from "@/lib/receipts/qr";
-import { applyConfirmationDbUnit, logServerError } from "@/lib/paymentConfirmation";
+import { applyConfirmationDbUnit, logServerError, TotalBalanceExceededError } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 import { formatDateDMY } from "@/lib/time";
 
@@ -32,18 +32,21 @@ export async function recordPaymentAndGenerateReceipt(params: {
   });
   if (!transaction) throw new Error("Transaction not found");
   if (transaction.status === "CANCELLED") throw new Error("Transaction is cancelled");
-  // No amount gate (owner decision 2026-10-14): any positive whole-naira
-  // amount is accepted. Schedule excess auto-parks as visible credit at
-  // confirm time (see applyConfirmationDbUnit).
+  // The ONLY gate (same rule as the confirm step, which re-checks atomically):
+  // the cumulative total including this payment must not exceed the account's
+  // total balance. Any amount at or below the outstanding balance is accepted
+  // — no per-installment amount, order, or due-date checks.
+  if (params.amount > transaction.outstandingBalance) {
+    throw new TotalBalanceExceededError(transaction.totalPaid, params.amount, transaction.totalPayable);
+  }
 
+  // No installment shortlist: the confirmation waterfall allocates from the
+  // oldest unpaid capacity, so a missing or fully-paid target never blocks a
+  // payment that fits the total balance (null = auto-resolve at confirm).
   const installment =
     params.installmentId != null
-      ? transaction.installments.find((i) => i.id === params.installmentId) ?? null
-      : (transaction.installments.find((i) => i.status !== "PAID" && i.status !== "WAIVED") ?? null);
-  if (!installment) throw new Error("No unpaid installment available for this transaction");
-  // No installment-level cap here: a payment may legitimately span several
-  // installments — confirmation waterfalls any excess forward and parks any
-  // remainder past the final installment as visible credit.
+      ? (transaction.installments.find((i) => i.id === params.installmentId) ?? null)
+      : null;
 
   const receiptRef = await generateUniqueReceiptRef();
   const paymentRef = await generateUniquePaymentRef();
@@ -57,7 +60,7 @@ export async function recordPaymentAndGenerateReceipt(params: {
       const payment = await tx.payment.create({
         data: {
           transactionId: transaction.id,
-          installmentId: installment!.id,
+          installmentId: installment?.id ?? null,
           paymentReference: paymentRef,
           amount: params.amount,
           paymentDate: params.paymentDate,

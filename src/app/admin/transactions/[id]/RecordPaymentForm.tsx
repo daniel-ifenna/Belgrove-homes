@@ -12,9 +12,9 @@ const labelOf = (inst: Installment) => (inst.type === "INITIAL" ? "Initial payme
 
 // Free-amount record form: the schedule is a guide, never a gate. The admin
 // types whatever the client actually paid; the suggested next amount is a
-// hint only, a live preview shows exactly what confirming will do, and any
-// amount above the outstanding balance auto-parks as a visible credit
-// balance at confirm time.
+// hint only and a live preview shows exactly what confirming will do. The
+// ONLY block is the total balance: amounts above the outstanding balance are
+// rejected (same rule the server enforces at record and confirm time).
 export default function RecordPaymentForm({
   transactionId,
   installments,
@@ -77,6 +77,12 @@ export default function RecordPaymentForm({
       setError("Enter a valid amount");
       return;
     }
+    if (isOver) {
+      setError(
+        `Amount exceeds the outstanding balance by ${formatNaira(overBy)}. Reduce the amount — payments above the outstanding balance are rejected.`
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -84,7 +90,7 @@ export default function RecordPaymentForm({
       const res = await fetch(`/api/admin/transactions/${transactionId}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amountNum, paymentDate, paymentMethod, bankReference: bankReference.trim() || undefined, notes, idempotencyKey: idemKey, asCredit: isOver }),
+        body: JSON.stringify({ amount: amountNum, paymentDate, paymentMethod, bankReference: bankReference.trim() || undefined, notes, idempotencyKey: idemKey }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Failed to record payment");
@@ -146,8 +152,8 @@ export default function RecordPaymentForm({
           </div>
         )}
         {isOver && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
-            <div className="text-[12px] text-amber-900">Exceeds outstanding by {formatNaira(overBy)}. The excess will be recorded as a visible credit balance on confirm.</div>
+          <div className="rounded-xl border border-red-300 bg-red-50 px-3 py-2.5">
+            <div className="text-[12px] text-red-800">Exceeds outstanding by {formatNaira(overBy)}. Reduce the amount — payments above the outstanding balance are rejected.</div>
           </div>
         )}
         <div className="grid md:grid-cols-2 gap-3">
@@ -165,7 +171,7 @@ export default function RecordPaymentForm({
           </div>
         </div>
         <div className="flex justify-end">
-          <button type="submit" disabled={busy || amountNum <= 0} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-6 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">{busy ? "Recording…" : "Record Payment for Verification"}</button>
+          <button type="submit" disabled={busy || amountNum <= 0 || isOver} className="text-sm bg-[var(--ops-primary)] text-white rounded-full px-6 py-2.5 font-medium hover:bg-[var(--ops-deep)] disabled:opacity-50">{busy ? "Recording…" : "Record Payment for Verification"}</button>
         </div>
       </form>
     </div>

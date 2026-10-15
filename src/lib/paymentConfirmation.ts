@@ -34,6 +34,26 @@ export class PaymentAlreadyHandledError extends Error {
   }
 }
 
+// The ONLY payment gate: cumulative confirmed payments (existing ledger
+// total + the new payment) must not exceed the account's total balance.
+// Generic — amounts only, never customer-specific. Thrown inside the same
+// DB transaction that writes the ledger entry, so the check and the write
+// are atomic (concurrent confirms serialize on the transaction row lock).
+export class TotalBalanceExceededError extends Error {
+  readonly existingTotal: number;
+  readonly amount: number;
+  readonly totalPayable: number;
+  constructor(existingTotal: number, amount: number, totalPayable: number) {
+    super(
+      `Payment of ${amount} would exceed the outstanding ${totalPayable - existingTotal} (total ${totalPayable}, already ${existingTotal} recorded)`
+    );
+    this.name = "TotalBalanceExceededError";
+    this.existingTotal = existingTotal;
+    this.amount = amount;
+    this.totalPayable = totalPayable;
+  }
+}
+
 // Legacy guard, kept for backward compatibility (routes still catch it and
 // pure-function tests still cover it). Nothing in the record/confirm flow
 // throws it anymore — over-schedule money auto-parks as visible credit.
@@ -103,6 +123,14 @@ export function toUserFacingError(error: unknown, action: "confirm" | "record" |
       ? "This payment was already confirmed or voided. Refresh to see the latest state."
       : "This payment is no longer pending. Refresh to see the latest state.";
   }
+  if (error instanceof TotalBalanceExceededError) {
+    const outstanding = error.totalPayable - error.existingTotal;
+    return (
+      `This payment of ₦${error.amount.toLocaleString("en-NG")} exceeds the outstanding balance of ₦${outstanding.toLocaleString("en-NG")} ` +
+      `(₦${error.existingTotal.toLocaleString("en-NG")} already paid of ₦${error.totalPayable.toLocaleString("en-NG")} total). ` +
+      `Reduce the amount — payments above the outstanding balance are rejected.`
+    );
+  }
   if (error instanceof OverScheduleError) {
     return (
       `This would exceed the remaining scheduled amount of ₦${error.scheduledAmount.toLocaleString("en-NG")} ` +
@@ -164,6 +192,12 @@ export type ConfirmDbResult = {
 export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInput): Promise<ConfirmDbResult> {
   const now = new Date();
 
+  // Serialize concurrent confirms on the transaction row: the UPDATE takes a
+  // row lock, so a second confirm waits here, then re-reads the first's
+  // committed total below — two payments racing cannot together exceed the
+  // total balance. (Reads alone would not block; the write lock is the gate.)
+  await tx.transaction.update({ where: { id: input.transactionId }, data: { updatedAt: now } });
+
   // Idempotent claim: exactly one confirmer can flip PENDING→CONFIRMED.
   const claimed = await tx.payment.updateMany({
     where: { id: input.paymentId, transactionId: input.transactionId, status: "PENDING_VERIFICATION" },
@@ -186,10 +220,24 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   if (!payment) throw new PaymentCorruptStateError("Confirmed payment row disappeared mid-transaction");
 
   const transaction = payment.transaction;
-  // No schedule gate (owner decision 2026-10-14): any positive whole-naira
-  // amount confirms. Whatever does not fit the remaining schedule is parked
-  // as the payment's visible credit balance (capped allocation below) —
-  // never truncated, never rejected.
+  // The ONLY gate (applies to every account, no per-installment checks): the
+  // cumulative confirmed total including this payment must not exceed the
+  // account's total balance. Any amount at or below the remaining balance
+  // confirms freely — smaller than, larger than, or out of order with any
+  // single installment. Read inside this transaction, after the row lock
+  // above, so the check and the ledger writes below are atomic.
+  const confirmedNow = await tx.payment.findMany({
+    where: { transactionId: transaction.id, status: "CONFIRMED" },
+  });
+  const totalAfterClaim = confirmedNow.reduce((sum, p) => sum + p.amount, 0);
+  if (totalAfterClaim > transaction.totalPayable) {
+    const existingTotal = totalAfterClaim - payment.amount;
+    throw new TotalBalanceExceededError(existingTotal, payment.amount, transaction.totalPayable);
+  }
+  // Whatever fits the total but not the remaining schedule (only possible
+  // with pre-existing credit capacity) still parks as this payment's visible
+  // credit balance via the capped allocation below — never truncated, and
+  // never a reason to reject a payment that fits the total balance.
   const wasExplicitCredit = payment.isCredit === true;
 
   // Resolve the installment: the payment's own, else the next unpaid one.
@@ -278,10 +326,9 @@ export async function applyConfirmationDbUnit(tx: TxClient, input: ConfirmDbInpu
   const newTotalPaid = confirmed.reduce((sum, p) => sum + p.amount, 0);
   const newOutstanding = transaction.totalPayable - newTotalPaid;
   if (newOutstanding < 0) {
-    // Negative outstanding is the visible credit balance. It is legitimate
-    // whenever this payment parked schedule excess as credit (auto-marked
-    // above), was recorded as explicit credit, or an earlier credit exists.
-    // Anything else is corruption.
+    // Negative outstanding is the visible credit balance. The total-balance
+    // gate above rejects new over-balance payments, so this is reachable
+    // only for pre-existing credit history. Anything else is corruption.
     const hasCredit =
       creditAmountThisPayment > 0 ||
       wasExplicitCredit ||

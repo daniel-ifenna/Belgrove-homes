@@ -7,6 +7,7 @@ import {
   toUserFacingError,
   PaymentAlreadyHandledError,
   OverScheduleError,
+  TotalBalanceExceededError,
   type TxClient,
 } from "../paymentConfirmation";
 
@@ -401,40 +402,37 @@ describe("applyConfirmationDbUnit", () => {
     expect(allocSum).toBe(900_000);
   });
 
-  it("explicit credit confirms: capped allocation, parked remainder, negative balance allowed", async () => {
+  it("over-balance payment is rejected even when explicitly marked credit", async () => {
     const state = seed2900();
     state.payments.push({ ...pendingPayment("pay-9"), amount: 3_400_000, isCredit: true });
     const tx = makeMockTx(state);
 
-    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE });
+    await expect(
+      applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE })
+    ).rejects.toBeInstanceOf(TotalBalanceExceededError);
 
-    expect(result.newTotalPaid).toBe(3_400_000);
-    expect(result.newOutstanding).toBe(-500_000);
-    expect(result.isPaidInFull).toBe(true);
-    expect(state.transactions[0].status).toBe("PAID_IN_FULL");
-    expect(state.payments.find((p) => p.id === "pay-9")?.creditAmount).toBe(500_000);
-    // Allocations cover the schedulable 2.9M only; the entry holds the full amount.
-    const allocSum = state.allocs.reduce((s, a) => s + ((a as { amount: number }).amount), 0);
-    expect(allocSum).toBe(2_900_000);
-    expect(state.ledger).toHaveLength(1);
-    expect(state.ledger[0]).toMatchObject({ type: "PAYMENT", amount: 3_400_000 });
+    // Nothing written: no ledger entry, no receipt, no totals moved.
+    // (The mock has no rollback so the claim flip stays; production rolls the
+    // whole unit back. Only no-partial-write guarantees are asserted here.)
+    expect(state.ledger).toHaveLength(0);
+    expect(state.receipts).toHaveLength(0);
+    expect(state.transactions[0].totalPaid).toBe(0);
+    expect(state.installments[0].paidAmount).toBe(0);
   });
 
-  it("non-credit overpayment confirms with the excess auto-parked as credit", async () => {
+  it("over-balance payment is rejected without any credit flag", async () => {
     const state = seed2900();
     state.payments.push({ ...pendingPayment("pay-9"), amount: 3_400_000, isCredit: false });
     const tx = makeMockTx(state);
 
-    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE });
+    await expect(
+      applyConfirmationDbUnit(tx, { paymentId: "pay-9", transactionId: "txn-1", ...REF_BASE })
+    ).rejects.toBeInstanceOf(TotalBalanceExceededError);
 
-    expect(result.newTotalPaid).toBe(3_400_000);
-    expect(result.newOutstanding).toBe(-500_000);
-    expect(result.isPaidInFull).toBe(true);
-    expect(state.payments.find((p) => p.id === "pay-9")).toMatchObject({ isCredit: true, creditAmount: 500_000 });
-    expect(state.ledger).toHaveLength(1);
-    expect(state.ledger[0]).toMatchObject({ type: "PAYMENT", amount: 3_400_000 });
-    const allocSum = state.allocs.reduce((s, a) => s + ((a as { amount: number }).amount), 0);
-    expect(allocSum).toBe(2_900_000);
+    expect(state.ledger).toHaveLength(0);
+    expect(state.receipts).toHaveLength(0);
+    expect(state.transactions[0].totalPaid).toBe(0);
+    expect(state.installments[0].paidAmount).toBe(0);
   });
 });
 
@@ -650,20 +648,20 @@ describe("waterfall allocation", () => {
     expect(state.transactions[0].status).toBe("PAID_IN_FULL");
   });
 
-  it("excess past the final installment confirms with the remainder as credit", async () => {
+  it("excess past the final installment is rejected when it exceeds the total balance", async () => {
     const state = seedSplit();
     state.payments.push({ ...pendingPayment("pay-1"), amount: 11_000_000 });
     const tx = makeMockTx(state);
 
-    const result = await applyConfirmationDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1", ...REF_BASE });
+    await expect(
+      applyConfirmationDbUnit(tx, { paymentId: "pay-1", transactionId: "txn-1", ...REF_BASE })
+    ).rejects.toBeInstanceOf(TotalBalanceExceededError);
 
-    expect(result.newTotalPaid).toBe(11_000_000);
-    expect(result.newOutstanding).toBe(-1_000_000);
-    expect(result.isPaidInFull).toBe(true);
-    expect(state.installments[0].paidAmount).toBe(4_000_000);
-    expect(state.installments[1].paidAmount).toBe(6_000_000);
-    expect(state.payments.find((p) => p.id === "pay-1")).toMatchObject({ isCredit: true, creditAmount: 1_000_000 });
-    expect(state.receipts).toHaveLength(1);
+    expect(state.ledger).toHaveLength(0);
+    expect(state.receipts).toHaveLength(0);
+    expect(state.transactions[0].totalPaid).toBe(0);
+    expect(state.installments[0].paidAmount).toBe(0);
+    expect(state.installments[1].paidAmount).toBe(0);
   });
 
   it("reversing a waterfall payment restores both buckets and Active status", async () => {
@@ -702,6 +700,372 @@ describe("waterfall allocation", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Total-balance gate, parametrized across multiple account shapes (never one).
+// Shapes mirror real accounts: outright single-installment, multi-installment
+// split, near-full, and a Sandra-shaped account (prior credit parking,
+// CANCELLED correction history, forced PAID labels on underpaid rows).
+// The gate rule is identical for all of them: existing confirmed total +
+// new payment > totalPayable -> reject; anything at or below -> accept.
+// ---------------------------------------------------------------------------
+
+type GateInstSpec = { n: number; type: string; scheduled: number; paid: number; status: string };
+type GatePaySpec = { id: string; amount: number; inst: string | null; isCredit?: boolean; credit?: number | null };
+
+function seedGateAccount(opts: {
+  ref: string;
+  total: number;
+  installments: GateInstSpec[];
+  confirmed: GatePaySpec[];
+  cancelled?: { id: string; amount: number }[];
+}): MockState {
+  const installments: MockInstallment[] = opts.installments.map((s, idx) => ({
+    id: `inst-${idx}`,
+    transactionId: "txn-1",
+    installmentNumber: s.n,
+    type: s.type,
+    dueDate: new Date(s.n === 0 ? "2026-01-01T00:00:00Z" : "2027-01-01T00:00:00Z"),
+    scheduledAmount: s.scheduled,
+    paidAmount: s.paid,
+    status: s.status,
+  }));
+  const payments: MockPayment[] = [
+    ...opts.confirmed.map((p) => ({
+      id: p.id,
+      transactionId: "txn-1",
+      status: "CONFIRMED",
+      amount: p.amount,
+      paymentDate: new Date("2026-02-01T00:00:00Z"),
+      paymentMethod: "Bank Transfer" as string | null,
+      installmentId: p.inst,
+      isCredit: p.isCredit,
+      creditAmount: p.credit ?? null,
+    })),
+    ...(opts.cancelled ?? []).map((p) => ({
+      id: p.id,
+      transactionId: "txn-1",
+      status: "CANCELLED",
+      amount: p.amount,
+      paymentDate: new Date("2026-02-01T00:00:00Z"),
+      paymentMethod: "Bank Transfer" as string | null,
+      installmentId: null as string | null,
+    })),
+  ];
+  const paidSum = opts.confirmed.reduce((s, p) => s + p.amount, 0);
+  const transaction: MockTransaction = {
+    id: "txn-1",
+    ref: opts.ref,
+    bookingId: null,
+    customerName: "Gate Test",
+    customerEmail: "gate@example.com",
+    customerPhone: null,
+    estate: "Test Estate",
+    unitType: "Plot",
+    plotCode: "TST-200",
+    sqm: 200,
+    baseAmount: opts.total,
+    unitPrice: opts.total,
+    plotQuantity: 1,
+    interestAmount: 0,
+    totalPayable: opts.total,
+    totalPaid: paidSum,
+    outstandingBalance: opts.total - paidSum,
+    status: paidSum >= opts.total ? "PAID_IN_FULL" : "ACTIVE",
+    paymentPlan: { code: "TEST", name: "Test" },
+    installments,
+  };
+  // Pre-existing confirmed payments carry their ledger entry + allocations,
+  // with per-installment allocation sums matching stored paidAmount.
+  const ledger: Record<string, unknown>[] = opts.confirmed.map((p, i) => ({
+    id: `le-seed-${i}`,
+    type: "PAYMENT",
+    amount: p.amount,
+    paymentId: p.id,
+  }));
+  const allocs: Record<string, unknown>[] = [];
+  for (const p of opts.confirmed) {
+    const allocatable = p.amount - (p.credit ?? 0);
+    if (p.inst) {
+      allocs.push({ id: `pa-seed-${p.id}`, paymentId: p.id, installmentId: p.inst, amount: allocatable });
+    } else {
+      // Waterfall the allocatable part across installments in order.
+      let rest = allocatable;
+      for (const inst of installments) {
+        if (rest <= 0) break;
+        const sched = opts.installments.find((s, idx) => `inst-${idx}` === inst.id)!;
+        const already = allocs
+          .filter((a) => (a as { installmentId: string }).installmentId === inst.id)
+          .reduce((s, a) => s + ((a as { amount: number }).amount), 0);
+        const room = sched.paid - already;
+        if (room <= 0) continue;
+        const take = Math.min(rest, room);
+        allocs.push({ id: `pa-seed-${p.id}-${inst.id}`, paymentId: p.id, installmentId: inst.id, amount: take });
+        rest -= take;
+      }
+    }
+  }
+  return { payments, installments, transactions: [transaction], receipts: [], ledger, allocs, audits: [], bookings: [], activities: [] };
+}
+
+function gatePending(state: MockState, id: string, amount: number, inst: string | null): void {
+  state.payments.push({
+    id,
+    transactionId: "txn-1",
+    status: "PENDING_VERIFICATION",
+    amount,
+    paymentDate: new Date("2026-03-01T00:00:00Z"),
+    paymentMethod: "Bank Transfer",
+    installmentId: inst,
+  });
+}
+
+function gateAccounts(): Record<string, MockState> {
+  return {
+    // Outright single-installment account.
+    outright: seedGateAccount({
+      ref: "TXN-GATE-OUTRIGHT",
+      total: 5_800_000,
+      installments: [{ n: 0, type: "INITIAL", scheduled: 5_800_000, paid: 0, status: "DUE" }],
+      confirmed: [],
+    }),
+    // Multi-installment split with headroom.
+    split: seedGateAccount({
+      ref: "TXN-GATE-SPLIT",
+      total: 10_000_000,
+      installments: [
+        { n: 0, type: "INITIAL", scheduled: 5_000_000, paid: 3_000_000, status: "PARTIALLY_PAID" },
+        { n: 1, type: "MONTHLY", scheduled: 2_000_000, paid: 0, status: "PENDING" },
+        { n: 2, type: "MONTHLY", scheduled: 2_000_000, paid: 0, status: "PENDING" },
+        { n: 3, type: "MONTHLY", scheduled: 1_000_000, paid: 0, status: "PENDING" },
+      ],
+      confirmed: [{ id: "c1", amount: 3_000_000, inst: "inst-0" }],
+    }),
+    // Near-full account.
+    nearfull: seedGateAccount({
+      ref: "TXN-GATE-NEARFULL",
+      total: 7_875_000,
+      installments: [
+        { n: 0, type: "INITIAL", scheduled: 3_937_500, paid: 3_937_500, status: "PAID" },
+        { n: 1, type: "MONTHLY", scheduled: 656_250, paid: 656_250, status: "PAID" },
+        { n: 2, type: "MONTHLY", scheduled: 656_250, paid: 0, status: "PENDING" },
+        { n: 3, type: "MONTHLY", scheduled: 656_250, paid: 0, status: "PENDING" },
+        { n: 4, type: "MONTHLY", scheduled: 656_250, paid: 0, status: "PENDING" },
+        { n: 5, type: "MONTHLY", scheduled: 656_250, paid: 0, status: "PENDING" },
+        { n: 6, type: "MONTHLY", scheduled: 656_250, paid: 0, status: "PENDING" },
+      ],
+      confirmed: [
+        { id: "c1", amount: 3_937_500, inst: "inst-0" },
+        { id: "c2", amount: 656_250, inst: "inst-1" },
+      ],
+    }),
+    // Sandra-shaped: fully paid, prior credit parking, CANCELLED correction
+    // history, forced PAID labels on underpaid rows. Same gate, no exceptions.
+    sandra: seedGateAccount({
+      ref: "TXN-GATE-SANDRA",
+      total: 5_625_000,
+      installments: [
+        { n: 0, type: "INITIAL", scheduled: 2_812_500, paid: 1_813_000, status: "PAID" },
+        { n: 1, type: "MONTHLY", scheduled: 937_500, paid: 937_500, status: "PAID" },
+        { n: 2, type: "MONTHLY", scheduled: 937_500, paid: 62_500, status: "PAID" },
+        { n: 3, type: "MONTHLY", scheduled: 937_500, paid: 937_500, status: "PAID" },
+      ],
+      confirmed: [
+        { id: "p1", amount: 813_000, inst: null },
+        { id: "p2", amount: 1_000_000, inst: null },
+        { id: "p4", amount: 2_812_000, inst: null, isCredit: true, credit: 1_874_500 },
+        { id: "p5", amount: 1_000_000, inst: null },
+      ],
+      cancelled: [
+        { id: "x1", amount: 2_812_000 },
+        { id: "x2", amount: 1_000_000 },
+        { id: "x3", amount: 281_200 },
+      ],
+    }),
+  };
+}
+
+// Ledger/schedule reconciliation invariants for one mock state.
+function expectGateStateReconciles(state: MockState): void {
+  const txn = state.transactions[0];
+  const confirmed = state.payments.filter((p) => p.status === "CONFIRMED");
+  const confirmedSum = confirmed.reduce((s, p) => s + p.amount, 0);
+  expect(txn.totalPaid).toBe(confirmedSum);
+  expect(txn.outstandingBalance).toBe(txn.totalPayable - confirmedSum);
+  const schedSum = state.installments.reduce((s, i) => s + i.scheduledAmount, 0);
+  expect(schedSum).toBe(txn.totalPayable);
+  const entries = state.ledger.filter((e) => (e as { type: string }).type === "PAYMENT");
+  expect(entries).toHaveLength(confirmed.length);
+  for (const p of confirmed) {
+    const entry = entries.find((e) => (e as { paymentId: string }).paymentId === p.id);
+    expect(entry).toBeDefined();
+    expect((entry as { amount: number }).amount).toBe(p.amount);
+    const allocSum = state.allocs
+      .filter((a) => (a as { paymentId: string }).paymentId === p.id)
+      .reduce((s, a) => s + ((a as { amount: number }).amount), 0);
+    expect(allocSum + (p.creditAmount ?? 0)).toBe(p.amount);
+  }
+  for (const inst of state.installments) {
+    const allocSum = state.allocs
+      .filter((a) => (a as { installmentId: string }).installmentId === inst.id)
+      .reduce((s, a) => s + ((a as { amount: number }).amount), 0);
+    expect(allocSum).toBe(inst.paidAmount);
+  }
+}
+
+describe("total-balance gate (parametrized across accounts)", () => {
+  it("seeded accounts reconcile before any new payment", () => {
+    for (const state of Object.values(gateAccounts())) expectGateStateReconciles(state);
+  });
+
+  it("payment smaller than the installment amount is accepted", async () => {
+    for (const key of ["outright", "split", "nearfull"] as const) {
+      const state = gateAccounts()[key];
+      gatePending(state, "new-1", 100_000, null);
+      const result = await applyConfirmationDbUnit(makeMockTx(state), {
+        paymentId: "new-1",
+        transactionId: "txn-1",
+        ...REF_BASE,
+      });
+      expect(result.newOutstanding).toBe(state.transactions[0].totalPayable - result.newTotalPaid);
+      expectGateStateReconciles(state);
+    }
+  });
+
+  it("payment larger than the installment amount but within balance is accepted", async () => {
+    const cases: { key: "split" | "nearfull"; amount: number }[] = [
+      { key: "split", amount: 6_000_000 },
+      { key: "nearfull", amount: 1_000_000 },
+    ];
+    for (const { key, amount } of cases) {
+      const state = gateAccounts()[key];
+      gatePending(state, "new-1", amount, null);
+      const result = await applyConfirmationDbUnit(makeMockTx(state), {
+        paymentId: "new-1",
+        transactionId: "txn-1",
+        ...REF_BASE,
+      });
+      expect(result.newOutstanding).toBeGreaterThanOrEqual(0);
+      expectGateStateReconciles(state);
+    }
+  });
+
+  it("payment targeting a later installment before an earlier one is accepted", async () => {
+    // Split: pay #2 in full while #1 is still unpaid.
+    const split = gateAccounts().split;
+    gatePending(split, "new-1", 2_000_000, "inst-2");
+    const r1 = await applyConfirmationDbUnit(makeMockTx(split), {
+      paymentId: "new-1",
+      transactionId: "txn-1",
+      ...REF_BASE,
+    });
+    expect(r1.newTotalPaid).toBe(5_000_000);
+    expect(split.installments[2].paidAmount).toBe(2_000_000);
+    expect(split.installments[1].paidAmount).toBe(0);
+    expectGateStateReconciles(split);
+
+    // Near-full: pay #3 while #2 is still unpaid.
+    const near = gateAccounts().nearfull;
+    gatePending(near, "new-1", 656_250, "inst-3");
+    await applyConfirmationDbUnit(makeMockTx(near), {
+      paymentId: "new-1",
+      transactionId: "txn-1",
+      ...REF_BASE,
+    });
+    expect(near.installments[3].paidAmount).toBe(656_250);
+    expect(near.installments[2].paidAmount).toBe(0);
+    expectGateStateReconciles(near);
+  });
+
+  it("payment bringing the cumulative total exactly to the balance is accepted", async () => {
+    const amounts: Record<string, number> = {
+      outright: 5_800_000,
+      split: 7_000_000,
+      nearfull: 3_281_250,
+    };
+    for (const [key, amount] of Object.entries(amounts)) {
+      const state = gateAccounts()[key];
+      gatePending(state, "new-1", amount, null);
+      const result = await applyConfirmationDbUnit(makeMockTx(state), {
+        paymentId: "new-1",
+        transactionId: "txn-1",
+        ...REF_BASE,
+      });
+      expect(result.newOutstanding).toBe(0);
+      expect(result.isPaidInFull).toBe(true);
+      expectGateStateReconciles(state);
+    }
+  });
+
+  it("payment pushing the cumulative total above the balance is rejected, ledger unchanged", async () => {
+    const amounts: Record<string, number> = {
+      outright: 5_800_001,
+      split: 7_000_001,
+      nearfull: 3_281_251,
+      sandra: 1,
+    };
+    for (const [key, amount] of Object.entries(amounts)) {
+      const state = gateAccounts()[key];
+      const before = {
+        ledger: state.ledger.length,
+        receipts: state.receipts.length,
+        totalPaid: state.transactions[0].totalPaid,
+        paid: state.installments.map((i) => i.paidAmount),
+      };
+      gatePending(state, "new-1", amount, null);
+      await expect(
+        applyConfirmationDbUnit(makeMockTx(state), {
+          paymentId: "new-1",
+          transactionId: "txn-1",
+          ...REF_BASE,
+        })
+      ).rejects.toBeInstanceOf(TotalBalanceExceededError);
+      expect(state.ledger).toHaveLength(before.ledger);
+      expect(state.receipts).toHaveLength(before.receipts);
+      expect(state.transactions[0].totalPaid).toBe(before.totalPaid);
+      expect(state.installments.map((i) => i.paidAmount)).toEqual(before.paid);
+    }
+  });
+
+  it("sequential confirms where each fits alone but together exceed: only the first is accepted", async () => {
+    for (const key of ["outright", "split"] as const) {
+      const state = gateAccounts()[key];
+      const first = key === "outright" ? 3_000_000 : 5_000_000;
+      const second = key === "outright" ? 3_000_000 : 5_000_000;
+      gatePending(state, "race-1", first, null);
+      gatePending(state, "race-2", second, null);
+      const tx = makeMockTx(state);
+      // Serializes on the transaction row lock in production; the mock runs
+      // the same order explicitly: second sees the first's committed total.
+      await applyConfirmationDbUnit(tx, { paymentId: "race-1", transactionId: "txn-1", ...REF_BASE });
+      await expect(
+        applyConfirmationDbUnit(tx, { paymentId: "race-2", transactionId: "txn-1", ...REF_BASE })
+      ).rejects.toBeInstanceOf(TotalBalanceExceededError);
+      // Winner has its entry; loser wrote nothing (its claim flip persists
+      // only because the mock has no rollback — production rolls it back).
+      const entries = state.ledger.filter((e) => (e as { type: string }).type === "PAYMENT");
+      expect(entries.some((e) => (e as { paymentId: string }).paymentId === "race-1")).toBe(true);
+      expect(entries.some((e) => (e as { paymentId: string }).paymentId === "race-2")).toBe(false);
+      expect(state.receipts.some((r) => (r as { paymentId: string }).paymentId === "race-2")).toBe(false);
+    }
+  });
+
+  it("sandra-shaped account rejects exactly like any other account (no special handling)", async () => {
+    const state = gateAccounts().sandra;
+    gatePending(state, "new-1", 500_000, null);
+    await expect(
+      applyConfirmationDbUnit(makeMockTx(state), {
+        paymentId: "new-1",
+        transactionId: "txn-1",
+        ...REF_BASE,
+      })
+    ).rejects.toBeInstanceOf(TotalBalanceExceededError);
+    // Pre-existing history untouched: credit flag, CANCELLED rows, labels.
+    expect(state.payments.find((p) => p.id === "p4")).toMatchObject({ isCredit: true, creditAmount: 1_874_500 });
+    expect(state.payments.filter((p) => p.status === "CANCELLED")).toHaveLength(3);
+    expect(state.ledger.filter((e) => (e as { type: string }).type === "PAYMENT")).toHaveLength(4);
+  });
+});
+
 describe("toUserFacingError", () => {
   it("maps the expired-transaction Prisma error to a friendly message with no internals", () => {
     const raw = new Error(
@@ -718,6 +1082,9 @@ describe("toUserFacingError", () => {
     expect(toUserFacingError(new OverScheduleError(2_900_000, 2_900_000, 2_900_000), "confirm")).toContain(
       "scheduled amount"
     );
+    const overMsg = toUserFacingError(new TotalBalanceExceededError(2_000_000, 1_500_000, 2_900_000), "confirm");
+    expect(overMsg).toContain("outstanding balance");
+    expect(overMsg).not.toContain("TotalBalanceExceededError");
     expect(toUserFacingError({ code: "P2002" }, "record")).toContain("already recorded");
   });
 });

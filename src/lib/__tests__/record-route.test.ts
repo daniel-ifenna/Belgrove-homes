@@ -83,14 +83,33 @@ describe("POST record payment", () => {
     expect(store.payments).toHaveLength(0);
   });
 
-  it("auto-marks over-outstanding amounts as credit instead of rejecting", async () => {
+  it("rejects amounts above the outstanding balance (the only gate)", async () => {
     const res = await POST(
       recordRequest({ ...base, amount: 1_400_000, idempotencyKey: "over-key-1" }),
       ctx
     );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining("outstanding balance") });
+    expect(store.payments).toHaveLength(0);
+  });
+
+  it("rejects over-outstanding amounts even when sent as credit (no bypass)", async () => {
+    const res = await POST(
+      recordRequest({ ...base, amount: 1_400_000, idempotencyKey: "over-key-2", asCredit: true }),
+      ctx
+    );
+    expect(res.status).toBe(400);
+    expect(store.payments).toHaveLength(0);
+  });
+
+  it("accepts amounts exactly at the outstanding balance", async () => {
+    const res = await POST(
+      recordRequest({ ...base, amount: 1_000_000, idempotencyKey: "exact-key-1" }),
+      ctx
+    );
     expect(res.status).toBe(201);
     expect(store.payments).toHaveLength(1);
-    expect(store.payments[0]).toMatchObject({ amount: 1_400_000, isCredit: true });
+    expect(store.payments[0]).toMatchObject({ amount: 1_000_000, isCredit: false });
   });
 
   it("records a free (non-scheduled) amount with no installment link", async () => {
@@ -125,11 +144,11 @@ describe("POST record payment", () => {
     expect(store.payments).toHaveLength(1);
   });
 
-  it("accepts explicit credit and flags backdating in the audit trail", async () => {
+  it("records within-balance amounts without credit and flags backdating in the audit trail", async () => {
     const res = await POST(
       recordRequest({
         ...base,
-        amount: 1_400_000,
+        amount: 400_000,
         paymentDate: "2026-01-05",
         idempotencyKey: "credit-key-1",
         asCredit: true,
@@ -137,10 +156,10 @@ describe("POST record payment", () => {
       ctx
     );
     expect(res.status).toBe(201);
-    expect(store.payments[0]).toMatchObject({ amount: 1_400_000, isCredit: true, creditAmount: null });
+    expect(store.payments[0]).toMatchObject({ amount: 400_000, isCredit: false, creditAmount: null });
     const audit = store.audits[0].data as Record<string, unknown>;
     const after = audit.after as Record<string, unknown>;
-    expect(after).toMatchObject({ asCredit: true, backdated: true });
+    expect(after).toMatchObject({ asCredit: false, backdated: true });
   });
 
   it("marks same-day payments as not backdated", async () => {

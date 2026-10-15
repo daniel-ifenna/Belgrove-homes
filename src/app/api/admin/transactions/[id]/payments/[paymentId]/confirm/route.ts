@@ -12,6 +12,7 @@ import {
   logServerError,
   PaymentAlreadyHandledError,
   OverScheduleError,
+  TotalBalanceExceededError,
 } from "@/lib/paymentConfirmation";
 import { generateAndStoreReceiptPdf } from "@/lib/receiptDelivery";
 import { formatDateDMY } from "@/lib/time";
@@ -93,6 +94,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       return NextResponse.json({ error: toUserFacingError(e, "confirm") }, { status: 409 });
     }
     if (e instanceof OverScheduleError) {
+      return NextResponse.json({ error: toUserFacingError(e, "confirm") }, { status: 400 });
+    }
+    if (e instanceof TotalBalanceExceededError) {
       return NextResponse.json({ error: toUserFacingError(e, "confirm") }, { status: 400 });
     }
     return NextResponse.json({ error: toUserFacingError(e, "confirm") }, { status: 500 });
